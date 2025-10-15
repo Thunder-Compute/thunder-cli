@@ -1,0 +1,101 @@
+package tui
+
+import (
+	"fmt"
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+type ConnectModel struct {
+	instances []string
+	cursor    int
+	selected  string
+	quitting  bool
+}
+
+func NewConnectModel(instances []string) ConnectModel {
+	if instances == nil {
+		instances = []string{
+			"instance-1 (us-east-1)",
+			"instance-2 (us-west-2)",
+			"instance-3 (eu-west-1)",
+			"instance-4 (ap-south-1)",
+		}
+	}
+	return ConnectModel{
+		instances: instances,
+	}
+}
+
+func (m ConnectModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m ConnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
+			m.quitting = true
+			return m, tea.Quit
+
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+
+		case "down", "j":
+			if m.cursor < len(m.instances)-1 {
+				m.cursor++
+			}
+
+		case "enter":
+			m.selected = m.instances[m.cursor]
+			m.quitting = true
+			return m, tea.Quit
+		}
+	}
+
+	return m, nil
+}
+
+func (m ConnectModel) View() string {
+	if m.quitting {
+		if m.selected != "" {
+			return fmt.Sprintf("Connecting to: %s\n", m.selected)
+		}
+		return "Connection cancelled.\n"
+	}
+
+	var b strings.Builder
+	b.WriteString("Select an instance to connect:\n\n")
+
+	for i, instance := range m.instances {
+		cursor := "  "
+		if m.cursor == i {
+			cursor = "> "
+		}
+		b.WriteString(fmt.Sprintf("%s%s\n", cursor, instance))
+	}
+
+	b.WriteString("\nUse ↑/↓ or j/k to navigate, Enter to select, q to quit\n")
+
+	return b.String()
+}
+
+func RunConnect(instances []string) (string, error) {
+	m := NewConnectModel(instances)
+	p := tea.NewProgram(m)
+
+	finalModel, err := p.Run()
+	if err != nil {
+		return "", fmt.Errorf("error running connect TUI: %w", err)
+	}
+
+	if m, ok := finalModel.(ConnectModel); ok {
+		return m.selected, nil
+	}
+
+	return "", nil
+}
