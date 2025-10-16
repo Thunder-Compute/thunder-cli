@@ -13,14 +13,12 @@ import (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "thunder-cli-draft",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Use:   "tnr",
+	Short: "Thunder Compute CLI - Manage your cloud instances",
+	Long: `tnr is the command-line interface for Thunder Compute.
+Use it to manage your cloud instances, deployments, and configurations.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+Authentication: Run 'tnr login' to authenticate with Thunder Compute.`,
 	Version: "1.0.0",
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := tui.Run(); err != nil {
