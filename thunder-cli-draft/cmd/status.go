@@ -1,40 +1,59 @@
 /*
 Copyright © 2025 NAME HERE <EMAIL ADDRESS>
-
 */
 package cmd
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/joshuawatkins04/thunder-cli-draft/api"
+	"github.com/joshuawatkins04/thunder-cli-draft/tui"
 	"github.com/spf13/cobra"
 )
+
+var noWait bool
 
 // statusCmd represents the status command
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Short: "List and monitor Thunder Compute instances",
+	Long: `List all Thunder Compute instances in your account with their current status.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+By default, the command will continuously monitor instances that are in transition 
+states (STARTING or DELETING) and automatically exit when all instances are stable.
+
+Use the --no-wait flag to display the status once and exit immediately.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("status called")
+		if err := runStatus(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(statusCmd)
+	statusCmd.Flags().BoolVar(&noWait, "no-wait", false, "Display status once and exit without monitoring")
+}
 
-	// Here you will define your flags and configuration settings.
+func runStatus() error {
+	config, err := LoadConfig()
+	if err != nil {
+		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
+	}
 
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// statusCmd.PersistentFlags().String("foo", "", "A help for foo")
+	if config.Token == "" {
+		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
+	}
 
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// statusCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	client := api.NewClient(config.Token)
+
+	monitoring := !noWait
+
+	if err := tui.RunStatus(client, monitoring); err != nil {
+		return err
+	}
+
+	return nil
 }

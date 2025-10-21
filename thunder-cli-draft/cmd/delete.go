@@ -1,40 +1,252 @@
 /*
 Copyright © 2025 NAME HERE <EMAIL ADDRESS>
-
 */
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/joshuawatkins04/thunder-cli-draft/api"
+	"github.com/joshuawatkins04/thunder-cli-draft/tui"
 	"github.com/spf13/cobra"
 )
 
 // deleteCmd represents the delete command
 var deleteCmd = &cobra.Command{
-	Use:   "delete",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Use:   "delete [instance_id]",
+	Short: "Delete a Thunder Compute instance",
+	Long: `Permanently delete a Thunder Compute instance.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+This command will:
+• Delete the instance from Thunder Compute servers
+• Clean up SSH configuration (~/.ssh/config)
+• Remove the instance from known hosts (~/.ssh/known_hosts)
+
+WARNING: This action is IRREVERSIBLE!
+All data on the instance will be permanently lost.
+
+Examples:
+  # Interactive mode - select from a list
+  tnr delete
+
+  # Direct deletion with instance ID
+  tnr delete abc123xyz`,
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("delete called")
+		if err := runDelete(args); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(deleteCmd)
+}
 
-	// Here you will define your flags and configuration settings.
+type deleteSpinnerModel struct {
+	spinner  spinner.Model
+	message  string
+	quitting bool
+}
 
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// deleteCmd.PersistentFlags().String("foo", "", "A help for foo")
+func newDeleteSpinnerModel(message string) deleteSpinnerModel {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
+	return deleteSpinnerModel{
+		spinner: s,
+		message: message,
+	}
+}
 
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// deleteCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+func (m deleteSpinnerModel) Init() tea.Cmd {
+	return m.spinner.Tick
+}
+
+func (m deleteSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg.(type) {
+	case tea.KeyMsg:
+		m.quitting = true
+		return m, tea.Quit
+	default:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+	}
+}
+
+func (m deleteSpinnerModel) View() string {
+	if m.quitting {
+		return ""
+	}
+	return fmt.Sprintf("\n %s %s\n\n", m.spinner.View(), m.message)
+}
+
+func runDelete(args []string) error {
+	config, err := LoadConfig()
+	if err != nil {
+		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
+	}
+
+	if config.Token == "" {
+		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
+	}
+
+	client := api.NewClient(config.Token)
+
+	var instanceID string
+	var selectedInstance *api.Instance
+
+	if len(args) == 0 {
+		instances, err := client.ListInstances()
+		if err != nil {
+			return fmt.Errorf("failed to fetch instances: %w", err)
+		}
+
+		if len(instances) == 0 {
+			fmt.Println("No instances found to delete.")
+			return nil
+		}
+
+		selectedInstance, err = tui.RunDeleteInteractive(instances)
+		if err != nil {
+			return err
+		}
+		instanceID = selectedInstance.UUID
+	} else {
+		instanceID = args[0]
+
+		instances, err := client.ListInstances()
+		if err != nil {
+			return fmt.Errorf("failed to fetch instances: %w", err)
+		}
+
+		for i := range instances {
+			if instances[i].UUID == instanceID {
+				selectedInstance = &instances[i]
+				break
+			}
+		}
+
+		if selectedInstance == nil {
+			return fmt.Errorf("instance '%s' not found", instanceID)
+		}
+	}
+
+	if selectedInstance.Status == "DELETING" {
+		return fmt.Errorf("instance '%s' is already being deleted", instanceID)
+	}
+
+	if selectedInstance.Status == "STARTING" {
+		fmt.Printf("\nWarning: Instance '%s' is currently STARTING.\n", instanceID)
+		fmt.Println("Deletion may fail. It's recommended to wait until the instance is RUNNING.")
+		fmt.Println("\nAttempting deletion anyway...")
+	}
+
+	p := tea.NewProgram(newDeleteSpinnerModel(fmt.Sprintf("Deleting instance %s...", instanceID)))
+	go func() {
+		p.Run()
+	}()
+
+	resp, err := client.DeleteInstance(instanceID)
+	p.Quit()
+
+	if err != nil {
+		return fmt.Errorf("failed to delete instance: %w\n\nPossible reasons:\n• Instance may be in STARTING state (wait for it to fully start first)\n• Instance may already be deleted\n• Server error occurred\n\nTry running 'tnr status' to check the instance state", err)
+	}
+
+	if err := cleanupSSHConfig(instanceID, selectedInstance.IP); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to clean up SSH configuration: %v\n", err)
+	}
+
+	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
+	fmt.Println(successStyle.Render(fmt.Sprintf("\n✓ Successfully deleted Thunder Compute instance %s", instanceID)))
+
+	if resp.Message != "" {
+		fmt.Printf("\n%s\n", resp.Message)
+	}
+
+	return nil
+}
+
+func cleanupSSHConfig(instanceID, ipAddress string) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	sshConfigPath := filepath.Join(homeDir, ".ssh", "config")
+
+	if err := removeSSHHostEntry(sshConfigPath, instanceID); err != nil {
+		return fmt.Errorf("failed to clean SSH config: %w", err)
+	}
+
+	if ipAddress != "" {
+		cmd := exec.Command("ssh-keygen", "-R", ipAddress)
+		cmd.Stdout = nil
+		cmd.Stderr = nil
+		cmd.Run()
+	}
+
+	return nil
+}
+
+func removeSSHHostEntry(configPath, instanceID string) error {
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return nil
+	}
+
+	file, err := os.Open(configPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	hostName := fmt.Sprintf("tnr-%s", instanceID)
+	inTargetHost := false
+	skipUntilNextHost := false
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmedLine := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmedLine, "Host ") {
+			if trimmedLine == fmt.Sprintf("Host %s", hostName) {
+				inTargetHost = true
+				skipUntilNextHost = true
+				continue
+			} else {
+				inTargetHost = false
+				skipUntilNextHost = false
+			}
+		}
+
+		if skipUntilNextHost && inTargetHost {
+			if strings.HasPrefix(trimmedLine, "Host ") {
+				skipUntilNextHost = false
+				inTargetHost = false
+				lines = append(lines, line)
+			}
+			continue
+		}
+
+		lines = append(lines, line)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	return os.WriteFile(configPath, []byte(strings.Join(lines, "\n")+"\n"), 0600)
 }
