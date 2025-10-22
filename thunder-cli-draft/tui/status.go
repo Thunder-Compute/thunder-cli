@@ -273,13 +273,11 @@ func capitalize(s string) string {
 }
 
 func RunStatus(client *api.Client, monitoring bool) error {
-	// Fetch initial instances
 	instances, err := client.ListInstances()
 	if err != nil {
 		return err
 	}
 
-	// If no instances and not monitoring, just print message
 	if len(instances) == 0 && !monitoring {
 		fmt.Println("No instances found. Use 'tnr create' to create a Thunder Compute instance.")
 		return nil

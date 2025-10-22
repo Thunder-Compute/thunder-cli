@@ -14,6 +14,7 @@ const (
 )
 
 type Instance struct {
+	ID        string `json:"-"`
 	UUID      string `json:"uuid"`
 	Name      string `json:"name"`
 	Status    string `json:"status"`
@@ -112,7 +113,8 @@ func (c *Client) ListInstances() ([]Instance, error) {
 	}
 
 	instances := make([]Instance, 0, len(rawResponse))
-	for _, instance := range rawResponse {
+	for id, instance := range rawResponse {
+		instance.ID = id
 		instances = append(instances, instance)
 	}
 
@@ -239,4 +241,168 @@ func (c *Client) DeleteInstance(instanceID string) (*DeleteInstanceResponse, err
 	}
 
 	return &deleteResp, nil
+}
+
+// GetLatestBinaryHash fetches the latest Thunder virtualization binary hash
+func (c *Client) GetLatestBinaryHash() (string, error) {
+	metadataURL := "https://storage.googleapis.com/storage/v1/b/client-binary/o/client_linux_x86_64?alt=json"
+
+	req, err := http.NewRequest("GET", metadataURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var result struct {
+		Metadata map[string]string `json:"metadata"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return result.Metadata["hash"], nil
+}
+
+type AddSSHKeyResponse struct {
+	UUID string `json:"uuid"`
+	Key  string `json:"key"`
+}
+
+// AddSSHKey generates and adds SSH keypair to instance
+func (c *Client) AddSSHKey(instanceID string) (*AddSSHKeyResponse, error) {
+	url := fmt.Sprintf("%s/instances/%s/add_key", baseURL, instanceID)
+
+	httpReq, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	httpReq.Header.Set("Authorization", "Bearer "+c.token)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		return nil, fmt.Errorf("authentication failed: invalid token")
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != 200 && resp.StatusCode != 201 {
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var keyResp AddSSHKeyResponse
+	if err := json.Unmarshal(body, &keyResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &keyResp, nil
+}
+
+type DeviceIDResponse struct {
+	ID string `json:"id"`
+}
+
+// GetNextDeviceID requests a new device ID for GPU virtualization
+func (c *Client) GetNextDeviceID() (string, error) {
+	req, err := http.NewRequest("GET", baseURL+"/next_id", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		return "", fmt.Errorf("authentication failed: invalid token")
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != 200 && resp.StatusCode != 201 {
+		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var deviceResp DeviceIDResponse
+	if err := json.Unmarshal(body, &deviceResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return deviceResp.ID, nil
+}
+
+// ListInstancesWithIPUpdate fetches instances and updates their IP addresses
+func (c *Client) ListInstancesWithIPUpdate() ([]Instance, error) {
+	req, err := http.NewRequest("GET", baseURL+"/instances/list?update_ips=true", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		return nil, fmt.Errorf("authentication failed: invalid token")
+	}
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var rawResponse map[string]Instance
+	if err := json.Unmarshal(body, &rawResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	instances := make([]Instance, 0, len(rawResponse))
+	for id, instance := range rawResponse {
+		instance.ID = id
+		instances = append(instances, instance)
+	}
+
+	return instances, nil
 }
