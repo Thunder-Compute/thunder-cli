@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -14,7 +15,8 @@ import (
 type createStep int
 
 const (
-	stepMode createStep = iota
+	stepLoading createStep = iota
+	stepMode
 	stepGPU
 	stepCompute
 	stepTemplate
@@ -42,6 +44,8 @@ type createModel struct {
 	diskInput textinput.Model
 	err       error
 	quitting  bool
+	client    *api.Client
+	spinner   spinner.Model
 }
 
 var (
@@ -78,29 +82,72 @@ var (
 			MarginBottom(1)
 )
 
-func NewCreateModel(templates []api.Template) createModel {
+func NewCreateModel(client *api.Client) createModel {
 	ti := textinput.New()
 	ti.Placeholder = "100"
 	ti.CharLimit = 4
 	ti.Width = 20
 
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
+
 	return createModel{
-		step:      stepMode,
-		templates: templates,
+		step:      stepLoading,
+		client:    client,
 		diskInput: ti,
+		spinner:   s,
 		config: CreateConfig{
 			DiskSizeGB: 100,
 		},
 	}
 }
 
+type createTemplatesMsg struct {
+	templates []api.Template
+	err       error
+}
+
+func fetchCreateTemplatesCmd(client *api.Client) tea.Cmd {
+	return func() tea.Msg {
+		templates, err := client.ListTemplates()
+		return createTemplatesMsg{templates: templates, err: err}
+	}
+}
+
 func (m createModel) Init() tea.Cmd {
-	return nil
+	return tea.Batch(m.spinner.Tick, fetchCreateTemplatesCmd(m.client))
 }
 
 func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case createTemplatesMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, tea.Quit
+		}
+		m.templates = msg.templates
+		if len(m.templates) == 0 {
+			m.err = fmt.Errorf("no templates available")
+			return m, tea.Quit
+		}
+		m.step = stepMode
+
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
 	case tea.KeyMsg:
+		if m.step == stepLoading {
+			switch msg.String() {
+			case "ctrl+c", "q":
+				m.quitting = true
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "q":
 			if m.step != stepConfirmation {
@@ -227,6 +274,14 @@ func (m createModel) getMaxCursor() int {
 }
 
 func (m createModel) View() string {
+	if m.err != nil {
+		return fmt.Sprintf("Error: %v\n", m.err)
+	}
+
+	if m.step == stepLoading {
+		return fmt.Sprintf("%s Fetching available templates...\n", m.spinner.View())
+	}
+
 	if m.quitting {
 		return "Operation cancelled.\n"
 	}
@@ -243,9 +298,10 @@ func (m createModel) View() string {
 	progressSteps := []string{"Mode", "GPU", "Compute", "Template", "Disk", "Confirm"}
 	progress := ""
 	for i, stepName := range progressSteps {
-		if i == int(m.step) {
+		adjustedStep := int(m.step) - 1
+		if i == adjustedStep {
 			progress += selectedStyle.Render(fmt.Sprintf("[%s]", stepName))
-		} else if i < int(m.step) {
+		} else if i < adjustedStep {
 			progress += fmt.Sprintf("[✓ %s]", stepName)
 		} else {
 			progress += fmt.Sprintf("[%s]", stepName)
@@ -400,8 +456,8 @@ func (m createModel) getTemplateName() string {
 	return m.config.Template
 }
 
-func RunCreateInteractive(templates []api.Template) (*CreateConfig, error) {
-	m := NewCreateModel(templates)
+func RunCreateInteractive(client *api.Client) (*CreateConfig, error) {
+	m := NewCreateModel(client)
 	p := tea.NewProgram(m)
 	finalModel, err := p.Run()
 	if err != nil {
@@ -409,6 +465,11 @@ func RunCreateInteractive(templates []api.Template) (*CreateConfig, error) {
 	}
 
 	result := finalModel.(createModel)
+
+	if result.err != nil {
+		return nil, result.err
+	}
+
 	if result.quitting || !result.config.Confirmed {
 		return nil, fmt.Errorf("operation cancelled")
 	}

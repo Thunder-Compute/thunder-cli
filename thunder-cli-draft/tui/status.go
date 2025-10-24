@@ -68,10 +68,11 @@ func NewStatusModel(client *api.Client, monitoring bool, instances []api.Instanc
 }
 
 func (m StatusModel) Init() tea.Cmd {
+	cmds := []tea.Cmd{m.spinner.Tick}
 	if m.monitoring {
-		return tea.Batch(m.spinner.Tick, tickCmd())
+		cmds = append(cmds, tickCmd())
 	}
-	return nil
+	return tea.Batch(cmds...)
 }
 
 func tickCmd() tea.Cmd {
@@ -108,12 +109,6 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.instances = msg.instances
 		m.lastUpdate = time.Now()
 
-		// Check if all instances are stable
-		if m.monitoring && m.allInstancesStable() {
-			m.quitting = true
-			return m, tea.Quit
-		}
-
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -121,19 +116,6 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
-}
-
-func (m StatusModel) allInstancesStable() bool {
-	if len(m.instances) == 0 {
-		return true
-	}
-
-	for _, instance := range m.instances {
-		if instance.Status == "STARTING" || instance.Status == "DELETING" {
-			return false
-		}
-	}
-	return true
 }
 
 func (m StatusModel) View() string {
@@ -147,11 +129,9 @@ func (m StatusModel) View() string {
 
 	var b strings.Builder
 
-	// Build the table
 	b.WriteString(m.renderTable())
 	b.WriteString("\n")
 
-	// Show timestamp
 	if m.monitoring {
 		timestamp := m.lastUpdate.Format("15:04:05")
 		b.WriteString(timestampStyle.Render(fmt.Sprintf("Last updated: %s", timestamp)))
@@ -160,7 +140,6 @@ func (m StatusModel) View() string {
 		b.WriteString("\n")
 	}
 
-	// Instructions
 	if m.monitoring {
 		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("Press Ctrl+C or q to stop monitoring"))
 		b.WriteString("\n")
@@ -176,7 +155,6 @@ func (m StatusModel) renderTable() string {
 			Render("No instances found. Use 'tnr create' to create a Thunder Compute instance.")
 	}
 
-	// Define column widths (content width, padding will be added by styles)
 	colWidths := map[string]int{
 		"ID":       14,
 		"Status":   12,
@@ -191,7 +169,6 @@ func (m StatusModel) renderTable() string {
 
 	var b strings.Builder
 
-	// Header
 	headers := []string{"ID", "Status", "Address", "Mode", "Disk", "GPU", "vCPUs", "RAM", "Template"}
 	headerRow := make([]string, len(headers))
 	for i, h := range headers {
@@ -200,18 +177,14 @@ func (m StatusModel) renderTable() string {
 	b.WriteString(strings.Join(headerRow, ""))
 	b.WriteString("\n")
 
-	// Separator
 	separatorRow := make([]string, len(headers))
 	for i, h := range headers {
-		// Account for padding in headerStyle (0, 1) = 2 chars total padding
 		separatorRow[i] = strings.Repeat("─", colWidths[h]+2)
 	}
 	b.WriteString(strings.Join(separatorRow, ""))
 	b.WriteString("\n")
 
-	// Rows
 	for _, instance := range m.instances {
-		// Format fields
 		id := truncate(instance.UUID, colWidths["ID"])
 		status := m.formatStatus(instance.Status, colWidths["Status"])
 		address := truncate(instance.IP, colWidths["Address"])
@@ -272,17 +245,7 @@ func capitalize(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-func RunStatus(client *api.Client, monitoring bool) error {
-	instances, err := client.ListInstances()
-	if err != nil {
-		return err
-	}
-
-	if len(instances) == 0 && !monitoring {
-		fmt.Println("No instances found. Use 'tnr create' to create a Thunder Compute instance.")
-		return nil
-	}
-
+func RunStatus(client *api.Client, monitoring bool, instances []api.Instance) error {
 	m := NewStatusModel(client, monitoring, instances)
 	p := tea.NewProgram(m)
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/joshuawatkins04/thunder-cli-draft/api"
 	"github.com/joshuawatkins04/thunder-cli-draft/tui"
 	"github.com/spf13/cobra"
@@ -20,8 +21,8 @@ var statusCmd = &cobra.Command{
 	Short: "List and monitor Thunder Compute instances",
 	Long: `List all Thunder Compute instances in your account with their current status.
 
-By default, the command will continuously monitor instances that are in transition 
-states (STARTING or DELETING) and automatically exit when all instances are stable.
+By default, the command will continuously monitor and refresh instance statuses.
+Press Ctrl+C or q to exit.
 
 Use the --no-wait flag to display the status once and exit immediately.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -48,10 +49,27 @@ func runStatus() error {
 	}
 
 	client := api.NewClient(config.Token)
-
 	monitoring := !noWait
 
-	if err := tui.RunStatus(client, monitoring); err != nil {
+	busy := tui.NewBusyModel("Fetching instances...")
+	bp := tea.NewProgram(busy)
+	busyDone := make(chan struct{})
+
+	go func() {
+		_, _ = bp.Run()
+		close(busyDone)
+	}()
+
+	instances, err := client.ListInstances()
+
+	bp.Send(tui.BusyDoneMsg{})
+	<-busyDone
+
+	if err != nil {
+		return fmt.Errorf("failed to list instances: %w", err)
+	}
+
+	if err := tui.RunStatus(client, monitoring, instances); err != nil {
 		return err
 	}
 

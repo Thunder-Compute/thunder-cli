@@ -29,12 +29,15 @@ type Phase struct {
 }
 
 type ConnectFlowModel struct {
-	phases       []Phase
-	currentPhase int
-	spinner      spinner.Model
-	startTime    time.Time
-	err          error
-	quitting     bool
+	phases        []Phase
+	currentPhase  int
+	spinner       spinner.Model
+	startTime     time.Time
+	totalDuration time.Duration
+	err           error
+	quitting      bool
+	lastPhaseIdx  int
+	awaitingEnter bool
 }
 
 type PhaseUpdateMsg struct {
@@ -55,7 +58,7 @@ type ConnectErrorMsg struct{ Err error }
 var (
 	connectTitleStyle = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("#7D56F4")).
+				Foreground(lipgloss.Color("#0391ff")).
 				MarginTop(1).
 				MarginBottom(1)
 
@@ -66,7 +69,7 @@ var (
 			Foreground(lipgloss.Color("#00D787"))
 
 	inProgressStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#7D56F4"))
+			Foreground(lipgloss.Color("#0391ff"))
 
 	pendingStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#888888"))
@@ -88,23 +91,20 @@ var (
 			MarginTop(1).
 			Padding(1, 2).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#7D56F4"))
+			BorderForeground(lipgloss.Color("#0391ff"))
 )
 
 func NewConnectFlowModel(instanceID string) ConnectFlowModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4"))
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
 
 	phases := []Phase{
 		{Name: "Pre-connection setup", Status: PhasePending},
 		{Name: "Instance validation", Status: PhasePending},
 		{Name: "SSH key management", Status: PhasePending},
 		{Name: "Establishing SSH connection", Status: PhasePending},
-		{Name: "Environment setup", Status: PhasePending},
-		{Name: "Thunder virtualization", Status: PhasePending},
-		{Name: "SSH config update", Status: PhasePending},
-		{Name: "Starting SSH session", Status: PhasePending},
+		{Name: "Setting up instance", Status: PhasePending},
 	}
 
 	return ConnectFlowModel{
@@ -112,6 +112,7 @@ func NewConnectFlowModel(instanceID string) ConnectFlowModel {
 		currentPhase: -1,
 		spinner:      s,
 		startTime:    time.Now(),
+		lastPhaseIdx: -1,
 	}
 }
 
@@ -119,35 +120,64 @@ func (m ConnectFlowModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
+func (m *ConnectFlowModel) setPhase(idx int, status PhaseStatus, msg string, dur time.Duration) {
+	if idx < 0 || idx >= len(m.phases) {
+		return
+	}
+	ph := &m.phases[idx]
+
+	if status == PhaseInProgress && ph.Status == PhaseInProgress {
+		if msg == "" || msg == ph.Message {
+			return
+		}
+	}
+
+	if ph.Status == status && ph.Message == msg && (dur == 0 || ph.Duration == dur) {
+		return
+	}
+
+	ph.Status = status
+	ph.Message = msg
+	if dur > 0 {
+		ph.Duration = dur
+	}
+	if status == PhaseInProgress {
+		m.currentPhase = idx
+		m.lastPhaseIdx = idx
+	}
+}
+
+func (m ConnectFlowModel) CurrentPhase() int {
+	return m.currentPhase
+}
+
 func (m ConnectFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
 			m.quitting = true
 			return m, tea.Quit
-		}
-
-	case PhaseUpdateMsg:
-		if msg.PhaseIndex >= 0 && msg.PhaseIndex < len(m.phases) {
-			m.phases[msg.PhaseIndex].Status = msg.Status
-			m.phases[msg.PhaseIndex].Message = msg.Message
-			m.phases[msg.PhaseIndex].Duration = msg.Duration
-			if msg.Status == PhaseInProgress {
-				m.currentPhase = msg.PhaseIndex
+		case "enter":
+			if m.awaitingEnter {
+				m.quitting = true
+				return m, tea.Quit
 			}
 		}
 		return m, nil
 
+	case PhaseUpdateMsg:
+		m.setPhase(msg.PhaseIndex, msg.Status, msg.Message, msg.Duration)
+		return m, nil
+
 	case PhaseCompleteMsg:
-		if msg.PhaseIndex >= 0 && msg.PhaseIndex < len(m.phases) {
-			m.phases[msg.PhaseIndex].Status = PhaseCompleted
-			m.phases[msg.PhaseIndex].Duration = msg.Duration
-		}
+		m.setPhase(msg.PhaseIndex, PhaseCompleted, "", msg.Duration)
 		return m, nil
 
 	case ConnectCompleteMsg:
-		m.quitting = true
-		return m, tea.Quit
+		m.totalDuration = time.Since(m.startTime)
+		m.awaitingEnter = true
+		return m, nil
 
 	case ConnectErrorMsg:
 		m.err = msg.Err
@@ -170,17 +200,20 @@ func (m ConnectFlowModel) View() string {
 
 	var b strings.Builder
 
-	// Title
 	b.WriteString(connectTitleStyle.Render("⚡ Connecting to Thunder Instance"))
 	b.WriteString("\n\n")
 
-	// Phases
-	for _, phase := range m.phases {
+	for i, phase := range m.phases {
 		var icon string
 		var style lipgloss.Style
 		var line string
 
-		switch phase.Status {
+		status := phase.Status
+		if status == PhaseInProgress && i != m.currentPhase {
+			status = PhasePending
+		}
+
+		switch status {
 		case PhaseCompleted:
 			icon = "✓"
 			style = completedStyle
@@ -215,21 +248,19 @@ func (m ConnectFlowModel) View() string {
 		b.WriteString("\n")
 	}
 
-	// Summary
-	if m.quitting && m.err == nil {
-		totalTime := time.Since(m.startTime)
+	if m.awaitingEnter && m.err == nil {
 		summary := summaryStyle.Render(
-			fmt.Sprintf("✓ Connected successfully in %s", totalTime.Round(time.Millisecond)),
+			fmt.Sprintf("✓ Connected successfully in %s", m.totalDuration.Round(time.Millisecond)),
 		)
 		b.WriteString("\n")
 		b.WriteString(summary)
 		b.WriteString("\n\n")
+		b.WriteString(pendingStyle.Render("Press Enter to start SSH session..."))
+		b.WriteString("\n")
 	}
 
 	return b.String()
 }
-
-// Helper functions to send updates from the main connect flow
 
 func SendPhaseUpdate(p *tea.Program, phaseIndex int, status PhaseStatus, message string, duration time.Duration) {
 	if p != nil {

@@ -11,12 +11,14 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// SSHClient wraps an SSH connection
 type SSHClient struct {
 	client *ssh.Client
 }
 
-// Close closes the SSH connection
+func (s *SSHClient) GetClient() *ssh.Client {
+	return s.client
+}
+
 func (s *SSHClient) Close() error {
 	if s.client != nil {
 		return s.client.Close()
@@ -24,7 +26,6 @@ func (s *SSHClient) Close() error {
 	return nil
 }
 
-// testSocketConnection checks if we can connect to the SSH port
 func testSocketConnection(ip string, port int) bool {
 	address := fmt.Sprintf("%s:%d", ip, port)
 	conn, err := net.DialTimeout("tcp", address, 5*time.Second)
@@ -35,9 +36,8 @@ func testSocketConnection(ip string, port int) bool {
 	return true
 }
 
-// RobustSSHConnect establishes an SSH connection with retry logic
+// RobustSSHConnect establishes SSH with retry logic (up to maxWait seconds)
 func RobustSSHConnect(ip, keyFile string, port int, maxWait int) (*SSHClient, error) {
-	// Read private key
 	keyData, err := os.ReadFile(keyFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key: %w", err)
@@ -60,43 +60,33 @@ func RobustSSHConnect(ip, keyFile string, port int, maxWait int) (*SSHClient, er
 	address := fmt.Sprintf("%s:%d", ip, port)
 	startTime := time.Now()
 
-	fmt.Println("Establishing SSH connection...")
-
 	for {
 		elapsed := time.Since(startTime)
 		if elapsed > time.Duration(maxWait)*time.Second {
 			return nil, fmt.Errorf("SSH connection timeout after %d seconds", maxWait)
 		}
 
-		// Test socket connection first
 		if !testSocketConnection(ip, port) {
-			fmt.Print(".")
 			time.Sleep(1 * time.Second)
 			continue
 		}
 
-		// Try SSH connection
 		client, err := ssh.Dial("tcp", address, config)
 		if err == nil {
-			fmt.Println("\n✓ SSH connection established")
 			return &SSHClient{client: client}, nil
 		}
 
-		// Retry on common errors
 		if strings.Contains(err.Error(), "connection refused") ||
 			strings.Contains(err.Error(), "no route to host") ||
 			strings.Contains(err.Error(), "i/o timeout") {
-			fmt.Print(".")
 			time.Sleep(1 * time.Second)
 			continue
 		}
 
-		// For other errors, return immediately
 		return nil, fmt.Errorf("SSH connection failed: %w", err)
 	}
 }
 
-// ExecuteSSHCommand runs a command on the remote host
 func ExecuteSSHCommand(client *SSHClient, command string) (string, error) {
 	if client == nil || client.client == nil {
 		return "", fmt.Errorf("SSH client is not connected")
@@ -116,7 +106,7 @@ func ExecuteSSHCommand(client *SSHClient, command string) (string, error) {
 	return string(output), nil
 }
 
-// CheckActiveSessions counts the number of active SSH sessions on the instance
+// CheckActiveSessions counts active SSH sessions (pts/ terminals)
 func CheckActiveSessions(client *SSHClient) (int, error) {
 	output, err := ExecuteSSHCommand(client, "who | grep 'pts/' | wc -l")
 	if err != nil {
@@ -132,19 +122,17 @@ func CheckActiveSessions(client *SSHClient) (int, error) {
 	return count, nil
 }
 
-// UploadFile uploads a file to the remote host using SFTP
+// UploadFile uploads a single file via SSH stdin pipe
 func UploadFile(client *SSHClient, localPath, remotePath string) error {
 	if client == nil || client.client == nil {
 		return fmt.Errorf("SSH client is not connected")
 	}
 
-	// Read local file
 	data, err := os.ReadFile(localPath)
 	if err != nil {
 		return fmt.Errorf("failed to read local file: %w", err)
 	}
 
-	// Create remote file using cat
 	session, err := client.client.NewSession()
 	if err != nil {
 		return fmt.Errorf("failed to create session: %w", err)
@@ -172,7 +160,6 @@ func UploadFile(client *SSHClient, localPath, remotePath string) error {
 	return nil
 }
 
-// DownloadFile downloads a file from the remote host
 func DownloadFile(client *SSHClient, remotePath, localPath string) error {
 	if client == nil || client.client == nil {
 		return fmt.Errorf("SSH client is not connected")

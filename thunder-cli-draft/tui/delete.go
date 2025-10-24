@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/joshuawatkins04/thunder-cli-draft/api"
@@ -24,6 +25,10 @@ type deleteModel struct {
 	selected  *api.Instance
 	confirmed bool
 	quitting  bool
+	client    *api.Client
+	loading   bool
+	spinner   spinner.Model
+	err       error
 }
 
 var (
@@ -56,20 +61,61 @@ var (
 				MarginBottom(1)
 )
 
-func NewDeleteModel(instances []api.Instance) deleteModel {
+func NewDeleteModel(client *api.Client) deleteModel {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
+
 	return deleteModel{
-		step:      deleteStepSelect,
-		instances: instances,
+		step:    deleteStepSelect,
+		client:  client,
+		loading: true,
+		spinner: s,
+	}
+}
+
+type deleteInstancesMsg struct {
+	instances []api.Instance
+	err       error
+}
+
+func fetchDeleteInstancesCmd(client *api.Client) tea.Cmd {
+	return func() tea.Msg {
+		instances, err := client.ListInstances()
+		return deleteInstancesMsg{instances: instances, err: err}
 	}
 }
 
 func (m deleteModel) Init() tea.Cmd {
-	return nil
+	return tea.Batch(m.spinner.Tick, fetchDeleteInstancesCmd(m.client))
 }
 
 func (m deleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case deleteInstancesMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, tea.Quit
+		}
+		m.instances = msg.instances
+
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
 	case tea.KeyMsg:
+		// Don't process keys while loading
+		if m.loading {
+			switch msg.String() {
+			case "ctrl+c", "q":
+				m.quitting = true
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "q":
 			if m.step != deleteStepConfirm {
@@ -139,6 +185,14 @@ func (m deleteModel) getMaxCursor() int {
 }
 
 func (m deleteModel) View() string {
+	if m.err != nil {
+		return fmt.Sprintf("Error: %v\n", m.err)
+	}
+
+	if m.loading {
+		return fmt.Sprintf("%s Fetching instances...\n", m.spinner.View())
+	}
+
 	if m.quitting {
 		return "Operation cancelled.\n"
 	}
@@ -149,7 +203,7 @@ func (m deleteModel) View() string {
 
 	var s strings.Builder
 
-	s.WriteString(deleteTitleStyle.Render("🗑️  Delete Thunder Compute Instance"))
+	s.WriteString(deleteTitleStyle.Render("⚡ Delete Thunder Compute Instance ⚡"))
 	s.WriteString("\n\n")
 
 	switch m.step {
@@ -255,12 +309,8 @@ func (m deleteModel) View() string {
 	return s.String()
 }
 
-func RunDeleteInteractive(instances []api.Instance) (*api.Instance, error) {
-	if len(instances) == 0 {
-		return nil, fmt.Errorf("no instances available to delete")
-	}
-
-	m := NewDeleteModel(instances)
+func RunDeleteInteractive(client *api.Client) (*api.Instance, error) {
+	m := NewDeleteModel(client)
 	p := tea.NewProgram(m)
 	finalModel, err := p.Run()
 	if err != nil {
@@ -268,6 +318,15 @@ func RunDeleteInteractive(instances []api.Instance) (*api.Instance, error) {
 	}
 
 	result := finalModel.(deleteModel)
+
+	if result.err != nil {
+		return nil, result.err
+	}
+
+	if len(result.instances) == 0 {
+		return nil, fmt.Errorf("no instances available to delete")
+	}
+
 	if result.quitting || !result.confirmed || result.selected == nil {
 		return nil, fmt.Errorf("operation cancelled")
 	}

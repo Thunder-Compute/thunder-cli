@@ -8,6 +8,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/joshuawatkins04/thunder-cli-draft/api"
 	"github.com/joshuawatkins04/thunder-cli-draft/tui"
 	"github.com/spf13/cobra"
@@ -72,6 +75,108 @@ func init() {
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (100-1000)")
 }
 
+type createProgressModel struct {
+	spinner spinner.Model
+	message string
+
+	client *api.Client
+	req    api.CreateInstanceRequest
+
+	done bool
+	err  error
+	resp *api.CreateInstanceResponse
+}
+
+type createInstanceResultMsg struct {
+	resp *api.CreateInstanceResponse
+	err  error
+}
+
+func newCreateProgressModel(client *api.Client, message string, req api.CreateInstanceRequest) createProgressModel {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
+
+	return createProgressModel{
+		spinner: s,
+		message: message,
+		client:  client,
+		req:     req,
+	}
+}
+
+func createInstanceCmd(client *api.Client, req api.CreateInstanceRequest) tea.Cmd {
+	return func() tea.Msg {
+		resp, err := client.CreateInstance(req)
+		return createInstanceResultMsg{
+			resp: resp,
+			err:  err,
+		}
+	}
+}
+
+func (m createProgressModel) Init() tea.Cmd {
+	return tea.Batch(m.spinner.Tick, createInstanceCmd(m.client, m.req))
+}
+
+func (m createProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		if m.done {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
+	case createInstanceResultMsg:
+		m.done = true
+		m.err = msg.err
+		if msg.err == nil {
+			m.resp = msg.resp
+		}
+		return m, tea.Quit
+
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q":
+			m.done = true
+			m.err = fmt.Errorf("operation cancelled")
+			return m, tea.Quit
+		}
+
+	case tea.QuitMsg:
+		return m, nil
+	}
+
+	return m, nil
+}
+
+func (m createProgressModel) View() string {
+	if m.done {
+		if m.err != nil {
+			errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F5F")).Bold(true)
+			return fmt.Sprintf("\n%s\n\n", errorStyle.Render(fmt.Sprintf("✗ Failed to create instance: %v", m.err)))
+		}
+
+		successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
+
+		var b strings.Builder
+		b.WriteString(successStyle.Render("\n✓ Instance created successfully!"))
+		b.WriteString(fmt.Sprintf("\n\nInstance ID: %s\n", m.resp.UUID))
+		if m.resp.Message != "" {
+			b.WriteString(fmt.Sprintf("Message: %s\n", m.resp.Message))
+		}
+		b.WriteString("\nNext steps:\n")
+		b.WriteString("  • Run 'tnr status' to monitor provisioning progress\n")
+		b.WriteString(fmt.Sprintf("  • Run 'tnr connect %s' once the instance is RUNNING\n", m.resp.UUID))
+
+		return b.String()
+	}
+
+	return fmt.Sprintf("\n %s %s\n\n", m.spinner.View(), m.message)
+}
+
 func runCreate(cmd *cobra.Command) error {
 	config, err := LoadConfig()
 	if err != nil {
@@ -84,27 +189,38 @@ func runCreate(cmd *cobra.Command) error {
 
 	client := api.NewClient(config.Token)
 
-	fmt.Println("Fetching available templates...")
-	templates, err := client.ListTemplates()
-	if err != nil {
-		return fmt.Errorf("failed to fetch templates: %w", err)
-	}
-
-	if len(templates) == 0 {
-		return fmt.Errorf("no templates available")
-	}
-
 	isInteractive := !cmd.Flags().Changed("mode")
 
 	var createConfig *tui.CreateConfig
 
 	if isInteractive {
-		fmt.Println("Starting interactive instance creation wizard...")
-		createConfig, err = tui.RunCreateInteractive(templates)
+		createConfig, err = tui.RunCreateInteractive(client)
 		if err != nil {
 			return err
 		}
 	} else {
+		busy := tui.NewBusyModel("Fetching templates...")
+		bp := tea.NewProgram(busy)
+		busyDone := make(chan struct{})
+
+		go func() {
+			_, _ = bp.Run()
+			close(busyDone)
+		}()
+
+		templates, err := client.ListTemplates()
+
+		bp.Send(tui.BusyDoneMsg{})
+		<-busyDone
+
+		if err != nil {
+			return fmt.Errorf("failed to fetch templates: %w", err)
+		}
+
+		if len(templates) == 0 {
+			return fmt.Errorf("no templates available")
+		}
+
 		createConfig = &tui.CreateConfig{
 			Mode:       mode,
 			GPUType:    gpuType,
@@ -135,20 +251,21 @@ func runCreate(cmd *cobra.Command) error {
 		DiskSizeGB: createConfig.DiskSizeGB,
 	}
 
-	fmt.Println("Creating instance...")
-	resp, err := client.CreateInstance(req)
-	if err != nil {
-		return fmt.Errorf("failed to create instance: %w", err)
+	progressModel := newCreateProgressModel(client, "Creating instance...", req)
+	program := tea.NewProgram(progressModel)
+	finalModel, runErr := program.Run()
+	if runErr != nil {
+		return fmt.Errorf("failed to render progress: %w", runErr)
 	}
 
-	fmt.Println("\n✓ Instance created successfully!")
-	fmt.Printf("\nInstance ID: %s\n", resp.UUID)
-	if resp.Message != "" {
-		fmt.Printf("Message: %s\n", resp.Message)
+	result, ok := finalModel.(createProgressModel)
+	if !ok {
+		return fmt.Errorf("unexpected result from progress renderer")
 	}
-	fmt.Println("\nNext steps:")
-	fmt.Println("  • Run 'tnr status' to monitor provisioning progress")
-	fmt.Printf("  • Run 'tnr connect %s' once the instance is RUNNING\n", resp.UUID)
+
+	if result.err != nil {
+		return fmt.Errorf("failed to create instance: %w", result.err)
+	}
 
 	return nil
 }

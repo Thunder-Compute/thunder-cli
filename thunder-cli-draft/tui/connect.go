@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type ConnectModel struct {
@@ -13,6 +14,11 @@ type ConnectModel struct {
 	selected  string
 	quitting  bool
 }
+
+var (
+	connectCursorStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#0391ff"))
+)
 
 func NewConnectModel(instances []string) ConnectModel {
 	if instances == nil {
@@ -74,7 +80,7 @@ func (m ConnectModel) View() string {
 	for i, instance := range m.instances {
 		cursor := "  "
 		if m.cursor == i {
-			cursor = "> "
+			cursor = connectCursorStyle.Render("> ")
 		}
 		b.WriteString(fmt.Sprintf("%s%s\n", cursor, instance))
 	}

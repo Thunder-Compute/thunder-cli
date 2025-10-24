@@ -38,7 +38,7 @@ Examples:
   tnr delete
 
   # Direct deletion with instance ID
-  tnr delete abc123xyz`,
+  tnr delete 0`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runDelete(args); err != nil {
@@ -73,10 +73,13 @@ func (m deleteSpinnerModel) Init() tea.Cmd {
 }
 
 func (m deleteSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg.(type) {
+	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		m.quitting = true
 		return m, tea.Quit
+	case tea.QuitMsg:
+		m.quitting = true
+		return m, nil
 	default:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -107,31 +110,34 @@ func runDelete(args []string) error {
 	var selectedInstance *api.Instance
 
 	if len(args) == 0 {
-		instances, err := client.ListInstances()
-		if err != nil {
-			return fmt.Errorf("failed to fetch instances: %w", err)
-		}
-
-		if len(instances) == 0 {
-			fmt.Println("No instances found to delete.")
-			return nil
-		}
-
-		selectedInstance, err = tui.RunDeleteInteractive(instances)
+		selectedInstance, err = tui.RunDeleteInteractive(client)
 		if err != nil {
 			return err
 		}
-		instanceID = selectedInstance.UUID
+		instanceID = selectedInstance.ID
 	} else {
 		instanceID = args[0]
 
+		busy := tui.NewBusyModel("Fetching instances...")
+		bp := tea.NewProgram(busy)
+		busyDone := make(chan struct{})
+
+		go func() {
+			_, _ = bp.Run()
+			close(busyDone)
+		}()
+
 		instances, err := client.ListInstances()
+
+		bp.Send(tui.BusyDoneMsg{})
+		<-busyDone
+
 		if err != nil {
 			return fmt.Errorf("failed to fetch instances: %w", err)
 		}
 
 		for i := range instances {
-			if instances[i].UUID == instanceID {
+			if instances[i].ID == instanceID || instances[i].UUID == instanceID {
 				selectedInstance = &instances[i]
 				break
 			}

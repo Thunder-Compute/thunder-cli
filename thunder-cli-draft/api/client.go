@@ -235,12 +235,10 @@ func (c *Client) DeleteInstance(instanceID string) (*DeleteInstanceResponse, err
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var deleteResp DeleteInstanceResponse
-	if err := json.Unmarshal(body, &deleteResp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	return &deleteResp, nil
+	return &DeleteInstanceResponse{
+		Message: string(body),
+		Success: true,
+	}, nil
 }
 
 // GetLatestBinaryHash fetches the latest Thunder virtualization binary hash
