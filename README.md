@@ -1,1 +1,3 @@
-Thunder CLI draft in Go
+To run tests do:
+
+go test ./... -v
