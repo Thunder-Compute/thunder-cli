@@ -1,0 +1,256 @@
+package tui
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
+
+type LoginState int
+
+const (
+	LoginStateWaiting LoginState = iota
+	LoginStateTokenInput
+	LoginStateSuccess
+	LoginStateError
+	LoginStateCancelled
+)
+
+type LoginModel struct {
+	state           LoginState
+	authURL         string
+	spinner         spinner.Model
+	tokenInput      textinput.Model
+	startTime       time.Time
+	elapsedTime     time.Duration
+	err             error
+	quitting        bool
+	showTokenPrompt bool
+}
+
+type LoginSuccessMsg struct {
+	Token string
+}
+
+type LoginErrorMsg struct {
+	Err error
+}
+
+type LoginCancelMsg struct{}
+
+type TokenSubmitMsg struct {
+	Token string
+}
+
+type SwitchToTokenMsg struct{}
+
+var (
+	loginTitleStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#0391ff")).
+			MarginTop(1).
+			MarginBottom(1)
+
+	loginPromptStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#a3a3a3")).
+				MarginBottom(1)
+
+	loginErrorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF5555")).
+			MarginBottom(1)
+
+	loginSuccessStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#00D787")).
+				MarginBottom(1)
+
+	loginHelpStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#888888")).
+			Italic(true).
+			MarginTop(1)
+
+	tokenInputStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#0391ff")).
+			Padding(0, 1).
+			MarginBottom(1)
+
+	elapsedTimeStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#888888")).
+				Italic(true)
+)
+
+func NewLoginModel(authURL string) LoginModel {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
+
+	ti := textinput.New()
+	ti.Placeholder = "Enter your Thunder Compute token..."
+	ti.CharLimit = 500
+	ti.Width = 50
+	ti.Focus()
+
+	return LoginModel{
+		state:      LoginStateWaiting,
+		authURL:    authURL,
+		spinner:    s,
+		tokenInput: ti,
+		startTime:  time.Now(),
+	}
+}
+
+func (m LoginModel) Init() tea.Cmd {
+	return tea.Batch(
+		m.spinner.Tick,
+		tea.Tick(time.Second, func(t time.Time) tea.Msg {
+			return time.Now()
+		}),
+	)
+}
+
+func (m LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch m.state {
+		case LoginStateWaiting:
+			switch msg.String() {
+			case "ctrl+c", "esc", "q":
+				m.state = LoginStateCancelled
+				m.quitting = true
+				return m, tea.Quit
+			case "t", "T":
+				m.state = LoginStateTokenInput
+				m.tokenInput.Focus()
+				return m, nil
+			}
+		case LoginStateTokenInput:
+			switch msg.String() {
+			case "ctrl+c", "esc":
+				m.state = LoginStateWaiting
+				m.tokenInput.Blur()
+				return m, nil
+			case "enter":
+				if strings.TrimSpace(m.tokenInput.Value()) != "" {
+					return m, func() tea.Msg {
+						return TokenSubmitMsg{Token: strings.TrimSpace(m.tokenInput.Value())}
+					}
+				}
+			default:
+				m.tokenInput, cmd = m.tokenInput.Update(msg)
+				return m, cmd
+			}
+		}
+
+	case time.Time:
+		m.elapsedTime = time.Since(m.startTime)
+		return m, tea.Tick(time.Second, func(t time.Time) tea.Msg {
+			return time.Now()
+		})
+
+	case spinner.TickMsg:
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
+	case LoginSuccessMsg:
+		m.state = LoginStateSuccess
+		m.quitting = true
+		return m, tea.Quit
+
+	case LoginErrorMsg:
+		m.state = LoginStateError
+		m.err = msg.Err
+		m.quitting = true
+		return m, tea.Quit
+
+	case LoginCancelMsg:
+		m.state = LoginStateCancelled
+		m.quitting = true
+		return m, tea.Quit
+
+	case TokenSubmitMsg:
+		return m, func() tea.Msg {
+			return LoginSuccessMsg{Token: msg.Token}
+		}
+	}
+
+	return m, cmd
+}
+
+func (m LoginModel) View() string {
+	if m.quitting {
+		switch m.state {
+		case LoginStateSuccess:
+			return loginSuccessStyle.Render("✓ Successfully authenticated with Thunder Compute!")
+		case LoginStateError:
+			return loginErrorStyle.Render(fmt.Sprintf("✗ Authentication failed: %v", m.err))
+		case LoginStateCancelled:
+			return loginErrorStyle.Render("Authentication cancelled")
+		}
+	}
+
+	var b strings.Builder
+
+	b.WriteString(loginTitleStyle.Render("⚡ Authenticating with Thunder Compute"))
+	b.WriteString("\n\n")
+
+	switch m.state {
+	case LoginStateWaiting:
+		b.WriteString(loginPromptStyle.Render("Opening browser for authentication..."))
+		b.WriteString("\n")
+		b.WriteString(loginPromptStyle.Render(fmt.Sprintf("Visit: %s", m.authURL)))
+		b.WriteString("\n\n")
+		b.WriteString(fmt.Sprintf("%s Waiting for browser callback...", m.spinner.View()))
+		b.WriteString("\n\n")
+		b.WriteString(elapsedTimeStyle.Render(fmt.Sprintf("Elapsed: %s", m.elapsedTime.Round(time.Second))))
+		b.WriteString("\n\n")
+		b.WriteString(loginHelpStyle.Render("Press 'T' to enter a token manually"))
+		b.WriteString("\n")
+		b.WriteString(loginHelpStyle.Render("Press Ctrl+C or ESC to cancel"))
+
+	case LoginStateTokenInput:
+		b.WriteString(loginPromptStyle.Render("Enter your Thunder Compute token:"))
+		b.WriteString("\n\n")
+		b.WriteString(tokenInputStyle.Render(m.tokenInput.View()))
+		b.WriteString("\n\n")
+		b.WriteString(loginHelpStyle.Render("Press Enter to submit, ESC to go back"))
+	}
+
+	return b.String()
+}
+
+func (m LoginModel) State() LoginState {
+	return m.state
+}
+
+func (m LoginModel) Token() string {
+	return m.tokenInput.Value()
+}
+
+func (m LoginModel) Error() error {
+	return m.err
+}
+
+func SendLoginSuccess(p *tea.Program, token string) {
+	if p != nil {
+		p.Send(LoginSuccessMsg{Token: token})
+	}
+}
+
+func SendLoginError(p *tea.Program, err error) {
+	if p != nil {
+		p.Send(LoginErrorMsg{Err: err})
+	}
+}
+
+func SendLoginCancel(p *tea.Program) {
+	if p != nil {
+		p.Send(LoginCancelMsg{})
+	}
+}

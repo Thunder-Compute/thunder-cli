@@ -19,6 +19,8 @@ import (
 	"runtime"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/joshuawatkins04/thunder-cli-draft/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -243,12 +245,19 @@ func runLogin() error {
 		return nil
 	}
 
+	return runInteractiveLogin()
+}
+
+func runInteractiveLogin() error {
 	state, err := generateState()
 	if err != nil {
 		return fmt.Errorf("failed to generate state: %w", err)
 	}
 
-	port, authChan, errChan, cleanup, err := startCallbackServer()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	port, authChan, errChan, cleanup, err := startCallbackServerWithContext(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start callback server: %w", err)
 	}
@@ -257,29 +266,49 @@ func runLogin() error {
 	returnURI := fmt.Sprintf("%s:%d/callback", callbackURL, port)
 	authURLWithParams := buildAuthURL(state, returnURI)
 
-	fmt.Println("Opening browser for authentication...")
-	fmt.Printf("If the browser doesn't open automatically, visit:\n%s\n\n", authURLWithParams)
-	fmt.Println("⚡ Tip: You can also login with a token using 'tnr login --token <your-token>'")
-	fmt.Println()
+	model := tui.NewLoginModel(authURLWithParams)
+	p := tea.NewProgram(model)
+
+	go func() {
+		select {
+		case authResp := <-authChan:
+			tui.SendLoginSuccess(p, authResp.Token)
+		case err := <-errChan:
+			tui.SendLoginError(p, err)
+		case <-ctx.Done():
+			tui.SendLoginCancel(p)
+		case <-time.After(5 * time.Minute):
+			tui.SendLoginError(p, fmt.Errorf("authentication timeout after 5 minutes"))
+		}
+	}()
 
 	if err := openBrowser(authURLWithParams); err != nil {
 		fmt.Printf("Failed to open browser automatically: %v\n", err)
 	}
 
-	fmt.Println("Waiting for authentication...")
+	_, err = p.Run()
+	if err != nil {
+		return fmt.Errorf("TUI error: %w", err)
+	}
 
-	select {
-	case authResp := <-authChan:
+	if model.State() == tui.LoginStateSuccess {
+		authResp := AuthResponse{
+			Token: model.Token(),
+		}
 		if err := saveConfig(authResp); err != nil {
 			return fmt.Errorf("failed to save credentials: %w", err)
 		}
-		fmt.Println("✓ Successfully authenticated with Thunder Compute!")
 		return nil
-	case err := <-errChan:
-		return fmt.Errorf("authentication failed: %w", err)
-	case <-time.After(5 * time.Minute):
-		return fmt.Errorf("authentication timeout after 5 minutes")
 	}
+
+	if model.State() == tui.LoginStateCancelled {
+		return fmt.Errorf("authentication cancelled")
+	}
+	if model.State() == tui.LoginStateError {
+		return model.Error()
+	}
+
+	return fmt.Errorf("authentication failed")
 }
 
 func generateState() (string, error) {
@@ -297,7 +326,7 @@ func buildAuthURL(state, returnURI string) string {
 	return fmt.Sprintf("%s?%s", authURL, params.Encode())
 }
 
-func startCallbackServer() (int, <-chan AuthResponse, <-chan error, func(), error) {
+func startCallbackServerWithContext(ctx context.Context) (int, <-chan AuthResponse, <-chan error, func(), error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return 0, nil, nil, nil, err
@@ -351,9 +380,9 @@ func startCallbackServer() (int, <-chan AuthResponse, <-chan error, func(), erro
 	}()
 
 	cleanup := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		server.Shutdown(ctx)
+		server.Shutdown(shutdownCtx)
 	}
 
 	return port, authChan, errChan, cleanup, nil
