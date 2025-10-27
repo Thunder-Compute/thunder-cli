@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	htemplate "html/template"
 	"net"
 	"net/http"
 	"net/url"
@@ -26,6 +27,178 @@ const (
 	callbackURL = "http://127.0.0.1"
 )
 
+const authSuccessHTML = `
+	<!DOCTYPE html>
+	<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>Authentication Successful</title>
+		<style>
+			* {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+			}
+
+			html, body {
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+				background: #0a0a0a;
+				color: #fafafa;
+				min-height: 100vh;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				padding: 20px;
+				text-rendering: optimizeLegibility;
+				-webkit-font-smoothing: antialiased;
+				-moz-osx-font-smoothing: grayscale;
+			}
+
+			.logo-container {
+				margin-bottom: 32px;
+				display: flex;
+				justify-content: center;
+				align-items: center;
+			}
+
+			.logo-container svg {
+				width: 120px;
+				height: 120px;
+			}
+
+			h1 {
+				font-size: 28px;
+				font-weight: 700;
+				color: #fafafa;
+				margin-bottom: 12px;
+				letter-spacing: -0.02em;
+				text-align: center;
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				justify-content: center;
+			}
+
+			.message {
+				font-size: 16px;
+				line-height: 1.6;
+				color: #a3a3a3;
+				margin-bottom: 24px;
+				text-align: center;
+				max-width: 400px;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="logo-container">
+			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+				<path d="M122.5 112.5L20 256L236 68H174L222.5 0L72.5 83.5L193 84L113.5 153.5L154.5 96H50L20 112.5H122.5Z" fill="#369EFF"/>
+				<path d="M222.5 0L73 83.5L193 84L113.5 153.5L154.5 96H50L20 112.5H122.5L20 256L236 68H174L222.5 0Z" fill="#369EFF"/>
+			</svg>
+		</div>
+		
+		<h1>
+			Authentication Successful!
+		</h1>
+		
+		<p class="message">
+			You can now close this window and return to your terminal.
+		</p>
+	</body>
+	</html>
+`
+
+const authFailedHTML = `
+	<!DOCTYPE html>
+	<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>Authentication Failed</title>
+		<style>
+			* {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+			}
+
+			html, body {
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+				background: #0a0a0a;
+				color: #fafafa;
+				min-height: 100vh;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				padding: 20px;
+				text-rendering: optimizeLegibility;
+				-webkit-font-smoothing: antialiased;
+				-moz-osx-font-smoothing: grayscale;
+			}
+
+			.logo-container {
+				margin-bottom: 32px;
+				display: flex;
+				justify-content: center;
+				align-items: center;
+			}
+
+			.logo-container svg {
+				width: 120px;
+				height: 120px;
+			}
+
+			h1 {
+				font-size: 28px;
+				font-weight: 700;
+				margin-bottom: 12px;
+				letter-spacing: -0.02em;
+				text-align: center;
+			}
+
+			.message {
+				font-size: 16px;
+				line-height: 1.6;
+				color: #a3a3a3;
+				margin-bottom: 24px;
+				text-align: center;
+				max-width: 400px;
+			}
+
+			.error {
+				background: rgba(239, 68, 68, 0.1);
+				border: 1px solid rgba(239, 68, 68, 0.3);
+				border-radius: 8px;
+				padding: 12px 16px;
+				color: #fca5a5;
+				margin-bottom: 16px;
+				word-break: break-word;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="logo-container">
+			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+				<path d="M122.5 112.5L20 256L236 68H174L222.5 0L72.5 83.5L193 84L113.5 153.5L154.5 96H50L20 112.5H122.5Z" fill="#369EFF"/>
+				<path d="M222.5 0L73 83.5L193 84L113.5 153.5L154.5 96H50L20 112.5H122.5L20 256L236 68H174L222.5 0Z" fill="#369EFF"/>
+			</svg>
+		</div>
+
+		<h1>Authentication Failed</h1>
+		<div class="error">Error: {{.Error}}</div>
+		<p class="message">You can now close this window and return to your terminal.</p>
+	</body>
+	</html>
+`
+
+var (
+	authSuccessTemplate = htemplate.Must(htemplate.New("success").Parse(authSuccessHTML))
+	authFailedTemplate  = htemplate.Must(htemplate.New("failed").Parse(authFailedHTML))
+)
+
 type AuthResponse struct {
 	Token        string `json:"token"`
 	RefreshToken string `json:"refresh_token,omitempty"`
@@ -37,6 +210,8 @@ type Config struct {
 	RefreshToken string    `json:"refresh_token,omitempty"`
 	ExpiresAt    time.Time `json:"expires_at,omitempty"`
 }
+
+var loginToken string
 
 // loginCmd represents the login command
 var loginCmd = &cobra.Command{
@@ -53,9 +228,21 @@ var loginCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(loginCmd)
+	loginCmd.Flags().StringVar(&loginToken, "token", "", "Authenticate directly with a token instead of opening browser")
 }
 
 func runLogin() error {
+	if loginToken != "" {
+		authResp := AuthResponse{
+			Token: loginToken,
+		}
+		if err := saveConfig(authResp); err != nil {
+			return fmt.Errorf("failed to save credentials: %w", err)
+		}
+		fmt.Println("✓ Successfully authenticated with Thunder Compute!")
+		return nil
+	}
+
 	state, err := generateState()
 	if err != nil {
 		return fmt.Errorf("failed to generate state: %w", err)
@@ -72,6 +259,8 @@ func runLogin() error {
 
 	fmt.Println("Opening browser for authentication...")
 	fmt.Printf("If the browser doesn't open automatically, visit:\n%s\n\n", authURLWithParams)
+	fmt.Println("⚡ Tip: You can also login with a token using 'tnr login --token <your-token>'")
+	fmt.Println()
 
 	if err := openBrowser(authURLWithParams); err != nil {
 		fmt.Printf("Failed to open browser automatically: %v\n", err)
@@ -132,16 +321,8 @@ func startCallbackServer() (int, <-chan AuthResponse, <-chan error, func(), erro
 		if errorParam != "" {
 			errChan <- fmt.Errorf("authentication error: %s", errorParam)
 			w.Header().Set("Content-Type", "text/html")
-			fmt.Fprintf(w, `
-				<html>
-				<head><title>Authentication Failed</title></head>
-				<body>
-					<h1>Authentication Failed</h1>
-					<p>Error: %s</p>
-					<p>You can close this window.</p>
-				</body>
-				</html>
-			`, errorParam)
+			w.WriteHeader(http.StatusUnauthorized)
+			authFailedTemplate.Execute(w, map[string]string{"Error": errorParam})
 			return
 		}
 
@@ -160,16 +341,7 @@ func startCallbackServer() (int, <-chan AuthResponse, <-chan error, func(), erro
 		authChan <- authResp
 
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, `
-			<html>
-			<head><title>Authentication Successful</title></head>
-			<body>
-				<h1>Authentication Successful!</h1>
-				<p>You have successfully authenticated with Thunder Compute.</p>
-				<p>You can close this window and return to your terminal.</p>
-			</body>
-			</html>
-		`)
+		authSuccessTemplate.Execute(w, nil)
 	})
 
 	go func() {
@@ -252,4 +424,42 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &config, nil
+}
+
+// logoutCmd represents the logout command
+var logoutCmd = &cobra.Command{
+	Use:   "logout",
+	Short: "Log out from Thunder Compute",
+	Long:  `Log out from Thunder Compute and remove saved authentication credentials.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if err := runLogout(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(logoutCmd)
+}
+
+func runLogout() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	configPath := filepath.Join(homeDir, ".thunder", "config.json")
+
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		fmt.Println("You are not logged in.")
+		return nil
+	}
+
+	if err := os.Remove(configPath); err != nil {
+		return fmt.Errorf("failed to remove config file: %w", err)
+	}
+
+	fmt.Println("✓ Successfully logged out from Thunder Compute!")
+	return nil
 }

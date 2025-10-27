@@ -37,7 +37,6 @@ type ConnectFlowModel struct {
 	err           error
 	quitting      bool
 	lastPhaseIdx  int
-	awaitingEnter bool
 }
 
 type PhaseUpdateMsg struct {
@@ -86,12 +85,6 @@ var (
 	durationStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#888888")).
 			Italic(true)
-
-	summaryStyle = lipgloss.NewStyle().
-			MarginTop(1).
-			Padding(1, 2).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#0391ff"))
 )
 
 func NewConnectFlowModel(instanceID string) ConnectFlowModel {
@@ -158,11 +151,6 @@ func (m ConnectFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q", "esc":
 			m.quitting = true
 			return m, tea.Quit
-		case "enter":
-			if m.awaitingEnter {
-				m.quitting = true
-				return m, tea.Quit
-			}
 		}
 		return m, nil
 
@@ -176,8 +164,8 @@ func (m ConnectFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ConnectCompleteMsg:
 		m.totalDuration = time.Since(m.startTime)
-		m.awaitingEnter = true
-		return m, nil
+		m.quitting = true
+		return m, tea.Quit
 
 	case ConnectErrorMsg:
 		m.err = msg.Err
@@ -245,17 +233,6 @@ func (m ConnectFlowModel) View() string {
 		}
 
 		b.WriteString(phaseStyle.Render(style.Render(line)))
-		b.WriteString("\n")
-	}
-
-	if m.awaitingEnter && m.err == nil {
-		summary := summaryStyle.Render(
-			fmt.Sprintf("✓ Connected successfully in %s", m.totalDuration.Round(time.Millisecond)),
-		)
-		b.WriteString("\n")
-		b.WriteString(summary)
-		b.WriteString("\n\n")
-		b.WriteString(pendingStyle.Render("Press Enter to start SSH session..."))
 		b.WriteString("\n")
 	}
 

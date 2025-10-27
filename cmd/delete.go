@@ -163,7 +163,7 @@ func runDelete(args []string) error {
 		p.Run()
 	}()
 
-	resp, err := client.DeleteInstance(instanceID)
+	_, err = client.DeleteInstance(instanceID)
 	p.Quit()
 
 	if err != nil {
@@ -176,10 +176,6 @@ func runDelete(args []string) error {
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
 	fmt.Println(successStyle.Render(fmt.Sprintf("\n✓ Successfully deleted Thunder Compute instance %s", instanceID)))
-
-	if resp.Message != "" {
-		fmt.Printf("\n%s\n", resp.Message)
-	}
 
 	return nil
 }
