@@ -121,6 +121,10 @@ func runDelete(args []string) error {
 				fmt.Println("User cancelled delete process")
 				return nil
 			}
+			if strings.Contains(err.Error(), "no instances available to delete") {
+				fmt.Println("No instances found. Create an instance first using 'tnr create'")
+				return nil
+			}
 			return err
 		}
 		instanceID = selectedInstance.ID

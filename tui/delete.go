@@ -199,9 +199,6 @@ func (m deleteModel) View() string {
 	}
 
 	if m.quitting {
-		if len(m.instances) == 0 {
-			return "No instances found.\n"
-		}
 		return ""
 	}
 
