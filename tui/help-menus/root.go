@@ -48,15 +48,26 @@ var (
 func RenderRootHelp(cmd *cobra.Command) {
 	var output strings.Builder
 
-	header := `
+	// Get version from cobra command
+	version := cmd.Root().Version
+	if version == "" {
+		version = "1.0.0"
+	}
+	versionText := "v " + version
+
+	// Calculate centering (77 chars total width inside the box)
+	boxWidth := 77
+	leftPadding := (boxWidth - len(versionText)) / 2
+	rightPadding := boxWidth - len(versionText) - leftPadding
+
+	header := fmt.Sprintf(`
 ╭─────────────────────────────────────────────────────────────────────────────╮
 │                                                                             │
 │                         ⚡  THUNDER COMPUTE CLI  ⚡                         │
-│                Manage cloud instances, deployments & configs                │
-│                                   v 1.0.0                                   │
+│%s%s%s│
 │                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	`, strings.Repeat(" ", leftPadding), versionText, strings.Repeat(" ", rightPadding))
 
 	output.WriteString(HeaderStyle.Render(header))
 	output.WriteString("\n\n")
@@ -114,7 +125,7 @@ func RenderRootHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Docs"))
 	output.WriteString("   ")
-	output.WriteString(LinkStyle.Render("https://docs.thundercompute.com"))
+	output.WriteString(LinkStyle.Render("https://www.thundercompute.com/docs"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

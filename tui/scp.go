@@ -250,7 +250,7 @@ func (m SCPModel) View() string {
 		s += "\n\n"
 		s += renderLogs(m)
 
-		s += "\n" + scpLogStyle.Render("Press q to cancel...") + "\n"
+		s += "\n" + scpLogStyle.Render("Press 'Q' to cancel...") + "\n"
 
 	case SCPPhaseError:
 		s += scpErrorStyleTUI.Render("✗ Transfer Failed") + "\n\n"

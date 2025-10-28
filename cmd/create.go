@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -25,8 +24,6 @@ var (
 	vcpus      int
 	template   string
 	diskSizeGB int
-	presetName string
-	savePreset string
 )
 
 var createCmd = &cobra.Command{
@@ -93,8 +90,6 @@ func init() {
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): 4, 8, 16, or 32")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (100-1000)")
-	createCmd.Flags().StringVar(&presetName, "preset", "", "Use a saved preset configuration")
-	createCmd.Flags().StringVar(&savePreset, "save-preset", "", "Save the configuration as a preset with the given name")
 }
 
 type createProgressModel struct {
@@ -216,10 +211,6 @@ func runCreate(cmd *cobra.Command) error {
 
 	client := api.NewClient(config.Token)
 
-	if presetName != "" {
-		return runCreateWithPreset(presetName, client)
-	}
-
 	isInteractive := !cmd.Flags().Changed("mode")
 
 	var createConfig *tui.CreateConfig
@@ -284,75 +275,6 @@ func runCreate(cmd *cobra.Command) error {
 		CPUCores:   createConfig.VCPUs,
 		Template:   createConfig.Template,
 		DiskSizeGB: createConfig.DiskSizeGB,
-	}
-
-	progressModel := newCreateProgressModel(client, "Creating instance...", req)
-	program := tea.NewProgram(progressModel)
-	finalModel, runErr := program.Run()
-	if runErr != nil {
-		return fmt.Errorf("failed to render progress: %w", runErr)
-	}
-
-	result, ok := finalModel.(createProgressModel)
-	if !ok {
-		return fmt.Errorf("unexpected result from progress renderer")
-	}
-
-	if result.cancelled {
-		fmt.Println("Operation cancelled.")
-		return nil
-	}
-
-	if result.err != nil {
-		return fmt.Errorf("failed to create instance: %w", result.err)
-	}
-
-	if savePreset != "" {
-		newPreset := Preset{
-			Name:       savePreset,
-			Mode:       createConfig.Mode,
-			GPUType:    createConfig.GPUType,
-			NumGPUs:    createConfig.NumGPUs,
-			VCPUs:      createConfig.VCPUs,
-			Template:   createConfig.Template,
-			DiskSizeGB: createConfig.DiskSizeGB,
-			CreatedAt:  time.Now(),
-		}
-
-		if err := AddPreset(newPreset); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Failed to save preset: %v\n", err)
-		} else {
-			fmt.Printf("✓ Configuration saved as preset '%s'\n", savePreset)
-		}
-	}
-
-	return nil
-}
-
-func runCreateWithPreset(presetName string, client *api.Client) error {
-	preset, err := GetPreset(presetName)
-	if err != nil {
-		return fmt.Errorf("preset not found: %w", err)
-	}
-
-	fmt.Printf("Using preset: %s\n", preset.Name)
-	fmt.Printf("Mode: %s\n", strings.Title(preset.Mode))
-	fmt.Printf("GPU: %s\n", strings.ToUpper(preset.GPUType))
-	if preset.Mode == "prototyping" {
-		fmt.Printf("vCPUs: %d\n", preset.VCPUs)
-	} else {
-		fmt.Printf("GPUs: %d\n", preset.NumGPUs)
-	}
-	fmt.Printf("Template: %s\n", preset.Template)
-	fmt.Printf("Disk Size: %d GB\n\n", preset.DiskSizeGB)
-
-	req := api.CreateInstanceRequest{
-		Mode:       preset.Mode,
-		GPUType:    preset.GPUType,
-		NumGPUs:    preset.NumGPUs,
-		CPUCores:   preset.VCPUs,
-		Template:   preset.Template,
-		DiskSizeGB: preset.DiskSizeGB,
 	}
 
 	progressModel := newCreateProgressModel(client, "Creating instance...", req)

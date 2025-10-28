@@ -81,7 +81,7 @@ func (m Model) View() string {
 		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice)
 	}
 
-	s += "\nPress q to cancel.\n"
+	s += "\nPress 'Q' to cancel.\n"
 
 	return s
 }

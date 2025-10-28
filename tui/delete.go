@@ -195,7 +195,7 @@ func (m deleteModel) View() string {
 	}
 
 	if m.loading {
-		return "\n  " + m.spinner.View() + " Fetching instances...\n\n" + helpStyle.Render("Press q to cancel") + "\n"
+		return "\n  " + m.spinner.View() + " Fetching instances...\n\n" + helpStyle.Render("Press 'Q' to cancel") + "\n"
 	}
 
 	if m.quitting {

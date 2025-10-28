@@ -183,14 +183,14 @@ func (m LoginModel) View() string {
 		b.WriteString("\n\n")
 		b.WriteString(loginHelpStyle.Render("Or, press 'T' to enter a token manually."))
 		b.WriteString("\n\n")
-		b.WriteString(loginHelpStyle.Render("Press Ctrl+C or q to cancel."))
+		b.WriteString(loginHelpStyle.Render("Press Ctrl+C or 'Q' to cancel."))
 
 	case LoginStateTokenInput:
 		b.WriteString(loginPromptStyle.Render("Enter your Thunder Compute token:"))
 		b.WriteString("\n\n")
 		b.WriteString(tokenInputStyle.Render(m.tokenInput.View()))
 		b.WriteString("\n\n")
-		b.WriteString(loginHelpStyle.Render("Press Enter to submit, ESC to go back"))
+		b.WriteString(loginHelpStyle.Render("Press Enter to submit, 'Esc' to go back"))
 	}
 
 	return b.String()

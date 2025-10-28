@@ -295,7 +295,7 @@ func (m presetSaveModel) View() string {
 			s.WriteString("\n")
 		}
 
-		s.WriteString("\nPress Enter to save, Esc to go back\n")
+		s.WriteString("\nPress Enter to save, 'Esc' to go back\n")
 	}
 
 	return s.String()
@@ -503,7 +503,7 @@ func (m PresetDeleteModel) View() string {
 	s.WriteString(errorStyle.Render("⚠ Warning: This action cannot be undone!"))
 	s.WriteString("\n\n")
 	s.WriteString(fmt.Sprintf("Are you sure you want to delete preset '%s'?\n\n", m.name))
-	s.WriteString("Press 'y' to confirm, 'q' to cancel: ")
+	s.WriteString("Press 'y' to confirm, 'Q' to cancel: ")
 	return s.String()
 }
 

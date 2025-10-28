@@ -171,7 +171,7 @@ func (m StatusModel) View() string {
 	}
 
 	if m.monitoring {
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("Press q to cancel monitoring"))
+		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("Press 'Q' to cancel monitoring"))
 		b.WriteString("\n")
 	}
 

@@ -111,7 +111,7 @@ func RenderStatusHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Interactive"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Press 'q' to quit monitoring"))
+	output.WriteString(DescStyle.Render("Press 'Q' to quit monitoring"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
@@ -138,7 +138,7 @@ func RenderStatusHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Exit"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Press 'q' to quit monitoring mode"))
+	output.WriteString(DescStyle.Render("Press 'Q' to quit monitoring mode"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

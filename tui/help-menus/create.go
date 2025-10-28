@@ -49,12 +49,6 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString(CommandStyle.Render("Production"))
 	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("tnr create --mode production --num-gpus 2"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("With preset"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr create --preset my-config"))
 	output.WriteString("\n\n")
 
 	// Examples Section
@@ -79,20 +73,6 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("\n")
 	output.WriteString("  ")
 	output.WriteString("tnr create --mode production --num-gpus 2 --template pytorch --disk-size-gb 500")
-	output.WriteString("\n\n")
-
-	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Save configuration as preset"))
-	output.WriteString("\n")
-	output.WriteString("  ")
-	output.WriteString("tnr create --mode prototyping --gpu a100 --vcpus 16 --save-preset my-setup")
-	output.WriteString("\n\n")
-
-	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Use saved preset"))
-	output.WriteString("\n")
-	output.WriteString("  ")
-	output.WriteString("tnr create --preset my-setup")
 	output.WriteString("\n\n")
 
 	// Flags Section
@@ -135,18 +115,6 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString(DescStyle.Render("Disk storage in GB (100-1000)"))
 	output.WriteString(" ")
 	output.WriteString(ExampleStyle.Render("(default: 100)"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(FlagStyle.Render("--preset"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Use a saved preset configuration"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(FlagStyle.Render("--save-preset"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Save the configuration as a preset with the given name"))
 	output.WriteString("\n\n")
 
 	// Instance Modes Section
@@ -196,12 +164,6 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString(CommandStyle.Render("Interactive"))
 	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Use interactive mode for guided setup"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Presets"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Save common configurations as presets"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

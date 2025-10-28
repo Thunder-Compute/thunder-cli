@@ -239,7 +239,7 @@ func (m ConnectFlowModel) View() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("Press q to cancel\n"))
+	b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("Press 'Q' to cancel\n"))
 
 	return b.String()
 }
