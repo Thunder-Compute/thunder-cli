@@ -6,12 +6,19 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+var (
+	helpStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#888888")).
+		Italic(true).
+		MarginTop(1)
+)
+
 type BusyDoneMsg struct{}
 
 type BusyModel struct {
 	text     string
 	spin     spinner.Model
-	quitting bool
+	Quitting bool
 }
 
 func NewBusyModel(text string) BusyModel {
@@ -26,10 +33,15 @@ func (m BusyModel) Init() tea.Cmd {
 }
 
 func (m BusyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg.(type) {
+	switch msg := msg.(type) {
 	case BusyDoneMsg:
-		m.quitting = true
+		m.Quitting = true
 		return m, tea.Quit
+	case tea.KeyMsg:
+		if msg.String() == "q" || msg.String() == "ctrl+c" {
+			m.Quitting = true
+			return m, tea.Quit
+		}
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spin, cmd = m.spin.Update(msg)
@@ -39,8 +51,8 @@ func (m BusyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m BusyModel) View() string {
-	if m.quitting {
+	if m.Quitting {
 		return ""
 	}
-	return "\n  " + m.spin.View() + " " + m.text + "\n"
+	return "\n  " + m.spin.View() + " " + m.text + "\n\n" + helpStyle.Render("Press q to cancel") + "\n"
 }

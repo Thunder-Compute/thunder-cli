@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/joshuawatkins04/thunder-cli-draft/api"
 	"github.com/joshuawatkins04/thunder-cli-draft/tui"
+	helpmenus "github.com/joshuawatkins04/thunder-cli-draft/tui/help-menus"
 	"github.com/spf13/cobra"
 )
 
@@ -23,6 +25,8 @@ var (
 	vcpus      int
 	template   string
 	diskSizeGB int
+	presetName string
+	savePreset string
 )
 
 var createCmd = &cobra.Command{
@@ -77,6 +81,10 @@ var (
 )
 
 func init() {
+	createCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		helpmenus.RenderCreateHelp(cmd)
+	})
+
 	rootCmd.AddCommand(createCmd)
 
 	createCmd.Flags().StringVar(&mode, "mode", "", "Instance mode: prototyping or production")
@@ -85,6 +93,8 @@ func init() {
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): 4, 8, 16, or 32")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (100-1000)")
+	createCmd.Flags().StringVar(&presetName, "preset", "", "Use a saved preset configuration")
+	createCmd.Flags().StringVar(&savePreset, "save-preset", "", "Save the configuration as a preset with the given name")
 }
 
 type createProgressModel struct {
@@ -94,9 +104,10 @@ type createProgressModel struct {
 	client *api.Client
 	req    api.CreateInstanceRequest
 
-	done bool
-	err  error
-	resp *api.CreateInstanceResponse
+	done      bool
+	err       error
+	cancelled bool
+	resp      *api.CreateInstanceResponse
 }
 
 type createInstanceResultMsg struct {
@@ -153,7 +164,7 @@ func (m createProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "q":
 			m.done = true
-			m.err = fmt.Errorf("operation cancelled")
+			m.cancelled = true
 			return m, tea.Quit
 		}
 
@@ -166,6 +177,10 @@ func (m createProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m createProgressModel) View() string {
 	if m.done {
+		if m.cancelled {
+			return "\nOperation cancelled.\n"
+		}
+
 		if m.err != nil {
 			errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F5F")).Bold(true)
 			return fmt.Sprintf("\n%s\n\n", errorStyle.Render(fmt.Sprintf("✗ Failed to create instance: %v", m.err)))
@@ -201,6 +216,10 @@ func runCreate(cmd *cobra.Command) error {
 
 	client := api.NewClient(config.Token)
 
+	if presetName != "" {
+		return runCreateWithPreset(presetName, client)
+	}
+
 	isInteractive := !cmd.Flags().Changed("mode")
 
 	var createConfig *tui.CreateConfig
@@ -208,6 +227,10 @@ func runCreate(cmd *cobra.Command) error {
 	if isInteractive {
 		createConfig, err = tui.RunCreateInteractive(client)
 		if err != nil {
+			if _, ok := err.(*tui.CancellationError); ok {
+				fmt.Println("Operation cancelled.")
+				return nil
+			}
 			return err
 		}
 	} else {
@@ -273,6 +296,80 @@ func runCreate(cmd *cobra.Command) error {
 	result, ok := finalModel.(createProgressModel)
 	if !ok {
 		return fmt.Errorf("unexpected result from progress renderer")
+	}
+
+	if result.cancelled {
+		fmt.Println("Operation cancelled.")
+		return nil
+	}
+
+	if result.err != nil {
+		return fmt.Errorf("failed to create instance: %w", result.err)
+	}
+
+	if savePreset != "" {
+		newPreset := Preset{
+			Name:       savePreset,
+			Mode:       createConfig.Mode,
+			GPUType:    createConfig.GPUType,
+			NumGPUs:    createConfig.NumGPUs,
+			VCPUs:      createConfig.VCPUs,
+			Template:   createConfig.Template,
+			DiskSizeGB: createConfig.DiskSizeGB,
+			CreatedAt:  time.Now(),
+		}
+
+		if err := AddPreset(newPreset); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to save preset: %v\n", err)
+		} else {
+			fmt.Printf("✓ Configuration saved as preset '%s'\n", savePreset)
+		}
+	}
+
+	return nil
+}
+
+func runCreateWithPreset(presetName string, client *api.Client) error {
+	preset, err := GetPreset(presetName)
+	if err != nil {
+		return fmt.Errorf("preset not found: %w", err)
+	}
+
+	fmt.Printf("Using preset: %s\n", preset.Name)
+	fmt.Printf("Mode: %s\n", strings.Title(preset.Mode))
+	fmt.Printf("GPU: %s\n", strings.ToUpper(preset.GPUType))
+	if preset.Mode == "prototyping" {
+		fmt.Printf("vCPUs: %d\n", preset.VCPUs)
+	} else {
+		fmt.Printf("GPUs: %d\n", preset.NumGPUs)
+	}
+	fmt.Printf("Template: %s\n", preset.Template)
+	fmt.Printf("Disk Size: %d GB\n\n", preset.DiskSizeGB)
+
+	req := api.CreateInstanceRequest{
+		Mode:       preset.Mode,
+		GPUType:    preset.GPUType,
+		NumGPUs:    preset.NumGPUs,
+		CPUCores:   preset.VCPUs,
+		Template:   preset.Template,
+		DiskSizeGB: preset.DiskSizeGB,
+	}
+
+	progressModel := newCreateProgressModel(client, "Creating instance...", req)
+	program := tea.NewProgram(progressModel)
+	finalModel, runErr := program.Run()
+	if runErr != nil {
+		return fmt.Errorf("failed to render progress: %w", runErr)
+	}
+
+	result, ok := finalModel.(createProgressModel)
+	if !ok {
+		return fmt.Errorf("unexpected result from progress renderer")
+	}
+
+	if result.cancelled {
+		fmt.Println("Operation cancelled.")
+		return nil
 	}
 
 	if result.err != nil {

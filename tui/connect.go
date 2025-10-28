@@ -42,7 +42,7 @@ func (m ConnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q", "esc":
+		case "q", "esc", "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
 
@@ -85,7 +85,7 @@ func (m ConnectModel) View() string {
 		b.WriteString(fmt.Sprintf("%s%s\n", cursor, instance))
 	}
 
-	b.WriteString("\nUse ↑/↓ or j/k to navigate, Enter to select, q to quit\n")
+	b.WriteString("\nUse ↑/↓ or j/k to navigate, Enter to select, q to cancel\n")
 
 	return b.String()
 }

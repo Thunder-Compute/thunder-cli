@@ -134,7 +134,7 @@ func (m SCPModel) Init() tea.Cmd {
 func (m SCPModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if msg.String() == "enter" || msg.String() == "ctrl+c" {
+		if msg.String() == "q" || msg.String() == "ctrl+c" {
 			m.quitting = true
 			return m, tea.Quit
 		}
@@ -250,7 +250,7 @@ func (m SCPModel) View() string {
 		s += "\n\n"
 		s += renderLogs(m)
 
-		s += "\n" + scpLogStyle.Render("Press Enter to exit...") + "\n"
+		s += "\n" + scpLogStyle.Render("Press q to cancel...") + "\n"
 
 	case SCPPhaseError:
 		s += scpErrorStyleTUI.Render("✗ Transfer Failed") + "\n\n"

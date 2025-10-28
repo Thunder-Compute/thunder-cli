@@ -6,6 +6,8 @@ package cmd
 import (
 	"os"
 
+	"github.com/joshuawatkins04/thunder-cli-draft/tui"
+	helpmenus "github.com/joshuawatkins04/thunder-cli-draft/tui/help-menus"
 	"github.com/spf13/cobra"
 )
 
@@ -14,12 +16,10 @@ var rootCmd = &cobra.Command{
 	Use:   "tnr",
 	Short: "Thunder Compute CLI - Manage your cloud instances",
 	Long: `tnr is the command-line interface for Thunder Compute.
-Use it to manage your cloud instances, deployments, and configurations.
-
-Authentication: Run 'tnr login' to authenticate with Thunder Compute.`,
+Use it to manage your cloud instances, deployments, and configurations.`,
 	Version: "1.0.0",
 	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Help()
+		tui.RenderCustomHelp(cmd)
 	},
 }
 
@@ -33,6 +33,58 @@ func Execute() {
 }
 
 func init() {
+	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		helpmenus.RenderRootHelp(cmd)
+	})
+
+	completionCmd := &cobra.Command{
+		Use:   "completion [shell]",
+		Short: "Generate the autocompletion script for tnr for the specified shell",
+		Long: `Generate the autocompletion script for tnr for the specified shell.
+See each sub-command's help for details on how to use the generated script.`,
+		Run: func(cmd *cobra.Command, args []string) {
+			rootCmd.GenBashCompletionV2(os.Stdout, true)
+		},
+	}
+
+	completionCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		helpmenus.RenderCompletionHelp(cmd)
+	})
+
+	completionCmd.AddCommand(&cobra.Command{
+		Use:   "bash",
+		Short: "Generate the autocompletion script for bash",
+		Run: func(cmd *cobra.Command, args []string) {
+			rootCmd.GenBashCompletionV2(os.Stdout, true)
+		},
+	})
+
+	completionCmd.AddCommand(&cobra.Command{
+		Use:   "zsh",
+		Short: "Generate the autocompletion script for zsh",
+		Run: func(cmd *cobra.Command, args []string) {
+			rootCmd.GenZshCompletion(os.Stdout)
+		},
+	})
+
+	completionCmd.AddCommand(&cobra.Command{
+		Use:   "fish",
+		Short: "Generate the autocompletion script for fish",
+		Run: func(cmd *cobra.Command, args []string) {
+			rootCmd.GenFishCompletion(os.Stdout, true)
+		},
+	})
+
+	completionCmd.AddCommand(&cobra.Command{
+		Use:   "powershell",
+		Short: "Generate the autocompletion script for powershell",
+		Run: func(cmd *cobra.Command, args []string) {
+			rootCmd.GenPowerShellCompletion(os.Stdout)
+		},
+	})
+
+	rootCmd.AddCommand(completionCmd)
+
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.

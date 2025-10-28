@@ -14,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/joshuawatkins04/thunder-cli-draft/api"
 	"github.com/joshuawatkins04/thunder-cli-draft/tui"
+	helpmenus "github.com/joshuawatkins04/thunder-cli-draft/tui/help-menus"
 	"github.com/joshuawatkins04/thunder-cli-draft/utils"
 	"github.com/spf13/cobra"
 )
@@ -64,6 +65,10 @@ Examples:
 }
 
 func init() {
+	scpCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		helpmenus.RenderSCPHelp(cmd)
+	})
+
 	rootCmd.AddCommand(scpCmd)
 	scpCmd.Flags().BoolVarP(&recursiveFlag, "recursive", "r", false, "Recursively copy directories")
 }

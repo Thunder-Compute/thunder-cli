@@ -37,6 +37,7 @@ type ConnectFlowModel struct {
 	err           error
 	quitting      bool
 	lastPhaseIdx  int
+	cancelled     bool
 }
 
 type PhaseUpdateMsg struct {
@@ -148,8 +149,9 @@ func (m ConnectFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q", "esc":
+		case "q", "esc", "ctrl+c":
 			m.quitting = true
+			m.cancelled = true
 			return m, tea.Quit
 		}
 		return m, nil
@@ -236,6 +238,9 @@ func (m ConnectFlowModel) View() string {
 		b.WriteString("\n")
 	}
 
+	b.WriteString("\n")
+	b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("Press q to cancel\n"))
+
 	return b.String()
 }
 
@@ -264,6 +269,8 @@ func SendConnectComplete(p *tea.Program) {
 		p.Send(ConnectCompleteMsg{})
 	}
 }
+
+func (m ConnectFlowModel) Cancelled() bool { return m.cancelled }
 
 func SendConnectError(p *tea.Program, err error) {
 	if p != nil {

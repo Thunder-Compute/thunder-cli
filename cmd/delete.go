@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/joshuawatkins04/thunder-cli-draft/api"
 	"github.com/joshuawatkins04/thunder-cli-draft/tui"
+	helpmenus "github.com/joshuawatkins04/thunder-cli-draft/tui/help-menus"
 	"github.com/spf13/cobra"
 )
 
@@ -49,6 +50,10 @@ Examples:
 }
 
 func init() {
+	deleteCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		helpmenus.RenderDeleteHelp(cmd)
+	})
+
 	rootCmd.AddCommand(deleteCmd)
 }
 
@@ -112,26 +117,17 @@ func runDelete(args []string) error {
 	if len(args) == 0 {
 		selectedInstance, err = tui.RunDeleteInteractive(client)
 		if err != nil {
+			if _, ok := err.(*tui.CancellationError); ok {
+				fmt.Println("User cancelled delete process")
+				return nil
+			}
 			return err
 		}
 		instanceID = selectedInstance.ID
 	} else {
 		instanceID = args[0]
 
-		busy := tui.NewBusyModel("Fetching instances...")
-		bp := tea.NewProgram(busy)
-		busyDone := make(chan struct{})
-
-		go func() {
-			_, _ = bp.Run()
-			close(busyDone)
-		}()
-
 		instances, err := client.ListInstances()
-
-		bp.Send(tui.BusyDoneMsg{})
-		<-busyDone
-
 		if err != nil {
 			return fmt.Errorf("failed to fetch instances: %w", err)
 		}

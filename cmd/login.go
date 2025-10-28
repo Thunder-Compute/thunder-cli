@@ -21,6 +21,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/joshuawatkins04/thunder-cli-draft/tui"
+	helpmenus "github.com/joshuawatkins04/thunder-cli-draft/tui/help-menus"
 	"github.com/spf13/cobra"
 )
 
@@ -229,11 +230,21 @@ var loginCmd = &cobra.Command{
 }
 
 func init() {
+	loginCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		helpmenus.RenderLoginHelp(cmd)
+	})
+
 	rootCmd.AddCommand(loginCmd)
 	loginCmd.Flags().StringVar(&loginToken, "token", "", "Authenticate directly with a token instead of opening browser")
 }
 
 func runLogin() error {
+	config, err := LoadConfig()
+	if err == nil && config.Token != "" {
+		fmt.Println("User already logged in. Log out to sign into a different account.")
+		return nil
+	}
+
 	if loginToken != "" {
 		authResp := AuthResponse{
 			Token: loginToken,
@@ -288,6 +299,10 @@ func runInteractiveLogin() error {
 
 	_, err = p.Run()
 	if err != nil {
+		if model.State() == tui.LoginStateCancelled {
+			fmt.Println("User cancelled authentication")
+			return nil
+		}
 		return fmt.Errorf("TUI error: %w", err)
 	}
 
@@ -302,7 +317,8 @@ func runInteractiveLogin() error {
 	}
 
 	if model.State() == tui.LoginStateCancelled {
-		return fmt.Errorf("authentication cancelled")
+		fmt.Println("User cancelled authentication")
+		return nil
 	}
 	if model.State() == tui.LoginStateError {
 		return model.Error()
@@ -469,6 +485,10 @@ var logoutCmd = &cobra.Command{
 }
 
 func init() {
+	logoutCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		helpmenus.RenderLogoutHelp(cmd)
+	})
+
 	rootCmd.AddCommand(logoutCmd)
 }
 

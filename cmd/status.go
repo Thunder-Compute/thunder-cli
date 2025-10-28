@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/joshuawatkins04/thunder-cli-draft/api"
 	"github.com/joshuawatkins04/thunder-cli-draft/tui"
+	helpmenus "github.com/joshuawatkins04/thunder-cli-draft/tui/help-menus"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +23,7 @@ var statusCmd = &cobra.Command{
 	Long: `List Thunder Compute instances and their current status.
 
 By default, continuously monitors and refreshes instance statuses.
-Press Ctrl+C or q to exit.
+Press q to cancel.
 
 Use --no-wait to display status once and exit immediately.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -34,6 +35,10 @@ Use --no-wait to display status once and exit immediately.`,
 }
 
 func init() {
+	statusCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		helpmenus.RenderStatusHelp(cmd)
+	})
+
 	rootCmd.AddCommand(statusCmd)
 	statusCmd.Flags().BoolVar(&noWait, "no-wait", false, "Display status once and exit without monitoring")
 }

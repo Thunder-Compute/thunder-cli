@@ -69,7 +69,7 @@ func NewStatusModel(client *api.Client, monitoring bool, instances []api.Instanc
 
 func (m StatusModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.spinner.Tick}
-	if m.monitoring {
+	if m.monitoring && len(m.instances) > 0 {
 		cmds = append(cmds, tickCmd())
 	}
 	return tea.Batch(cmds...)
@@ -89,18 +89,34 @@ func fetchInstancesCmd(client *api.Client) tea.Cmd {
 }
 
 func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.quitting {
+		return m, tea.Quit
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "q", "ctrl+c":
 			m.quitting = true
+			m.monitoring = false
 			return m, tea.Quit
 		}
 
 	case tickMsg:
-		if m.monitoring {
+		if m.monitoring && len(m.instances) > 0 {
 			return m, tea.Batch(tickCmd(), fetchInstancesCmd(m.client))
 		}
+
+	case spinner.TickMsg:
+		if len(m.instances) == 0 && m.firstRender {
+			m.quitting = true
+			m.monitoring = false
+			m.firstRender = false
+			return m, tea.Quit
+		}
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case instancesMsg:
 		if msg.err != nil {
@@ -110,6 +126,12 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.instances = msg.instances
 		m.lastUpdate = time.Now()
 
+		if len(m.instances) == 0 {
+			m.quitting = true
+			m.monitoring = false
+			return m, tea.Quit
+		}
+
 		hasTransitionStates := m.hasTransitionStates()
 
 		if !hasTransitionStates && !m.firstRender && m.monitoring {
@@ -117,11 +139,6 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.firstRender = false
-
-	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
 	}
 
 	return m, nil
@@ -132,7 +149,7 @@ func (m StatusModel) View() string {
 		return fmt.Sprintf("Error: %v\n", m.err)
 	}
 
-	if m.quitting && !m.monitoring {
+	if m.quitting {
 		return ""
 	}
 
@@ -154,7 +171,7 @@ func (m StatusModel) View() string {
 	}
 
 	if m.monitoring {
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("Press Ctrl+C or q to stop monitoring"))
+		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("Press q to cancel monitoring"))
 		b.WriteString("\n")
 	}
 

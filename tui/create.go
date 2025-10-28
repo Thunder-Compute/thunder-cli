@@ -12,10 +12,17 @@ import (
 	"github.com/joshuawatkins04/thunder-cli-draft/api"
 )
 
+type CancellationError struct{}
+
+func (e *CancellationError) Error() string {
+	return "operation cancelled"
+}
+
 type createStep int
 
 const (
-	stepMode createStep = iota
+	stepPresetSelection createStep = iota
+	stepMode
 	stepGPU
 	stepCompute
 	stepTemplate
@@ -46,6 +53,9 @@ type createModel struct {
 	quitting        bool
 	client          *api.Client
 	spinner         spinner.Model
+	presetSelected  bool
+	showSavePreset  bool
+	savePresetName  string
 }
 
 var (
@@ -93,7 +103,7 @@ func NewCreateModel(client *api.Client) createModel {
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
 
 	return createModel{
-		step:      stepMode,
+		step:      stepPresetSelection,
 		client:    client,
 		diskInput: ti,
 		spinner:   s,
@@ -168,16 +178,22 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "q", "ctrl+c":
 			if m.step != stepConfirmation {
 				m.quitting = true
 				return m, tea.Quit
 			}
 
 		case "esc":
-			if m.step > stepMode && m.step < stepConfirmation {
+			if m.step > stepPresetSelection {
 				m.step--
 				m.cursor = 0
+				if m.step == stepDiskSize {
+					m.diskInput.Blur()
+				}
+			} else if m.step == stepPresetSelection {
+				m.quitting = true
+				return m, tea.Quit
 			}
 
 		case "enter":
@@ -207,6 +223,20 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
+	case stepPresetSelection:
+		if m.cursor == 0 {
+			// Use a preset
+			// TODO: Load preset selection dialog
+			m.presetSelected = true
+			// For now, skip to mode selection
+			m.step = stepMode
+			m.cursor = 0
+		} else {
+			// Configure from scratch
+			m.step = stepMode
+			m.cursor = 0
+		}
+
 	case stepMode:
 		modes := []string{"prototyping", "production"}
 		m.config.Mode = modes[m.cursor]
@@ -254,6 +284,14 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 
 	case stepConfirmation:
 		if m.cursor == 0 {
+			// Create instance
+			m.config.Confirmed = true
+			m.step = stepComplete
+			return m, tea.Quit
+		} else if m.cursor == 1 && m.showSavePreset {
+			// Save as preset (if enabled)
+			// TODO: Implement save preset dialog
+			m.showSavePreset = false
 			m.config.Confirmed = true
 			m.step = stepComplete
 			return m, tea.Quit
@@ -275,6 +313,8 @@ func (m createModel) getGPUOptions() []string {
 
 func (m createModel) getMaxCursor() int {
 	switch m.step {
+	case stepPresetSelection:
+		return 1
 	case stepMode:
 		return 1
 	case stepGPU:
@@ -287,6 +327,9 @@ func (m createModel) getMaxCursor() int {
 	case stepTemplate:
 		return len(m.templates) - 1
 	case stepConfirmation:
+		if m.showSavePreset {
+			return 2
+		}
 		return 1
 	}
 	return 0
@@ -298,7 +341,7 @@ func (m createModel) View() string {
 	}
 
 	if m.quitting {
-		return "Operation cancelled.\n"
+		return ""
 	}
 
 	if m.step == stepComplete {
@@ -310,7 +353,7 @@ func (m createModel) View() string {
 	s.WriteString(titleStyle.Render("⚡ Create Thunder Compute Instance"))
 	s.WriteString("\n\n")
 
-	progressSteps := []string{"Mode", "GPU", "Compute", "Template", "Disk", "Confirm"}
+	progressSteps := []string{"Preset", "Mode", "GPU", "Compute", "Template", "Disk", "Confirm"}
 	progress := ""
 	for i, stepName := range progressSteps {
 		adjustedStep := int(m.step)
@@ -329,6 +372,17 @@ func (m createModel) View() string {
 	s.WriteString("\n\n")
 
 	switch m.step {
+	case stepPresetSelection:
+		s.WriteString("How would you like to configure this instance?\n\n")
+		options := []string{"Configure from scratch", "Use a preset configuration"}
+		for i, option := range options {
+			cursor := "  "
+			if m.cursor == i {
+				cursor = cursorStyle.Render("▶ ")
+			}
+			s.WriteString(fmt.Sprintf("%s%s\n", cursor, option))
+		}
+
 	case stepMode:
 		s.WriteString("Select instance mode:\n\n")
 		modes := []string{"Prototyping (lowest cost, dev/test)", "Production (highest stability, long-running)"}
@@ -456,7 +510,12 @@ func (m createModel) View() string {
 		}
 
 		s.WriteString("Confirm creation?\n\n")
-		options := []string{"✓ Create Instance", "✗ Cancel"}
+		options := []string{"✓ Create Instance"}
+		if m.showSavePreset {
+			options = append(options, "💾 Save as preset")
+		}
+		options = append(options, "✗ Cancel")
+
 		for i, option := range options {
 			cursor := "  "
 			if m.cursor == i {
@@ -468,7 +527,7 @@ func (m createModel) View() string {
 
 	if m.step != stepConfirmation {
 		s.WriteString("\n")
-		s.WriteString("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Quit\n")
+		s.WriteString("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n")
 	} else {
 		s.WriteString("\n")
 		s.WriteString("↑/↓: Navigate  Enter: Confirm\n")
@@ -501,7 +560,7 @@ func RunCreateInteractive(client *api.Client) (*CreateConfig, error) {
 	}
 
 	if result.quitting || !result.config.Confirmed {
-		return nil, fmt.Errorf("operation cancelled")
+		return nil, &CancellationError{}
 	}
 
 	return &result.config, nil

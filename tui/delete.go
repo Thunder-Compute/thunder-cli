@@ -100,6 +100,11 @@ func (m deleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.instances = msg.instances
 
+		if len(m.instances) == 0 {
+			m.quitting = true
+			return m, tea.Quit
+		}
+
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -109,7 +114,7 @@ func (m deleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Don't process keys while loading
 		if m.loading {
 			switch msg.String() {
-			case "ctrl+c", "q":
+			case "q", "ctrl+c":
 				m.quitting = true
 				return m, tea.Quit
 			}
@@ -117,7 +122,7 @@ func (m deleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "q", "ctrl+c":
 			if m.step != deleteStepConfirm {
 				m.quitting = true
 				return m, tea.Quit
@@ -190,11 +195,14 @@ func (m deleteModel) View() string {
 	}
 
 	if m.loading {
-		return fmt.Sprintf("%s Fetching instances...\n", m.spinner.View())
+		return "\n  " + m.spinner.View() + " Fetching instances...\n\n" + helpStyle.Render("Press q to cancel") + "\n"
 	}
 
 	if m.quitting {
-		return "Operation cancelled.\n"
+		if len(m.instances) == 0 {
+			return "No instances found.\n"
+		}
+		return ""
 	}
 
 	if m.step == deleteStepComplete {
@@ -208,12 +216,6 @@ func (m deleteModel) View() string {
 
 	switch m.step {
 	case deleteStepSelect:
-		if len(m.instances) == 0 {
-			s.WriteString("No instances found.\n")
-			s.WriteString("\nPress q to quit.\n")
-			return s.String()
-		}
-
 		s.WriteString("Select an instance to delete:\n\n")
 
 		hasStartingInstances := false
@@ -327,8 +329,12 @@ func RunDeleteInteractive(client *api.Client) (*api.Instance, error) {
 		return nil, fmt.Errorf("no instances available to delete")
 	}
 
-	if result.quitting || !result.confirmed || result.selected == nil {
-		return nil, fmt.Errorf("operation cancelled")
+	if result.quitting {
+		return nil, &CancellationError{}
+	}
+
+	if !result.confirmed || result.selected == nil {
+		return nil, &CancellationError{}
 	}
 
 	return result.selected, nil

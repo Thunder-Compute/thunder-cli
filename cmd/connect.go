@@ -4,16 +4,19 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/joshuawatkins04/thunder-cli-draft/api"
 	"github.com/joshuawatkins04/thunder-cli-draft/tui"
+	helpmenus "github.com/joshuawatkins04/thunder-cli-draft/tui/help-menus"
 	"github.com/joshuawatkins04/thunder-cli-draft/utils"
 	"github.com/spf13/cobra"
 )
@@ -58,20 +61,43 @@ If no instance ID is provided, an interactive selection menu will be displayed.`
 			busy := tui.NewBusyModel("Fetching instances...")
 			bp := tea.NewProgram(busy)
 			busyDone := make(chan struct{})
+			cancelled := make(chan bool, 1)
 
 			go func() {
-				_, _ = bp.Run()
+				finalModel, _ := bp.Run()
+				if finalModel.(tui.BusyModel).Quitting {
+					cancelled <- true
+				}
 				close(busyDone)
 			}()
 
-			client := api.NewClient(config.Token)
-			instances, err := client.ListInstances()
+			type apiResult struct {
+				instances []api.Instance
+				err       error
+			}
+			resultChan := make(chan apiResult, 1)
+			go func() {
+				client := api.NewClient(config.Token)
+				instances, err := client.ListInstances()
+				resultChan <- apiResult{instances, err}
+			}()
 
-			bp.Send(tui.BusyDoneMsg{})
-			<-busyDone
+			var instances []api.Instance
+			var apiErr error
+			select {
+			case <-cancelled:
+				bp.Send(tui.BusyDoneMsg{})
+				<-busyDone
+				fmt.Println("Operation cancelled.")
+				os.Exit(0)
+			case result := <-resultChan:
+				bp.Send(tui.BusyDoneMsg{})
+				<-busyDone
+				instances, apiErr = result.instances, result.err
+			}
 
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: failed to list instances: %v\n", err)
+			if apiErr != nil {
+				fmt.Fprintf(os.Stderr, "Error: failed to list instances: %v\n", apiErr)
 				os.Exit(1)
 			}
 
@@ -112,7 +138,7 @@ If no instance ID is provided, an interactive selection menu will be displayed.`
 			}
 
 			if selected == "" {
-				fmt.Println("Connection cancelled.")
+				fmt.Println("User cancelled instance connection")
 				os.Exit(0)
 			}
 
@@ -128,6 +154,10 @@ If no instance ID is provided, an interactive selection menu will be displayed.`
 }
 
 func init() {
+	connectCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		helpmenus.RenderConnectHelp(cmd)
+	})
+
 	rootCmd.AddCommand(connectCmd)
 	connectCmd.Flags().StringSliceVarP(&tunnelPorts, "tunnel", "t", []string{}, "Port forwarding (can specify multiple times: -t 8080 -t 3000)")
 	connectCmd.Flags().BoolVar(&debugMode, "debug", false, "Show detailed timing breakdown")
@@ -151,17 +181,56 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 	flowModel := tui.NewConnectFlowModel(instanceID)
 	p := tea.NewProgram(flowModel)
 
-	// Run TUI in background
 	tuiDone := make(chan error, 1)
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	var cancelledMu sync.Mutex
+	cancelled := false
+	printedCancel := false
+
 	go func() {
-		_, err := p.Run()
+		finalModel, err := p.Run()
 		if err != nil {
 			tuiDone <- err
 		}
 		close(tuiDone)
+		if fm, ok := finalModel.(tui.ConnectFlowModel); ok && fm.Cancelled() {
+			cancel()
+			cancelledMu.Lock()
+			cancelled = true
+			cancelledMu.Unlock()
+		}
 	}()
 
 	time.Sleep(50 * time.Millisecond)
+
+	checkCancelled := func() bool {
+		cancelledMu.Lock()
+		isCancelled := cancelled
+		alreadyPrinted := printedCancel
+		if isCancelled && !alreadyPrinted {
+			fmt.Println("User cancelled instance connection")
+			printedCancel = true
+			cancelledMu.Unlock()
+			return true
+		}
+		cancelledMu.Unlock()
+		select {
+		case <-cancelCtx.Done():
+			cancelledMu.Lock()
+			if cancelled && !printedCancel {
+				fmt.Println("User cancelled instance connection")
+				printedCancel = true
+			}
+			cancelledMu.Unlock()
+			return true
+		default:
+			return false
+		}
+	}
+
+	if checkCancelled() {
+		return nil
+	}
 
 	phase1Start := time.Now()
 	tui.SendPhaseUpdate(p, 0, tui.PhaseInProgress, "Checking prerequisites...", 0)
@@ -175,6 +244,9 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 		}
 	}
 
+	if checkCancelled() {
+		return nil
+	}
 	if err := utils.AcquireLock(instanceID); err != nil {
 		tui.SendConnectError(p, err)
 		<-tuiDone
@@ -202,11 +274,14 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 		return err
 	}
 
+	if checkCancelled() {
+		return nil
+	}
 	client := api.NewClient(config.Token)
 
 	// Fetch binary hash in background for potential virtualization setup
 	go func() {
-		hash, err := client.GetLatestBinaryHash()
+		hash, err := client.GetLatestBinaryHashCtx(cancelCtx)
 		if err != nil {
 			hashErrChan <- err
 			return
@@ -214,7 +289,13 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 		hashChan <- hash
 	}()
 
-	instances, err := client.ListInstancesWithIPUpdate()
+	if checkCancelled() {
+		return nil
+	}
+	instances, err := client.ListInstancesWithIPUpdateCtx(cancelCtx)
+	if checkCancelled() {
+		return nil
+	}
 	if err != nil {
 		tui.SendConnectError(p, err)
 		<-tuiDone
@@ -262,9 +343,15 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 	tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Checking SSH keys...", 0)
 
 	keyFile := utils.GetKeyFile(instance.UUID)
+	if checkCancelled() {
+		return nil
+	}
 	if !utils.KeyExists(instance.UUID) {
 		tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Generating new SSH key...", 0)
-		keyResp, err := client.AddSSHKey(instanceID)
+		keyResp, err := client.AddSSHKeyCtx(cancelCtx, instanceID)
+		if checkCancelled() {
+			return nil
+		}
 		if err != nil {
 			tui.SendConnectError(p, err)
 			<-tuiDone
@@ -285,7 +372,13 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 	tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Connecting to %s:%d...", instance.IP, port), 0)
 
 	// Establish SSH connection with 2-minute timeout and retry logic
-	sshClient, err := utils.RobustSSHConnect(instance.IP, keyFile, port, 120)
+	if checkCancelled() {
+		return nil
+	}
+	sshClient, err := utils.RobustSSHConnectCtx(cancelCtx, instance.IP, keyFile, port, 120)
+	if checkCancelled() {
+		return nil
+	}
 	if err != nil {
 		tui.SendConnectError(p, err)
 		<-tuiDone
@@ -316,8 +409,16 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 		binaryHash = hash
 	case <-hashErrChan:
 		binaryHash = ""
+	case <-cancelCtx.Done():
+		if checkCancelled() {
+			return nil
+		}
 	case <-time.After(10 * time.Second):
 		binaryHash = ""
+	}
+
+	if checkCancelled() {
+		return nil
 	}
 
 	// Only configure virtualization if we're the only/first session
@@ -356,8 +457,29 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 
 	tui.SendConnectComplete(p)
 
-	if err := <-tuiDone; err != nil {
-		return fmt.Errorf("TUI error: %w", err)
+	if checkCancelled() {
+		return nil
+	}
+
+	select {
+	case err := <-tuiDone:
+		if err != nil {
+			if checkCancelled() {
+				return nil
+			}
+			return fmt.Errorf("TUI error: %w", err)
+		}
+	default:
+		if err := <-tuiDone; err != nil {
+			if checkCancelled() {
+				return nil
+			}
+			return fmt.Errorf("TUI error: %w", err)
+		}
+	}
+
+	if checkCancelled() {
+		return nil
 	}
 
 	if debug {

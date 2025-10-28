@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -36,8 +37,11 @@ func testSocketConnection(ip string, port int) bool {
 	return true
 }
 
-// RobustSSHConnect establishes SSH with retry logic (up to maxWait seconds)
 func RobustSSHConnect(ip, keyFile string, port int, maxWait int) (*SSHClient, error) {
+	return RobustSSHConnectCtx(context.Background(), ip, keyFile, port, maxWait)
+}
+
+func RobustSSHConnectCtx(ctx context.Context, ip, keyFile string, port int, maxWait int) (*SSHClient, error) {
 	keyData, err := os.ReadFile(keyFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key: %w", err)
@@ -61,6 +65,11 @@ func RobustSSHConnect(ip, keyFile string, port int, maxWait int) (*SSHClient, er
 	startTime := time.Now()
 
 	for {
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("SSH connection cancelled")
+		default:
+		}
 		elapsed := time.Since(startTime)
 		if elapsed > time.Duration(maxWait)*time.Second {
 			return nil, fmt.Errorf("SSH connection timeout after %d seconds", maxWait)
@@ -71,9 +80,35 @@ func RobustSSHConnect(ip, keyFile string, port int, maxWait int) (*SSHClient, er
 			continue
 		}
 
-		client, err := ssh.Dial("tcp", address, config)
+		dialer := &net.Dialer{}
+		var conn net.Conn
+		d := make(chan struct{})
+		var dialErr error
+		go func() {
+			conn, dialErr = dialer.Dial("tcp", address)
+			close(d)
+		}()
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("SSH connection cancelled")
+		case <-d:
+			// proceed
+		}
+
+		if dialErr != nil {
+			if strings.Contains(dialErr.Error(), "connection refused") ||
+				strings.Contains(dialErr.Error(), "no route to host") ||
+				strings.Contains(dialErr.Error(), "i/o timeout") {
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			return nil, fmt.Errorf("SSH dial failed: %w", dialErr)
+		}
+
+		cc, chans, reqs, err := ssh.NewClientConn(conn, address, config)
 		if err == nil {
-			return &SSHClient{client: client}, nil
+			return &SSHClient{client: ssh.NewClient(cc, chans, reqs)}, nil
 		}
 
 		if strings.Contains(err.Error(), "connection refused") ||
