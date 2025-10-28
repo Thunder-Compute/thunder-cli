@@ -54,5 +54,5 @@ func (m BusyModel) View() string {
 	if m.Quitting {
 		return ""
 	}
-	return "\n  " + m.spin.View() + " " + m.text + "\n\n" + helpStyle.Render("Press 'Q' to cancel") + "\n"
+	return "\n  " + m.spin.View() + " " + m.text + "\n" + helpStyle.Render("Press 'Q' to cancel") + "\n"
 }

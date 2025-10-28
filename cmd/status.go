@@ -54,7 +54,7 @@ func runStatus() error {
 	}
 
 	client := api.NewClient(config.Token)
-	monitoring := !noWait
+	monitoring := true // Always monitor; --no-wait is currently disabled
 
 	busy := tui.NewBusyModel("Fetching instances...")
 	bp := tea.NewProgram(busy)

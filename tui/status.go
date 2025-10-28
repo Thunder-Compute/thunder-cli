@@ -132,11 +132,12 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-		hasTransitionStates := m.hasTransitionStates()
-
-		if !hasTransitionStates && !m.firstRender && m.monitoring {
-			m.monitoring = false
-		}
+		// Commented out: logic to stop polling when not in transition states
+		// Now it always polls
+		// hasTransitionStates := m.hasTransitionStates()
+		// if !hasTransitionStates && !m.firstRender && m.monitoring {
+		// 	m.monitoring = false
+		// }
 
 		m.firstRender = false
 	}
@@ -164,11 +165,13 @@ func (m StatusModel) View() string {
 		b.WriteString("  ")
 		b.WriteString(m.spinner.View())
 		b.WriteString("\n")
-	} else if !m.firstRender {
-		timestamp := m.lastUpdate.Format("15:04:05")
-		b.WriteString(timestampStyle.Render(fmt.Sprintf("Last updated: %s (monitoring stopped - no instances in transition)", timestamp)))
-		b.WriteString("\n")
 	}
+	// Commented out: message about monitoring stopping is no longer relevant
+	// } else if !m.firstRender {
+	// 	timestamp := m.lastUpdate.Format("15:04:05")
+	// 	b.WriteString(timestampStyle.Render(fmt.Sprintf("Last updated: %s (monitoring stopped - no instances in transition)", timestamp)))
+	// 	b.WriteString("\n")
+	// }
 
 	if m.monitoring {
 		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("Press 'Q' to cancel monitoring"))
