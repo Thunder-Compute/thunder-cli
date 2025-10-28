@@ -62,13 +62,6 @@ func RenderDeleteHelp(cmd *cobra.Command) {
 	output.WriteString(CommandStyle.Render("tnr delete 0"))
 	output.WriteString("\n\n")
 
-	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Delete instance with ID 'abc123'"))
-	output.WriteString("\n")
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("tnr delete abc123"))
-	output.WriteString("\n\n")
-
 	// What happens section
 	output.WriteString(SectionStyle.Render("● WHAT HAPPENS"))
 	output.WriteString("\n\n")

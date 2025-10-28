@@ -52,14 +52,14 @@ func RenderLoginHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("# Interactive browser authentication"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("tnr login"))
+	output.WriteString("tnr login")
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Direct token authentication"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("tnr login --token abc123xyz789"))
+	output.WriteString("tnr login --token abc123xyz789")
 	output.WriteString("\n\n")
 
 	// Flags Section

@@ -64,28 +64,28 @@ func RenderCompletionHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("# Generate bash completion script"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("tnr completion bash"))
+	output.WriteString("tnr completion bash")
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Generate zsh completion script"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("tnr completion zsh"))
+	output.WriteString("tnr completion zsh")
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Generate fish completion script"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("tnr completion fish"))
+	output.WriteString("tnr completion fish")
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Generate PowerShell completion script"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("tnr completion powershell"))
+	output.WriteString("tnr completion powershell")
 	output.WriteString("\n\n")
 
 	// Shell Support Section
