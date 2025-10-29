@@ -45,10 +45,15 @@ jobs:
 
       - name: Generate latest.json
         run: |
-          VERSION=${GITHUB_REF_NAME}
-          BUCKET=${{ secrets.TNR_S3_BUCKET }}
-          AWS_REGION=${{ secrets.AWS_REGION }}
-          bash scripts/generate-latest-json.sh
-          aws s3 cp latest.json s3://$BUCKET/tnr/releases/latest.json --cache-control 'public, max-age=120' --acl public-read
+          VERSION="${GITHUB_REF_NAME}" \
+          BUCKET="${{ secrets.TNR_S3_BUCKET }}" \
+          AWS_REGION="${{ secrets.AWS_REGION }}" \
+            bash scripts/generate-latest-json.sh
+        
+          aws s3 cp latest.json "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/latest.json" \
+            --cache-control 'public, max-age=120' \
+            --content-type 'application/json' \
+            --acl public-read
+        
 
 
