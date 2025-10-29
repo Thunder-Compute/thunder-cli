@@ -4,7 +4,7 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package tui
 
 import (
-	helpmenus "github.com/joshuawatkins04/thunder-cli-draft/tui/help-menus"
+	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/spf13/cobra"
 )
 

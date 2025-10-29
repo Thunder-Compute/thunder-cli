@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/joshuawatkins04/thunder-cli-draft/api"
+	"github.com/Thunder-Compute/thunder-cli/api"
 )
 
 type PresetSaveResult struct {

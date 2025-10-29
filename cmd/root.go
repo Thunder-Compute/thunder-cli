@@ -6,17 +6,18 @@ package cmd
 import (
 	"os"
 
-	"github.com/joshuawatkins04/thunder-cli-draft/tui"
-	helpmenus "github.com/joshuawatkins04/thunder-cli-draft/tui/help-menus"
+	"github.com/Thunder-Compute/thunder-cli/internal/version"
+	"github.com/Thunder-Compute/thunder-cli/tui"
+	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/spf13/cobra"
 )
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "tnr",
-	Short: "Thunder Compute CLI",
-	Long: "tnr is the command-line interface for Thunder Compute.\nUse it to manage and connect to your Thunder Compute instances.",
-	Version: "1.0.0",
+	Use:     "tnr",
+	Short:   "Thunder Compute CLI",
+	Long:    "tnr is the command-line interface for Thunder Compute.\nUse it to manage and connect to your Thunder Compute instances.",
+	Version: version.BuildVersion,
 	Run: func(cmd *cobra.Command, args []string) {
 		tui.RenderCustomHelp(cmd)
 	},

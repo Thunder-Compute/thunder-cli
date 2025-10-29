@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tnr"
+dynamic = ["version"]
+description = "Thunder Compute CLI (Python shim installing the Go binary)"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "Thunder", email = "noreply@thunder.invalid" }]
+keywords = ["thunder", "cli"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/Thunder-Compute/thunder-cli"
+
+[project.scripts]
+tnr = "tnr_installer.wrapper:main"
+
+[tool.hatch.version]
+path = "src/tnr_installer/__init__.py"
+
+

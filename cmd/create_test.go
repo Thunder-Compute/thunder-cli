@@ -3,8 +3,8 @@ package cmd
 import (
 	"testing"
 
-	"github.com/joshuawatkins04/thunder-cli-draft/api"
-	"github.com/joshuawatkins04/thunder-cli-draft/tui"
+	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/tui"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

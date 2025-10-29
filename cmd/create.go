@@ -11,9 +11,9 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/joshuawatkins04/thunder-cli-draft/api"
-	"github.com/joshuawatkins04/thunder-cli-draft/tui"
-	helpmenus "github.com/joshuawatkins04/thunder-cli-draft/tui/help-menus"
+	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/tui"
+	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/spf13/cobra"
 )
 

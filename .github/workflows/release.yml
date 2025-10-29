@@ -1,0 +1,54 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+
+      - name: Run tests
+        run: go test ./... -v
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: GoReleaser (S3 only)
+        uses: goreleaser/goreleaser-action@v6.4.0
+        with:
+          version: latest
+          args: release --clean --config .goreleaser.s3-only.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+
+      - name: Generate latest.json
+        run: |
+          VERSION=${GITHUB_REF_NAME}
+          BUCKET=${{ secrets.TNR_S3_BUCKET }}
+          AWS_REGION=${{ secrets.AWS_REGION }}
+          bash scripts/generate-latest-json.sh
+          aws s3 cp latest.json s3://$BUCKET/tnr/releases/latest.json --cache-control 'public, max-age=120' --acl public-read
+
+
