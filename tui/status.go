@@ -2,13 +2,15 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/Thunder-Compute/thunder-cli/api"
 )
 
 var (
@@ -150,14 +152,18 @@ func (m StatusModel) View() string {
 		return fmt.Sprintf("Error: %v\n", m.err)
 	}
 
-	if m.quitting {
-		return ""
-	}
-
 	var b strings.Builder
 
 	b.WriteString(m.renderTable())
 	b.WriteString("\n")
+
+	if m.quitting {
+		// When quitting, still show the table but remove interactive elements
+		timestamp := m.lastUpdate.Format("15:04:05")
+		b.WriteString(timestampStyle.Render(fmt.Sprintf("Last updated: %s", timestamp)))
+		b.WriteString("\n")
+		return b.String()
+	}
 
 	if m.monitoring {
 		timestamp := m.lastUpdate.Format("15:04:05")
@@ -218,7 +224,18 @@ func (m StatusModel) renderTable() string {
 	b.WriteString(strings.Join(separatorRow, ""))
 	b.WriteString("\n")
 
-	for _, instance := range m.instances {
+	// Sort instances by ID ascending if there are multiple
+	instances := m.instances
+	if len(instances) > 1 {
+		sortedInstances := make([]api.Instance, len(instances))
+		copy(sortedInstances, instances)
+		sort.Slice(sortedInstances, func(i, j int) bool {
+			return sortedInstances[i].ID < sortedInstances[j].ID
+		})
+		instances = sortedInstances
+	}
+
+	for _, instance := range instances {
 		id := truncate(instance.ID, colWidths["ID"])
 		name := truncate(instance.Name, colWidths["Name"])
 		status := m.formatStatus(instance.Status, colWidths["Status"])
@@ -297,7 +314,7 @@ func capitalize(s string) string {
 
 func RunStatus(client *api.Client, monitoring bool, instances []api.Instance) error {
 	m := NewStatusModel(client, monitoring, instances)
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithOutput(os.Stdout))
 
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("error running status TUI: %w", err)

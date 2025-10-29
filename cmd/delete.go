@@ -11,12 +11,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -96,7 +96,7 @@ func (m deleteSpinnerModel) View() string {
 	if m.quitting {
 		return ""
 	}
-	return fmt.Sprintf("\n %s %s\n\n", m.spinner.View(), m.message)
+	return fmt.Sprintf("\n %s %s\n", m.spinner.View(), m.message)
 }
 
 func runDelete(args []string) error {
@@ -176,7 +176,7 @@ func runDelete(args []string) error {
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
 	fmt.Println(successStyle.Render(fmt.Sprintf("\n✓ Successfully deleted Thunder Compute instance %s", instanceID)))
-
+	fmt.Println("\n")
 	return nil
 }
 
