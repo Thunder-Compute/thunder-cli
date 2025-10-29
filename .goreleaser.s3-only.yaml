@@ -43,5 +43,5 @@ blobs:
   - provider: s3
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
-    folder: "tnr/releases/{{ .Version }}"
+    key_prefix: "tnr/releases/{{ .Version }}"
     ids: [archive, checksum]
