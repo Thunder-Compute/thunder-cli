@@ -19,9 +19,9 @@ import (
 	"runtime"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
