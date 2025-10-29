@@ -52,8 +52,4 @@ jobs:
         
           aws s3 cp latest.json "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/latest.json" \
             --cache-control 'public, max-age=120' \
-            --content-type 'application/json' \
-            --acl public-read
-        
-
-
+            --content-type 'application/json'
