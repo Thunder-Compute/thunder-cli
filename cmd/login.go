@@ -245,6 +245,20 @@ func runLogin() error {
 		return nil
 	}
 
+	// Check environment variable as fallback if no token in config file
+	if err != nil || config == nil || config.Token == "" {
+		if envToken := os.Getenv("TNR_API_TOKEN"); envToken != "" {
+			authResp := AuthResponse{
+				Token: envToken,
+			}
+			if err := saveConfig(authResp); err != nil {
+				return fmt.Errorf("failed to save credentials: %w", err)
+			}
+			fmt.Println("✓ Successfully authenticated with Thunder Compute using TNR_API_TOKEN!")
+			return nil
+		}
+	}
+
 	if loginToken != "" {
 		authResp := AuthResponse{
 			Token: loginToken,
