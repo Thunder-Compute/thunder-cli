@@ -1,4 +1,5 @@
-# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# https://goreleaser.com/customization/blob/
+
 version: 2
 
 project_name: tnr
@@ -43,5 +44,5 @@ blobs:
   - provider: s3
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
-    key_prefix: "tnr/releases/{{ .Version }}"
+    directory: "tnr/releases/{{ .Version }}"
     ids: [archive, checksum]
