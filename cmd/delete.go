@@ -58,27 +58,55 @@ func init() {
 }
 
 type deleteSpinnerModel struct {
-	spinner  spinner.Model
-	message  string
-	quitting bool
+	spinner    spinner.Model
+	message    string
+	quitting   bool
+	success    bool
+	successMsg string
+	err        error
+	client     *api.Client
+	instanceID string
 }
 
-func newDeleteSpinnerModel(message string) deleteSpinnerModel {
+type deleteResultMsg struct {
+	err error
+}
+
+func deleteInstanceCmd(client *api.Client, instanceID string) tea.Cmd {
+	return func() tea.Msg {
+		_, err := client.DeleteInstance(instanceID)
+		return deleteResultMsg{err: err}
+	}
+}
+
+func newDeleteSpinnerModel(client *api.Client, instanceID, message string) deleteSpinnerModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
 	return deleteSpinnerModel{
-		spinner: s,
-		message: message,
+		spinner:    s,
+		message:    message,
+		client:     client,
+		instanceID: instanceID,
 	}
 }
 
 func (m deleteSpinnerModel) Init() tea.Cmd {
-	return m.spinner.Tick
+	return tea.Batch(m.spinner.Tick, deleteInstanceCmd(m.client, m.instanceID))
 }
 
 func (m deleteSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case deleteResultMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			m.quitting = true
+			return m, tea.Quit
+		}
+		m.success = true
+		m.successMsg = fmt.Sprintf("✓ Successfully deleted Thunder Compute instance %s", m.instanceID)
+		m.quitting = true
+		return m, tea.Quit
 	case tea.KeyMsg:
 		m.quitting = true
 		return m, tea.Quit
@@ -93,6 +121,10 @@ func (m deleteSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m deleteSpinnerModel) View() string {
+	if m.success {
+		successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
+		return successStyle.Render(m.successMsg) + "\n\n"
+	}
 	if m.quitting {
 		return ""
 	}
@@ -159,25 +191,22 @@ func runDelete(args []string) error {
 		fmt.Println("\nAttempting deletion anyway...")
 	}
 
-	p := tea.NewProgram(newDeleteSpinnerModel(fmt.Sprintf("Deleting instance %s...", instanceID)))
-	go func() {
-		p.Run()
-	}()
-
-	_, err = client.DeleteInstance(instanceID)
-	p.Quit()
-
+	fmt.Println()
+	p := tea.NewProgram(newDeleteSpinnerModel(client, instanceID, fmt.Sprintf("Deleting instance %s...", instanceID)))
+	finalModel, err := p.Run()
 	if err != nil {
-		return fmt.Errorf("failed to delete instance: %w\n\nPossible reasons:\n• Instance may be in STARTING state (wait for it to fully start first)\n• Instance may already be deleted\n• Server error occurred\n\nTry running 'tnr status' to check the instance state", err)
+		return fmt.Errorf("error running deletion: %w", err)
+	}
+
+	result := finalModel.(deleteSpinnerModel)
+	if result.err != nil {
+		return fmt.Errorf("failed to delete instance: %w\n\nPossible reasons:\n• Instance may be in STARTING state (wait for it to fully start first)\n• Instance may already be deleted\n• Server error occurred\n\nTry running 'tnr status' to check the instance state", result.err)
 	}
 
 	if err := cleanupSSHConfig(instanceID, selectedInstance.IP); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to clean up SSH configuration: %v\n", err)
 	}
 
-	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
-	fmt.Println(successStyle.Render(fmt.Sprintf("\n✓ Successfully deleted Thunder Compute instance %s", instanceID)))
-	fmt.Println()
 	return nil
 }
 

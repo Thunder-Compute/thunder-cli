@@ -176,10 +176,8 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
-			if m.step != stepConfirmation {
-				m.quitting = true
-				return m, tea.Quit
-			}
+			m.quitting = true
+			return m, tea.Quit
 
 		case "esc":
 			if m.step > stepMode {
@@ -372,9 +370,9 @@ func (m createModel) View() string {
 			case "a100xl":
 				switch m.config.Mode {
 				case "production":
-					displayName = "A100"
+					displayName = "A100 80GB"
 				case "prototyping":
-					displayName = "A100 (more powerful)"
+					displayName = "A100 80GB (more powerful)"
 				}
 			case "h100":
 				if m.config.Mode == "production" {
@@ -457,7 +455,7 @@ func (m createModel) View() string {
 		s.WriteString("Press Enter to continue\n")
 
 	case stepConfirmation:
-		s.WriteString("Review your configuration:\n\n")
+		s.WriteString("Review your configuration:\n")
 
 		panel := fmt.Sprintf(
 			"Mode:       %s\n"+
@@ -479,7 +477,7 @@ func (m createModel) View() string {
 		s.WriteString("\n")
 
 		if m.config.Mode == "prototyping" {
-			warning := "⚠ Prototyping mode: for dev/testing; interruptions possible; not for production.\n"
+			warning := "⚠ Prototyping mode: for dev/testing; not for production inference or long-running tasks.\n"
 			s.WriteString(warningStyle.Render(warning))
 			s.WriteString("\n")
 		}
@@ -505,7 +503,7 @@ func (m createModel) View() string {
 		s.WriteString("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n")
 	} else {
 		s.WriteString("\n")
-		s.WriteString("↑/↓: Navigate  Enter: Confirm\n")
+		s.WriteString("↑/↓: Navigate  Enter: Confirm  Q: Cancel\n")
 	}
 
 	return s.String()

@@ -37,13 +37,13 @@ The command supports two modes:
 
 Instance Modes:
 1. Prototyping (default, lowest cost):
-   - GPU: T4 or A100
+   - GPU: T4 or A100 80GB
    - GPU Count: Exactly 1 GPU
    - vCPUs: Choose 4, 8, 16, or 32 vCPUs (8GB RAM per vCPU)
    - Use Case: Development and testing
 
 2. Production (highest stability):
-   - GPU: A100 or H100
+   - GPU: A100 80GB or H100
    - GPU Count: 1, 2, or 4 GPUs
    - vCPUs: Fixed at 18 per GPU (144GB RAM per GPU)
    - Use Case: Long-running production workloads
@@ -274,8 +274,8 @@ func runCreate(cmd *cobra.Command) error {
 		if createConfig.Mode == "prototyping" {
 			fmt.Println("\nPROTOTYPING MODE DISCLAIMER")
 			fmt.Println("Prototyping instances are designed for development and testing.")
-			fmt.Println("They may experience occasional interruptions and are not recommended")
-			fmt.Println("for production workloads or long-running tasks.")
+			fmt.Println("They may experience incompatibilities with some workloads.")
+			fmt.Println("for production inference or long-running tasks.")
 		}
 	}
 
