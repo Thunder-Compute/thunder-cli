@@ -283,7 +283,7 @@ func (m createModel) getGPUOptions() []string {
 	if m.config.Mode == "prototyping" {
 		return []string{"t4", "a100xl"}
 	}
-	return []string{"a100xl", "h100xl"}
+	return []string{"a100xl", "h100"}
 }
 
 func (m createModel) getMaxCursor() int {
@@ -371,7 +371,7 @@ func (m createModel) View() string {
 				case "prototyping":
 					displayName = "A100 (more powerful)"
 				}
-			case "h100xl":
+			case "h100":
 				if m.config.Mode == "production" {
 					displayName = "H100"
 				}

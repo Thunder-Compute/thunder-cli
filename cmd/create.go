@@ -73,7 +73,7 @@ var (
 
 	productionGPUMap = map[string]string{
 		"a100": "a100xl",
-		"h100": "h100xl",
+		"h100": "h100",
 	}
 )
 
