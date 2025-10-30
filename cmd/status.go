@@ -53,7 +53,7 @@ func runStatus() error {
 	}
 
 	client := api.NewClient(config.Token)
-	monitoring := true // Always monitor; --no-wait is currently disabled
+	monitoring := !noWait
 
 	return tui.RunStatus(client, monitoring, nil)
 }

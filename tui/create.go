@@ -5,11 +5,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/Thunder-Compute/thunder-cli/api"
 )
 
 type CancellationError struct{}
@@ -319,9 +319,9 @@ func (m createModel) View() string {
 	}
 
 	var s strings.Builder
-
+	s.WriteString("\n")
 	s.WriteString(titleStyle.Render("⚡ Create Thunder Compute Instance"))
-	s.WriteString("\n\n")
+	s.WriteString("\n")
 
 	progressSteps := []string{"Mode", "GPU", "Compute", "Template", "Disk", "Confirm"}
 	progress := ""

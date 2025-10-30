@@ -175,8 +175,8 @@ func runDelete(args []string) error {
 	}
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
-	fmt.Println(successStyle.Render(fmt.Sprintf("✓ Successfully deleted Thunder Compute instance %s", instanceID)))
-
+	fmt.Println(successStyle.Render(fmt.Sprintf("\n✓ Successfully deleted Thunder Compute instance %s", instanceID)))
+	fmt.Println("\n")
 	return nil
 }
 

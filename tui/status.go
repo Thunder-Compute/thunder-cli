@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"time"
 
@@ -133,6 +134,12 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, deferQuit()
 		}
 
+		if !m.monitoring {
+			m.firstRender = false
+			m.quitting = true
+			return m, deferQuit()
+		}
+
 		// Commented out: logic to stop polling when not in transition states
 		// Now it always polls
 		// hasTransitionStates := m.hasTransitionStates()
@@ -147,6 +154,10 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m StatusModel) View() string {
+	if m.err != nil {
+		return fmt.Sprintf("Error: %v\n", m.err)
+	}
+
 	var b strings.Builder
 
 	if len(m.instances) == 0 && m.err == nil && !m.done && !m.cancelled && m.firstRender {
@@ -159,6 +170,13 @@ func (m StatusModel) View() string {
 
 	b.WriteString(m.renderTable())
 	b.WriteString("\n")
+
+	if m.quitting {
+		timestamp := m.lastUpdate.Format("15:04:05")
+		b.WriteString(timestampStyle.Render(fmt.Sprintf("Last updated: %s", timestamp)))
+		b.WriteString("\n")
+		return b.String()
+	}
 
 	if m.monitoring {
 		ts := m.lastUpdate.Format("15:04:05")
@@ -227,7 +245,17 @@ func (m StatusModel) renderTable() string {
 	b.WriteString(strings.Join(separatorRow, ""))
 	b.WriteString("\n")
 
-	for _, instance := range m.instances {
+	instances := m.instances
+	if len(instances) > 1 {
+		sortedInstances := make([]api.Instance, len(instances))
+		copy(sortedInstances, instances)
+		sort.Slice(sortedInstances, func(i, j int) bool {
+			return sortedInstances[i].ID < sortedInstances[j].ID
+		})
+		instances = sortedInstances
+	}
+
+	for _, instance := range instances {
 		id := truncate(instance.ID, colWidths["ID"])
 		name := truncate(instance.Name, colWidths["Name"])
 		status := m.formatStatus(instance.Status, colWidths["Status"])

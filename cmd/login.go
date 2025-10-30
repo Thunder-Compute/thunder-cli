@@ -19,9 +19,9 @@ import (
 	"runtime"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
@@ -243,6 +243,20 @@ func runLogin() error {
 	if err == nil && config.Token != "" {
 		fmt.Println("User already logged in. Log out to sign into a different account.")
 		return nil
+	}
+
+	// Check environment variable as fallback if no token in config file
+	if err != nil || config == nil || config.Token == "" {
+		if envToken := os.Getenv("TNR_API_TOKEN"); envToken != "" {
+			authResp := AuthResponse{
+				Token: envToken,
+			}
+			if err := saveConfig(authResp); err != nil {
+				return fmt.Errorf("failed to save credentials: %w", err)
+			}
+			fmt.Println("✓ Successfully authenticated with Thunder Compute using TNR_API_TOKEN!")
+			return nil
+		}
 	}
 
 	if loginToken != "" {

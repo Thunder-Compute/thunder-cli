@@ -8,12 +8,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -192,11 +192,11 @@ func (m createProgressModel) View() string {
 		b.WriteString("\nNext steps:\n")
 		b.WriteString("  • Run 'tnr status' to monitor provisioning progress\n")
 		b.WriteString(fmt.Sprintf("  • Run 'tnr connect %d' once the instance is RUNNING\n", m.resp.Identifier))
-
+		b.WriteString("\n")
 		return b.String()
 	}
 
-	return fmt.Sprintf("\n %s %s\n\n", m.spinner.View(), m.message)
+	return fmt.Sprintf("\n %s %s\n", m.spinner.View(), m.message)
 }
 
 func runCreate(cmd *cobra.Command) error {
