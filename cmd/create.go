@@ -181,19 +181,30 @@ func (m createProgressModel) View() string {
 			return fmt.Sprintf("\n%s\n\n", errorStyle.Render(fmt.Sprintf("✗ Failed to create instance: %v", m.err)))
 		}
 
-		successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
+		titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00D787")).Bold(true)
+		headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
+		labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+		valueStyle := lipgloss.NewStyle().Bold(true)
+		cmdStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CCCCCC"))
+		boxStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#0391ff")).
+			Padding(1, 2)
 
-		var b strings.Builder
-		b.WriteString(successStyle.Render("\n✓ Instance created successfully!"))
-		b.WriteString(fmt.Sprintf("\n\nInstance ID: %d\n", m.resp.Identifier))
+		var lines []string
+		lines = append(lines, titleStyle.Render("✓ Instance created successfully!"))
+		lines = append(lines, "")
+		lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(fmt.Sprintf("%d", m.resp.Identifier)))
 		if m.resp.Message != "" {
-			b.WriteString(fmt.Sprintf("Message: %s\n", m.resp.Message))
+			lines = append(lines, labelStyle.Render("Message:")+" "+cmdStyle.Render(m.resp.Message))
 		}
-		b.WriteString("\nNext steps:\n")
-		b.WriteString("  • Run 'tnr status' to monitor provisioning progress\n")
-		b.WriteString(fmt.Sprintf("  • Run 'tnr connect %d' once the instance is RUNNING\n", m.resp.Identifier))
-		b.WriteString("\n")
-		return b.String()
+		lines = append(lines, "")
+		lines = append(lines, headerStyle.Render("Next steps:"))
+		lines = append(lines, cmdStyle.Render("  • Run 'tnr status' to monitor provisioning progress"))
+		lines = append(lines, cmdStyle.Render(fmt.Sprintf("  • Run 'tnr connect %d' once the instance is RUNNING", m.resp.Identifier)))
+
+		content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+		return "\n" + boxStyle.Render(content) + "\n\n"
 	}
 
 	return fmt.Sprintf("\n %s %s\n", m.spinner.View(), m.message)

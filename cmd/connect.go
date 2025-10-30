@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +19,9 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/utils"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -26,6 +29,40 @@ var (
 	tunnelPorts []string
 	debugMode   bool
 )
+
+type connectFetchSpinnerModel struct {
+	spinner  spinner.Model
+	message  string
+	quitting bool
+}
+
+func newConnectFetchSpinnerModel(message string) connectFetchSpinnerModel {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
+	return connectFetchSpinnerModel{spinner: s, message: message}
+}
+
+func (m connectFetchSpinnerModel) Init() tea.Cmd { return m.spinner.Tick }
+func (m connectFetchSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "Q", "ctrl+c", "esc":
+			m.quitting = true
+			return m, tea.Quit
+		}
+	}
+	var cmd tea.Cmd
+	m.spinner, cmd = m.spinner.Update(msg)
+	return m, cmd
+}
+func (m connectFetchSpinnerModel) View() string {
+	if m.quitting {
+		return ""
+	}
+	return fmt.Sprintf("\n  %s %s\n", m.spinner.View(), m.message)
+}
 
 // connectCmd represents the connect command
 var connectCmd = &cobra.Command{
@@ -59,10 +96,43 @@ If no instance ID is provided, an interactive selection menu will be displayed.`
 				os.Exit(1)
 			}
 
+			fetchProg := tea.NewProgram(newConnectFetchSpinnerModel("Fetching instances..."))
+			fetchDone := make(chan struct{})
+			cancelled := make(chan bool, 1)
+			go func() {
+				final, _ := fetchProg.Run()
+				if fm, ok := final.(connectFetchSpinnerModel); ok && fm.quitting {
+					cancelled <- true
+				}
+				close(fetchDone)
+			}()
+
 			client := api.NewClient(config.Token)
-			instances, err := client.ListInstances()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: failed to list instances: %v\n", err)
+			type apiResult struct {
+				instances []api.Instance
+				err       error
+			}
+			resultChan := make(chan apiResult, 1)
+			go func() {
+				insts, err := client.ListInstances()
+				resultChan <- apiResult{insts, err}
+			}()
+
+			var instances []api.Instance
+			var apiErr error
+			select {
+			case <-cancelled:
+				fetchProg.Quit()
+				<-fetchDone
+				fmt.Println("Operation cancelled.")
+				os.Exit(0)
+			case res := <-resultChan:
+				fetchProg.Quit()
+				<-fetchDone
+				instances, apiErr = res.instances, res.err
+			}
+			if apiErr != nil {
+				fmt.Fprintf(os.Stderr, "Error: failed to list instances: %v\n", apiErr)
 				os.Exit(1)
 			}
 
@@ -98,6 +168,10 @@ If no instance ID is provided, an interactive selection menu will be displayed.`
 
 			selected, err := selectInstanceTUI(instanceList)
 			if err != nil {
+				if strings.Contains(strings.ToLower(err.Error()), "cancelled") {
+					fmt.Println("Operation cancelled.")
+					os.Exit(0)
+				}
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
 			}
