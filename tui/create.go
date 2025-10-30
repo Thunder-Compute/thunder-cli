@@ -80,12 +80,8 @@ var (
 
 	warningStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFA500")).
-			Bold(true).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#FFA500")).
-			Padding(1, 2).
-			MarginTop(1).
-			MarginBottom(1)
+			Italic(true).
+			Padding(0, 1)
 )
 
 func NewCreateModel(client *api.Client) createModel {
@@ -93,6 +89,11 @@ func NewCreateModel(client *api.Client) createModel {
 	ti.Placeholder = "100"
 	ti.CharLimit = 4
 	ti.Width = 20
+	ti.Prompt = "▶ "
+	ti.PromptStyle = cursorStyle
+	ti.TextStyle = cursorStyle
+	ti.PlaceholderStyle = cursorStyle
+	ti.Cursor.Style = cursorStyle
 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -350,7 +351,11 @@ func (m createModel) View() string {
 			if m.cursor == i {
 				cursor = cursorStyle.Render("▶ ")
 			}
-			s.WriteString(fmt.Sprintf("%s%s\n", cursor, mode))
+			display := mode
+			if m.cursor == i {
+				display = selectedStyle.Render(mode)
+			}
+			s.WriteString(fmt.Sprintf("%s%s\n", cursor, display))
 		}
 
 	case stepGPU:
@@ -380,6 +385,9 @@ func (m createModel) View() string {
 					displayName += " (more affordable)"
 				}
 			}
+			if m.cursor == i {
+				displayName = selectedStyle.Render(displayName)
+			}
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, displayName))
 		}
 
@@ -393,7 +401,11 @@ func (m createModel) View() string {
 					cursor = cursorStyle.Render("▶ ")
 				}
 				ram := vcpu * 8
-				s.WriteString(fmt.Sprintf("%s%d vCPUs (%d GB RAM)\n", cursor, vcpu, ram))
+				line := fmt.Sprintf("%s%d vCPUs (%d GB RAM)", cursor, vcpu, ram)
+				if m.cursor == i {
+					line = fmt.Sprintf("%s%s", cursor, selectedStyle.Render(fmt.Sprintf("%d vCPUs (%d GB RAM)", vcpu, ram)))
+				}
+				s.WriteString(line + "\n")
 			}
 		} else {
 			s.WriteString("Select number of GPUs (18 vCPUs per GPU, 144GB RAM per GPU):\n\n")
@@ -404,7 +416,11 @@ func (m createModel) View() string {
 					cursor = cursorStyle.Render("▶ ")
 				}
 				vcpus := num * 18
-				s.WriteString(fmt.Sprintf("%s%d GPU(s) → %d vCPUs\n", cursor, num, vcpus))
+				text := fmt.Sprintf("%d GPU(s) → %d vCPUs", num, vcpus)
+				if m.cursor == i {
+					text = selectedStyle.Render(text)
+				}
+				s.WriteString(fmt.Sprintf("%s%s\n", cursor, text))
 			}
 		}
 
@@ -421,6 +437,9 @@ func (m createModel) View() string {
 				name := template.DisplayName
 				if template.ExtendedDescription != "" {
 					name += fmt.Sprintf(" - %s", template.ExtendedDescription)
+				}
+				if m.cursor == i {
+					name = selectedStyle.Render(name)
 				}
 				s.WriteString(fmt.Sprintf("%s%s\n", cursor, name))
 			}
@@ -457,15 +476,12 @@ func (m createModel) View() string {
 			m.config.DiskSizeGB,
 		)
 		s.WriteString(panelStyle.Render(panel))
-		s.WriteString("\n\n")
+		s.WriteString("\n")
 
 		if m.config.Mode == "prototyping" {
-			warning := "PROTOTYPING MODE DISCLAIMER\n\n" +
-				"Prototyping instances are designed for development and testing.\n" +
-				"They may experience occasional interruptions and are not recommended\n" +
-				"for production workloads or long-running tasks."
+			warning := "⚠ Prototyping mode: for dev/testing; interruptions possible; not for production.\n"
 			s.WriteString(warningStyle.Render(warning))
-			s.WriteString("\n\n")
+			s.WriteString("\n")
 		}
 
 		s.WriteString("Confirm creation?\n\n")
@@ -476,7 +492,11 @@ func (m createModel) View() string {
 			if m.cursor == i {
 				cursor = cursorStyle.Render("▶ ")
 			}
-			s.WriteString(fmt.Sprintf("%s%s\n", cursor, option))
+			text := option
+			if m.cursor == i {
+				text = selectedStyle.Render(option)
+			}
+			s.WriteString(fmt.Sprintf("%s%s\n", cursor, text))
 		}
 	}
 
