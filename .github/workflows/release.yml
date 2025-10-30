@@ -53,3 +53,42 @@ jobs:
           aws s3 cp latest.json "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/latest.json" \
             --cache-control 'public, max-age=120' \
             --content-type 'application/json'
+
+  macos_pkg:
+    needs: goreleaser
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Build .pkg installer for macOS
+        run: |
+          set -e
+          VERSION=${{ github.ref_name }}
+          ARCH="arm64"  # or amd64 if you prefer
+
+          echo "Downloading macOS binary from S3..."
+          mkdir -p dist/pkgbuild_root/usr/local/bin
+          aws s3 cp "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${VERSION}/tnr_${VERSION}_darwin_${ARCH}.tar.gz" dist/
+          tar -xzf "dist/tnr_${VERSION}_darwin_${ARCH}.tar.gz" -C dist/pkgbuild_root/usr/local/bin
+
+          echo "Building .pkg installer..."
+          pkgbuild \
+            --root dist/pkgbuild_root \
+            --identifier com.thundercompute.tnr \
+            --version $VERSION \
+            --install-location / \
+            dist/tnr_${VERSION}_macos.pkg
+
+      - name: Upload .pkg to S3
+        run: |
+          VERSION=${{ github.ref_name }}
+          aws s3 cp dist/tnr_${VERSION}_macos.pkg \
+            "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${VERSION}/" \
+            --content-type "application/vnd.apple.installer+xml"
