@@ -1,0 +1,80 @@
+# macOS-only build configuration with signing
+version: 2
+
+project_name: tnr
+
+before:
+  hooks: []
+
+builds:
+  - id: tnr
+    main: ./main.go
+    binary: tnr
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildVersion={{.Version}}
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildCommit={{.Commit}}
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildDate={{.Date}}
+    hooks:
+      post:
+        - cmd: codesign
+          args:
+            - '--force'
+            - '--options=runtime'
+            - '--sign'
+            - '{{ .Env.APPLE_SIGNING_IDENTITY }}'
+            - '{{ .ArtifactPath }}'
+        - cmd: codesign
+          args:
+            - '--verify'
+            - '--verbose'
+            - '{{ .ArtifactPath }}'
+
+archives:
+  - id: archive
+    builds: [tnr]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    files:
+      - LICENSE
+      - README.md
+  - id: archive-zip
+    builds: [tnr]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  disable: true
+
+signs:
+  - signature: "${artifact}.sig"
+    ids: [archive]
+    cmd: cosign
+    args: ["sign-blob", "--yes", "--output-signature", "${signature}", "${artifact}"]
+
+notarize:
+  apple_id:
+    username: '{{ .Env.APPLE_ID }}'
+    password: '{{ .Env.APPLE_APP_SPECIFIC_PASSWORD }}'
+  team_id: '{{ .Env.APPLE_TEAM_ID }}'
+  tool: notarytool
+  zip:
+    - artifacts: archive-zip
+
+blobs:
+  - provider: s3
+    bucket: "{{ .Env.TNR_S3_BUCKET }}"
+    region: "{{ .Env.AWS_REGION }}"
+    directory: "tnr/releases/{{ .Version }}"
+    ids: [archive, archive-zip, checksum]
+

@@ -8,16 +8,17 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"runtime"
 	"strconv"
 	"sync"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/utils"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
@@ -58,46 +59,10 @@ If no instance ID is provided, an interactive selection menu will be displayed.`
 				os.Exit(1)
 			}
 
-			busy := tui.NewBusyModel("Fetching instances...")
-			bp := tea.NewProgram(busy)
-			busyDone := make(chan struct{})
-			cancelled := make(chan bool, 1)
-
-			go func() {
-				finalModel, _ := bp.Run()
-				if finalModel.(tui.BusyModel).Quitting {
-					cancelled <- true
-				}
-				close(busyDone)
-			}()
-
-			type apiResult struct {
-				instances []api.Instance
-				err       error
-			}
-			resultChan := make(chan apiResult, 1)
-			go func() {
-				client := api.NewClient(config.Token)
-				instances, err := client.ListInstances()
-				resultChan <- apiResult{instances, err}
-			}()
-
-			var instances []api.Instance
-			var apiErr error
-			select {
-			case <-cancelled:
-				bp.Send(tui.BusyDoneMsg{})
-				<-busyDone
-				fmt.Println("Operation cancelled.")
-				os.Exit(0)
-			case result := <-resultChan:
-				bp.Send(tui.BusyDoneMsg{})
-				<-busyDone
-				instances, apiErr = result.instances, result.err
-			}
-
-			if apiErr != nil {
-				fmt.Fprintf(os.Stderr, "Error: failed to list instances: %v\n", apiErr)
+			client := api.NewClient(config.Token)
+			instances, err := client.ListInstances()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: failed to list instances: %v\n", err)
 				os.Exit(1)
 			}
 
@@ -165,6 +130,9 @@ func init() {
 }
 
 func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
 	startTime := time.Now()
 	phaseTimings := make(map[string]time.Duration)
 
@@ -177,9 +145,12 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 		tunnelPorts = append(tunnelPorts, port)
 	}
 
-	// Initialize TUI
 	flowModel := tui.NewConnectFlowModel(instanceID)
-	p := tea.NewProgram(flowModel)
+	p := tea.NewProgram(
+		flowModel,
+		tea.WithContext(ctx),
+		tea.WithOutput(os.Stdout),
+	)
 
 	tuiDone := make(chan error, 1)
 	cancelCtx, cancel := context.WithCancel(context.Background())

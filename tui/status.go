@@ -1,37 +1,30 @@
 package tui
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"strings"
 	"time"
 
+	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/Thunder-Compute/thunder-cli/api"
 )
 
 var (
-	headerStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#0391ff")).
-			Padding(0, 1)
-
-	runningStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("10")) // Green
-
-	startingStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("11")) // Yellow
-
-	deletingStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("9")) // Red
-
-	cellStyle = lipgloss.NewStyle().
-			Padding(0, 1)
-
-	timestampStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8")).
-			Italic(true)
+	headerStyle     lipgloss.Style
+	runningStyle    lipgloss.Style
+	startingStyle   lipgloss.Style
+	deletingStyle   lipgloss.Style
+	cellStyle       lipgloss.Style
+	timestampStyle  lipgloss.Style
+	successStyle    lipgloss.Style
+	errorStyleTUI   lipgloss.Style
+	warningStyleTUI lipgloss.Style
+	helpStyleTUI    lipgloss.Style
 )
 
 type StatusModel struct {
@@ -43,6 +36,8 @@ type StatusModel struct {
 	spinner     spinner.Model
 	err         error
 	firstRender bool
+	done        bool
+	cancelled   bool
 }
 
 type tickMsg time.Time
@@ -51,6 +46,8 @@ type instancesMsg struct {
 	instances []api.Instance
 	err       error
 }
+
+type quitNow struct{}
 
 func NewStatusModel(client *api.Client, monitoring bool, instances []api.Instance) StatusModel {
 	s := spinner.New()
@@ -68,8 +65,8 @@ func NewStatusModel(client *api.Client, monitoring bool, instances []api.Instanc
 }
 
 func (m StatusModel) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.spinner.Tick}
-	if m.monitoring && len(m.instances) > 0 {
+	cmds := []tea.Cmd{m.spinner.Tick, fetchInstancesCmd(m.client)}
+	if m.monitoring {
 		cmds = append(cmds, tickCmd())
 	}
 	return tea.Batch(cmds...)
@@ -88,6 +85,10 @@ func fetchInstancesCmd(client *api.Client) tea.Cmd {
 	}
 }
 
+func deferQuit() tea.Cmd {
+	return tea.Tick(1*time.Millisecond, func(time.Time) tea.Msg { return quitNow{} })
+}
+
 func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.quitting {
 		return m, tea.Quit
@@ -96,11 +97,15 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "q", "Q", "ctrl+c":
+			m.cancelled = true
 			m.quitting = true
 			m.monitoring = false
-			return m, tea.Quit
+			return m, deferQuit()
 		}
+
+	case quitNow:
+		return m, tea.Quit
 
 	case tickMsg:
 		if m.monitoring && len(m.instances) > 0 {
@@ -108,12 +113,6 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case spinner.TickMsg:
-		if len(m.instances) == 0 && m.firstRender {
-			m.quitting = true
-			m.monitoring = false
-			m.firstRender = false
-			return m, tea.Quit
-		}
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
@@ -121,15 +120,17 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case instancesMsg:
 		if msg.err != nil {
 			m.err = msg.err
-			return m, tea.Quit
+			m.monitoring = false
+			return m, nil
 		}
 		m.instances = msg.instances
 		m.lastUpdate = time.Now()
 
 		if len(m.instances) == 0 {
-			m.quitting = true
 			m.monitoring = false
-			return m, tea.Quit
+			m.firstRender = false
+			m.quitting = true
+			return m, deferQuit()
 		}
 
 		// Commented out: logic to stop polling when not in transition states
@@ -146,36 +147,44 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m StatusModel) View() string {
-	if m.err != nil {
-		return fmt.Sprintf("Error: %v\n", m.err)
-	}
-
-	if m.quitting {
-		return ""
-	}
-
 	var b strings.Builder
+
+	if len(m.instances) == 0 && m.err == nil && !m.done && !m.cancelled && m.firstRender {
+		b.WriteString("\n  ")
+		b.WriteString(m.spinner.View())
+		b.WriteString(" Fetching instances...\n\n")
+		b.WriteString(helpStyleTUI.Render("Press 'Q' to cancel\n"))
+		return b.String()
+	}
 
 	b.WriteString(m.renderTable())
 	b.WriteString("\n")
 
 	if m.monitoring {
-		timestamp := m.lastUpdate.Format("15:04:05")
-		b.WriteString(timestampStyle.Render(fmt.Sprintf("Last updated: %s", timestamp)))
+		ts := m.lastUpdate.Format("15:04:05")
+		b.WriteString(timestampStyle.Render(fmt.Sprintf("Last updated: %s", ts)))
 		b.WriteString("  ")
 		b.WriteString(m.spinner.View())
 		b.WriteString("\n")
 	}
-	// Commented out: message about monitoring stopping is no longer relevant
-	// } else if !m.firstRender {
-	// 	timestamp := m.lastUpdate.Format("15:04:05")
-	// 	b.WriteString(timestampStyle.Render(fmt.Sprintf("Last updated: %s (monitoring stopped - no instances in transition)", timestamp)))
-	// 	b.WriteString("\n")
-	// }
 
-	if m.monitoring {
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("Press 'Q' to cancel monitoring"))
-		b.WriteString("\n")
+	if m.err != nil {
+		b.WriteString(errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v\n", m.err)))
+	}
+	if m.cancelled {
+		b.WriteString(warningStyleTUI.Render("✗ Cancelled\n"))
+	}
+	if m.done {
+		b.WriteString(successStyle.Render("✓ Done\n"))
+	}
+
+	b.WriteString("\n")
+	if m.quitting {
+		b.WriteString(helpStyleTUI.Render("Closing...\n"))
+	} else if m.monitoring {
+		b.WriteString(helpStyleTUI.Render("Press 'Q' to cancel monitoring\n"))
+	} else {
+		b.WriteString(helpStyleTUI.Render("Press 'Q' to close\n"))
 	}
 
 	return b.String()
@@ -296,8 +305,54 @@ func capitalize(s string) string {
 }
 
 func RunStatus(client *api.Client, monitoring bool, instances []api.Instance) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	r := lipgloss.NewRenderer(os.Stdout)
+
+	headerStyle = r.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#0391ff")).
+		Padding(0, 1)
+
+	runningStyle = r.NewStyle().
+		Foreground(lipgloss.Color("10")) // Green
+
+	startingStyle = r.NewStyle().
+		Foreground(lipgloss.Color("11")) // Yellow
+
+	deletingStyle = r.NewStyle().
+		Foreground(lipgloss.Color("9")) // Red
+
+	cellStyle = r.NewStyle().
+		Padding(0, 1)
+
+	timestampStyle = r.NewStyle().
+		Foreground(lipgloss.Color("8")).
+		Italic(true)
+
+	successStyle = r.NewStyle().
+		Foreground(lipgloss.Color("#00D787")).
+		Bold(true)
+
+	errorStyleTUI = r.NewStyle().
+		Foreground(lipgloss.Color("#FF5555")).
+		Bold(true)
+
+	warningStyleTUI = r.NewStyle().
+		Foreground(lipgloss.Color("#FFB86C")).
+		Bold(true)
+
+	helpStyleTUI = r.NewStyle().
+		Foreground(lipgloss.Color("8")).
+		Italic(true)
+
 	m := NewStatusModel(client, monitoring, instances)
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(
+		m,
+		tea.WithContext(ctx),
+		tea.WithOutput(os.Stdout),
+	)
 
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("error running status TUI: %w", err)

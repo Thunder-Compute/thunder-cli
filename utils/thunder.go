@@ -60,7 +60,7 @@ func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpu
 		return nil
 	}
 
-	fmt.Println("Configuring Thunder virtualization...")
+	// fmt.Println("Configuring Thunder virtualization...")
 
 	// Create Thunder directory
 	if _, err := ExecuteSSHCommand(client, fmt.Sprintf("mkdir -p %s", thunderConfigDir)); err != nil {
@@ -68,7 +68,7 @@ func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpu
 	}
 
 	// Download Thunder binary
-	fmt.Println("Downloading Thunder binary...")
+	// fmt.Println("Downloading Thunder binary...")
 	downloadCmd := fmt.Sprintf("curl -L %s -o /tmp/libthunder.tmp && mv /tmp/libthunder.tmp %s", thunderBinaryURL, thunderLibPath)
 	if _, err := ExecuteSSHCommand(client, downloadCmd); err != nil {
 		return fmt.Errorf("failed to download Thunder binary: %w", err)

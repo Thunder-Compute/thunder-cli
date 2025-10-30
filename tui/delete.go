@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/Thunder-Compute/thunder-cli/api"
 )
 
 type deleteStep int
@@ -195,7 +195,7 @@ func (m deleteModel) View() string {
 	}
 
 	if m.loading {
-		return "\n  " + m.spinner.View() + " Fetching instances...\n\n" + helpStyle.Render("Press 'Q' to cancel") + "\n"
+		return "\n  " + m.spinner.View() + " Fetching instances...\n" + helpStyle.Render("Press 'Q' to cancel") + "\n"
 	}
 
 	if m.quitting {

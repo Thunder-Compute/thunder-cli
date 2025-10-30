@@ -38,6 +38,7 @@ type ConnectFlowModel struct {
 	quitting      bool
 	lastPhaseIdx  int
 	cancelled     bool
+	done          bool
 }
 
 type PhaseUpdateMsg struct {
@@ -54,6 +55,7 @@ type PhaseCompleteMsg struct {
 
 type ConnectCompleteMsg struct{}
 type ConnectErrorMsg struct{ Err error }
+type connectQuitNow struct{}
 
 var (
 	connectTitleStyle = lipgloss.NewStyle().
@@ -86,6 +88,10 @@ var (
 	durationStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#888888")).
 			Italic(true)
+
+	helpStyleConnect = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("8")).
+				Italic(true)
 )
 
 func NewConnectFlowModel(instanceID string) ConnectFlowModel {
@@ -108,6 +114,10 @@ func NewConnectFlowModel(instanceID string) ConnectFlowModel {
 		startTime:    time.Now(),
 		lastPhaseIdx: -1,
 	}
+}
+
+func connectDeferQuit() tea.Cmd {
+	return tea.Tick(1*time.Millisecond, func(time.Time) tea.Msg { return connectQuitNow{} })
 }
 
 func (m ConnectFlowModel) Init() tea.Cmd {
@@ -146,15 +156,22 @@ func (m ConnectFlowModel) CurrentPhase() int {
 }
 
 func (m ConnectFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.quitting {
+		return m, tea.Quit
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "esc", "ctrl+c":
-			m.quitting = true
+		case "q", "Q", "esc", "ctrl+c":
 			m.cancelled = true
-			return m, tea.Quit
+			m.quitting = true
+			return m, connectDeferQuit()
 		}
 		return m, nil
+
+	case connectQuitNow:
+		return m, tea.Quit
 
 	case PhaseUpdateMsg:
 		m.setPhase(msg.PhaseIndex, msg.Status, msg.Message, msg.Duration)
@@ -166,13 +183,14 @@ func (m ConnectFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ConnectCompleteMsg:
 		m.totalDuration = time.Since(m.startTime)
+		m.done = true
 		m.quitting = true
-		return m, tea.Quit
+		return m, connectDeferQuit()
 
 	case ConnectErrorMsg:
 		m.err = msg.Err
 		m.quitting = true
-		return m, tea.Quit
+		return m, connectDeferQuit()
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -184,10 +202,6 @@ func (m ConnectFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m ConnectFlowModel) View() string {
-	if m.quitting && m.err != nil {
-		return connectErrorStyle.Render(fmt.Sprintf("\n✗ Connection failed: %v\n\n", m.err))
-	}
-
 	var b strings.Builder
 
 	b.WriteString(connectTitleStyle.Render("⚡ Connecting to Thunder Instance"))
@@ -238,8 +252,28 @@ func (m ConnectFlowModel) View() string {
 		b.WriteString("\n")
 	}
 
+	if m.err != nil {
+		b.WriteString("\n")
+		b.WriteString(connectErrorStyle.Render(fmt.Sprintf("✗ Connection failed: %v", m.err)))
+		b.WriteString("\n")
+	}
+	if m.cancelled {
+		b.WriteString("\n")
+		b.WriteString(connectWarningStyle.Render("✗ Cancelled"))
+		b.WriteString("\n")
+	}
+	if m.done {
+		b.WriteString("\n")
+		b.WriteString(completedStyle.Render("✓ Connection established successfully"))
+		b.WriteString("\n")
+	}
+
 	b.WriteString("\n")
-	b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("Press 'Q' to cancel\n"))
+	if m.quitting {
+		b.WriteString(helpStyleConnect.Render("Closing...\n"))
+	} else {
+		b.WriteString(helpStyleConnect.Render("Press 'Q' to cancel\n"))
+	}
 
 	return b.String()
 }

@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,11 +16,20 @@ type ConnectModel struct {
 	cursor    int
 	selected  string
 	quitting  bool
+	done      bool
+	cancelled bool
 }
 
 var (
 	connectCursorStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#0391ff"))
+				Foreground(lipgloss.Color("#0391ff"))
+	connectSelectedStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#50FA7B")).
+				Background(lipgloss.Color("#44475A"))
+	connectHelpStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("8")).
+				Italic(true)
 )
 
 func NewConnectModel(instances []string) ConnectModel {
@@ -42,9 +54,10 @@ func (m ConnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "esc", "ctrl+c":
+		case "q", "Q", "esc", "ctrl+c":
+			m.cancelled = true
 			m.quitting = true
-			return m, tea.Quit
+			return m, deferQuit()
 
 		case "up", "k":
 			if m.cursor > 0 {
@@ -58,24 +71,22 @@ func (m ConnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 			m.selected = m.instances[m.cursor]
+			m.done = true
 			m.quitting = true
-			return m, tea.Quit
+			return m, deferQuit()
 		}
+	case quitNow:
+		return m, tea.Quit
 	}
 
 	return m, nil
 }
 
 func (m ConnectModel) View() string {
-	if m.quitting {
-		if m.selected != "" {
-			return fmt.Sprintf("Connecting to: %s\n", m.selected)
-		}
-		return "Connection cancelled.\n"
-	}
-
 	var b strings.Builder
-	b.WriteString("Select an instance to connect:\n\n")
+
+	b.WriteString(connectTitleStyle.Render("⚡ Select Thunder Instance to Connect"))
+	b.WriteString("\n\n")
 
 	for i, instance := range m.instances {
 		cursor := "  "
@@ -85,14 +96,50 @@ func (m ConnectModel) View() string {
 		b.WriteString(fmt.Sprintf("%s%s\n", cursor, instance))
 	}
 
-	b.WriteString("\nUse ↑/↓ or j/k to navigate, Enter to select, q to cancel\n")
+	if m.done && m.selected != "" {
+		b.WriteString("\n")
+		b.WriteString(completedStyle.Render(fmt.Sprintf("✓ Selected: %s", m.selected)))
+		b.WriteString("\n")
+	}
+	if m.cancelled {
+		b.WriteString("\n")
+		b.WriteString(connectWarningStyle.Render("✗ Cancelled"))
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	if m.quitting {
+		b.WriteString(connectHelpStyle.Render("Closing..."))
+	} else if m.done || m.cancelled {
+		b.WriteString(connectHelpStyle.Render("Press 'Q' to close"))
+	} else {
+		b.WriteString(connectHelpStyle.Render("↑/↓: Navigate  Enter: Select  Q/Esc: Cancel"))
+	}
 
 	return b.String()
 }
 
 func RunConnect(instances []string) (string, error) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	r := lipgloss.NewRenderer(os.Stdout)
+
+	connectSelectedStyle = r.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#50FA7B")).
+		Background(lipgloss.Color("#44475A"))
+
+	connectHelpStyle = r.NewStyle().
+		Foreground(lipgloss.Color("8")).
+		Italic(true)
+
 	m := NewConnectModel(instances)
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(
+		m,
+		tea.WithContext(ctx),
+		tea.WithOutput(os.Stdout),
+	)
 
 	finalModel, err := p.Run()
 	if err != nil {
@@ -100,6 +147,9 @@ func RunConnect(instances []string) (string, error) {
 	}
 
 	if m, ok := finalModel.(ConnectModel); ok {
+		if m.cancelled {
+			return "", fmt.Errorf("cancelled")
+		}
 		return m.selected, nil
 	}
 

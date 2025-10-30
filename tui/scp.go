@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -40,6 +41,8 @@ type SCPModel struct {
 	instanceName string
 	logs         []string
 	duration     time.Duration
+	done         bool
+	cancelled    bool
 }
 
 type SCPProgressMsg struct {
@@ -103,6 +106,24 @@ var (
 				Padding(0, 2)
 )
 
+func InitSCPStyles(out io.Writer) {
+	r := lipgloss.NewRenderer(out)
+
+	scpTitleStyle = r.NewStyle().Bold(true).Foreground(lipgloss.Color("#0391ff"))
+	scpPhaseStyle = r.NewStyle().Foreground(lipgloss.Color("#0391ff")).Italic(true)
+	scpLogStyle = r.NewStyle().Foreground(lipgloss.Color("#888888"))
+	scpLogSuccessStyle = r.NewStyle().Foreground(lipgloss.Color("#00D787"))
+	scpFileStyle = r.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
+	scpStatsStyle = r.NewStyle().Foreground(lipgloss.Color("#CCCCCC"))
+	scpSpeedStyle = r.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
+	scpCompleteStyle = r.NewStyle().Foreground(lipgloss.Color("#00D787")).Bold(true)
+	scpErrorStyleTUI = r.NewStyle().Foreground(lipgloss.Color("#FF5555")).Bold(true)
+	scpSuccessBoxStyle = r.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#0391ff")).
+		Padding(0, 2)
+}
+
 func NewSCPModel(direction, instanceName string) SCPModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -134,9 +155,10 @@ func (m SCPModel) Init() tea.Cmd {
 func (m SCPModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if msg.String() == "q" || msg.String() == "ctrl+c" {
+		if msg.String() == "q" || msg.String() == "Q" || msg.String() == "ctrl+c" {
+			m.cancelled = true
 			m.quitting = true
-			return m, tea.Quit
+			return m, deferQuit()
 		}
 
 	case SCPPhaseMsg:
@@ -185,11 +207,17 @@ func (m SCPModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logs[0] = "✓ SSH connected"
 		m.logs[1] = "✓ Size calculated"
 		m.logs[2] = "✓ File transfer completed"
-		return m, nil
+		m.done = true
+		m.quitting = true
+		return m, deferQuit()
 
 	case SCPErrorMsg:
 		m.phase = SCPPhaseError
 		m.err = msg.Err
+		m.quitting = true
+		return m, deferQuit()
+
+	case quitNow:
 		return m, tea.Quit
 
 	case spinner.TickMsg:
@@ -205,10 +233,6 @@ func (m SCPModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m SCPModel) View() string {
-	if m.quitting && m.phase != SCPPhaseComplete && m.phase != SCPPhaseError {
-		return "Transfer cancelled.\n"
-	}
-
 	var s string
 
 	action := "Upload"
@@ -217,9 +241,7 @@ func (m SCPModel) View() string {
 	}
 	s += scpTitleStyle.Render(fmt.Sprintf("SCP %s - %s", action, m.instanceName)) + "\n\n"
 
-	if m.phase != SCPPhaseComplete {
-		s += renderLogs(m)
-	}
+	s += renderLogs(m)
 
 	switch m.phase {
 	case SCPPhaseTransferring:
@@ -247,14 +269,30 @@ func (m SCPModel) View() string {
 	case SCPPhaseComplete:
 		s += "\n"
 		s += renderSuccessBox(m)
-		s += "\n\n"
-		s += renderLogs(m)
-
-		s += "\n" + scpLogStyle.Render("Press 'Q' to cancel...") + "\n"
+		s += "\n"
 
 	case SCPPhaseError:
-		s += scpErrorStyleTUI.Render("✗ Transfer Failed") + "\n\n"
-		s += scpErrorStyleTUI.Render(fmt.Sprintf("Error: %v\n", m.err))
+		s += errorStyleTUI.Render("✗ Transfer Failed") + "\n\n"
+		s += errorStyleTUI.Render(fmt.Sprintf("Error: %v\n", m.err))
+	}
+
+	if m.err != nil || m.phase == SCPPhaseError {
+		s += errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v\n", m.err))
+	}
+	if m.cancelled {
+		s += warningStyleTUI.Render("✗ Cancelled\n")
+	}
+	if m.done {
+		s += successStyle.Render("✓ Transfer complete\n")
+	}
+
+	s += "\n"
+	if m.quitting {
+		s += helpStyleTUI.Render("Closing...\n")
+	} else if m.done || m.err != nil || m.cancelled {
+		s += helpStyleTUI.Render("Press 'Q' to close\n")
+	} else {
+		s += helpStyleTUI.Render("Press 'Q' to cancel\n")
 	}
 
 	return s

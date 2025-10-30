@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
@@ -56,27 +55,5 @@ func runStatus() error {
 	client := api.NewClient(config.Token)
 	monitoring := true // Always monitor; --no-wait is currently disabled
 
-	busy := tui.NewBusyModel("Fetching instances...")
-	bp := tea.NewProgram(busy)
-	busyDone := make(chan struct{})
-
-	go func() {
-		_, _ = bp.Run()
-		close(busyDone)
-	}()
-
-	instances, err := client.ListInstances()
-
-	bp.Send(tui.BusyDoneMsg{})
-	<-busyDone
-
-	if err != nil {
-		return fmt.Errorf("failed to list instances: %w", err)
-	}
-
-	if err := tui.RunStatus(client, monitoring, instances); err != nil {
-		return err
-	}
-
-	return nil
+	return tui.RunStatus(client, monitoring, nil)
 }

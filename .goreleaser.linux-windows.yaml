@@ -1,0 +1,52 @@
+# Linux and Windows build configuration (no macOS signing needed)
+version: 2
+
+project_name: tnr
+
+before:
+  hooks: []
+
+builds:
+  - id: tnr
+    main: ./main.go
+    binary: tnr
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildVersion={{.Version}}
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildCommit={{.Commit}}
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildDate={{.Date}}
+
+archives:
+  - id: archive
+    builds: [tnr]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  disable: true
+
+signs:
+  - signature: "${artifact}.sig"
+    ids: [archive]
+    cmd: cosign
+    args: ["sign-blob", "--yes", "--output-signature", "${signature}", "${artifact}"]
+
+blobs:
+  - provider: s3
+    bucket: "{{ .Env.TNR_S3_BUCKET }}"
+    region: "{{ .Env.AWS_REGION }}"
+    directory: "tnr/releases/{{ .Version }}"
+    ids: [archive, checksum]
+

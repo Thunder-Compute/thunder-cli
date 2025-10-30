@@ -4,18 +4,20 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/utils"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
@@ -130,6 +132,8 @@ func isValidInstanceID(s string) bool {
 }
 
 func runSCP(sources []string, destination string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 	config, err := LoadConfig()
 	if err != nil {
 		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
@@ -206,9 +210,17 @@ func runSCP(sources []string, destination string) error {
 		keyFile = utils.GetKeyFile(targetInstance.UUID)
 	}
 
+	// Initialize renderer-based styles for consistent colors
+	tui.InitCommonStyles(os.Stdout)
+	tui.InitSCPStyles(os.Stdout)
+
 	instanceName := fmt.Sprintf("%s (%s)", targetInstance.Name, targetInstance.ID)
 	scpModel := tui.NewSCPModel(direction, instanceName)
-	p := tea.NewProgram(scpModel)
+	p := tea.NewProgram(
+		scpModel,
+		tea.WithContext(ctx),
+		tea.WithOutput(os.Stdout),
+	)
 
 	tuiDone := make(chan error, 1)
 	go func() {
