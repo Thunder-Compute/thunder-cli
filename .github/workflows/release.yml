@@ -74,27 +74,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="${{ github.ref_name }}"
+          TAG_VERSION="${{ github.ref_name }}"
+          CLEAN_VERSION="${TAG_VERSION#v}"  # remove leading 'v'
           ARCH="${{ matrix.arch }}"
-          echo "Building .pkg for ${ARCH}..."
+          echo "Building .pkg for ${ARCH} (version ${CLEAN_VERSION})..."
 
           mkdir -p dist/pkgbuild_root/usr/local/bin dist/work
-          aws s3 cp "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${VERSION}/tnr_${VERSION}_darwin_${ARCH}.tar.gz" dist/work/
+          echo "Downloading macOS binary from S3..."
+          aws s3 cp "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${CLEAN_VERSION}/tnr_${CLEAN_VERSION}_darwin_${ARCH}.tar.gz" dist/work/
 
-          tar -xzf "dist/work/tnr_${VERSION}_darwin_${ARCH}.tar.gz" -C dist/work tnr
+          tar -xzf "dist/work/tnr_${CLEAN_VERSION}_darwin_${ARCH}.tar.gz" -C dist/work tnr
           install -m 0755 dist/work/tnr dist/pkgbuild_root/usr/local/bin/tnr
 
+          echo "Running pkgbuild..."
           pkgbuild \
             --root dist/pkgbuild_root \
             --identifier com.thundercompute.tnr \
-            --version "${VERSION}" \
+            --version "${CLEAN_VERSION}" \
             --install-location / \
-            "dist/tnr_${VERSION}_macos_${ARCH}.pkg"
+            "dist/tnr_${CLEAN_VERSION}_macos_${ARCH}.pkg"
 
       - name: Upload .pkg to S3 (${{ matrix.arch }})
         run: |
-          VERSION="${{ github.ref_name }}"
+          TAG_VERSION="${{ github.ref_name }}"
+          CLEAN_VERSION="${TAG_VERSION#v}"
           ARCH="${{ matrix.arch }}"
-          aws s3 cp "dist/tnr_${VERSION}_macos_${ARCH}.pkg" \
-            "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${VERSION}/" \
+          echo "Uploading .pkg to S3..."
+          aws s3 cp "dist/tnr_${CLEAN_VERSION}_macos_${ARCH}.pkg" \
+            "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${CLEAN_VERSION}/" \
             --content-type "application/vnd.apple.installer+xml"
