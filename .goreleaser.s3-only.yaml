@@ -21,27 +21,14 @@ builds:
 
 archives:
   - id: archive
-    builds: [tnr]
+    ids: [tnr]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     files:
       - LICENSE
       - README.md
-
-nfpms:
-  - id: macos_pkg
-    builds: [tnr]
-    formats: [pkg]
-    vendor: "Thunder Compute"
-    maintainer: "Thunder Compute <support@thundercompute.com>"
-    description: "Thunder Compute CLI — manage cloud instances, deployments, and configs."
-    license: MIT
-    homepage: "https://thundercompute.com"
-    package_name: "tnr"
-    bindir: /usr/local/bin
-    dependencies: []
 
 checksum:
   name_template: "checksums.txt"
@@ -49,29 +36,9 @@ checksum:
 release:
   disable: true
 
-after:
-  hooks:
-    # Only run pkgbuild on macOS binaries
-    - |
-      if [[ "$GOOS" == "darwin" ]]; then
-        echo "Building .pkg for macOS..."
-        mkdir -p dist/pkgbuild_root/usr/local/bin
-        # Pick the darwin binary from dist folder
-        cp dist/tnr_darwin_arm64_v8.0/tnr dist/pkgbuild_root/usr/local/bin/tnr
-        pkgbuild \
-          --root dist/pkgbuild_root \
-          --identifier "com.thundercompute.tnr" \
-          --version "{{ .Version }}" \
-          --install-location "/" \
-          dist/tnr_{{ .Version }}_macos.pkg
-      fi
-
 blobs:
   - provider: s3
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}"
     ids: [archive, checksum]
-    extra_files:
-      - dist/tnr_{{ .Version }}_macos.pkg
-

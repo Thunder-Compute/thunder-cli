@@ -57,6 +57,9 @@ jobs:
   macos_pkg:
     needs: goreleaser
     runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [arm64, amd64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,28 +70,31 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Build .pkg installer for macOS
+      - name: Build .pkg installer for macOS (${{ matrix.arch }})
+        shell: bash
         run: |
-          set -e
-          VERSION=${{ github.ref_name }}
-          ARCH="arm64"  # or amd64 if you prefer
+          set -euo pipefail
+          VERSION="${{ github.ref_name }}"
+          ARCH="${{ matrix.arch }}"
+          echo "Building .pkg for ${ARCH}..."
 
-          echo "Downloading macOS binary from S3..."
-          mkdir -p dist/pkgbuild_root/usr/local/bin
-          aws s3 cp "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${VERSION}/tnr_${VERSION}_darwin_${ARCH}.tar.gz" dist/
-          tar -xzf "dist/tnr_${VERSION}_darwin_${ARCH}.tar.gz" -C dist/pkgbuild_root/usr/local/bin
+          mkdir -p dist/pkgbuild_root/usr/local/bin dist/work
+          aws s3 cp "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${VERSION}/tnr_${VERSION}_darwin_${ARCH}.tar.gz" dist/work/
 
-          echo "Building .pkg installer..."
+          tar -xzf "dist/work/tnr_${VERSION}_darwin_${ARCH}.tar.gz" -C dist/work tnr
+          install -m 0755 dist/work/tnr dist/pkgbuild_root/usr/local/bin/tnr
+
           pkgbuild \
             --root dist/pkgbuild_root \
             --identifier com.thundercompute.tnr \
-            --version $VERSION \
+            --version "${VERSION}" \
             --install-location / \
-            dist/tnr_${VERSION}_macos.pkg
+            "dist/tnr_${VERSION}_macos_${ARCH}.pkg"
 
-      - name: Upload .pkg to S3
+      - name: Upload .pkg to S3 (${{ matrix.arch }})
         run: |
-          VERSION=${{ github.ref_name }}
-          aws s3 cp dist/tnr_${VERSION}_macos.pkg \
+          VERSION="${{ github.ref_name }}"
+          ARCH="${{ matrix.arch }}"
+          aws s3 cp "dist/tnr_${VERSION}_macos_${ARCH}.pkg" \
             "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${VERSION}/" \
             --content-type "application/vnd.apple.installer+xml"
