@@ -10,6 +10,7 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
+	termx "github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
 
@@ -54,6 +55,12 @@ func runStatus() error {
 
 	client := api.NewClient(config.Token)
 	monitoring := !noWait
+
+	if monitoring {
+		if !termx.IsTerminal(os.Stdout.Fd()) {
+			return fmt.Errorf("error running status TUI: not a TTY")
+		}
+	}
 
 	return tui.RunStatus(client, monitoring, nil)
 }
