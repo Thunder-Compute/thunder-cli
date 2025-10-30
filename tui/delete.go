@@ -237,8 +237,9 @@ func (m deleteModel) View() string {
 			}
 			resetColor := "\033[0m"
 
-			info := fmt.Sprintf("%s (%s%s%s%s) - %s - %sx%s - %s",
-				instance.UUID,
+			info := fmt.Sprintf("(%s) %s (%s%s%s%s) - %s - %sx%s - %s",
+				instance.ID,
+				instance.Name,
 				statusColor,
 				instance.Status,
 				resetColor,
