@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -18,6 +19,8 @@ type ConnectModel struct {
 	quitting  bool
 	done      bool
 	cancelled bool
+	loading   bool
+	spin      spinner.Model
 }
 
 var (
@@ -41,18 +44,40 @@ func NewConnectModel(instances []string) ConnectModel {
 			"instance-4 (ap-south-1)",
 		}
 	}
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
 	return ConnectModel{
 		instances: instances,
+		spin:      s,
 	}
 }
 
 func (m ConnectModel) Init() tea.Cmd {
+	if m.loading {
+		return m.spin.Tick
+	}
 	return nil
 }
 
 func (m ConnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		if m.loading {
+			var cmd tea.Cmd
+			m.spin, cmd = m.spin.Update(msg)
+			return m, cmd
+		}
 	case tea.KeyMsg:
+		if m.loading {
+			switch msg.String() {
+			case "q", "Q", "esc", "ctrl+c":
+				m.cancelled = true
+				m.quitting = true
+				return m, tea.Quit
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case "q", "Q", "esc", "ctrl+c":
 			m.cancelled = true
@@ -84,6 +109,10 @@ func (m ConnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m ConnectModel) View() string {
 	var b strings.Builder
+
+	if m.loading {
+		return "\n  " + m.spin.View() + " Fetching instances...\n" + helpStyle.Render("Press 'Q' to cancel") + "\n"
+	}
 
 	b.WriteString(connectTitleStyle.Render("⚡ Select Thunder Instance to Connect"))
 	b.WriteString("\n\n")
@@ -148,7 +177,7 @@ func RunConnect(instances []string) (string, error) {
 
 	if m, ok := finalModel.(ConnectModel); ok {
 		if m.cancelled {
-			return "", fmt.Errorf("cancelled")
+			return "", &CancellationError{}
 		}
 		return m.selected, nil
 	}

@@ -122,7 +122,8 @@ func runDelete(args []string) error {
 				return nil
 			}
 			if strings.Contains(err.Error(), "no instances available to delete") {
-				fmt.Println("No instances found. Create an instance first using 'tnr create'")
+				emptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+				fmt.Println(emptyStyle.Render("No instances found. Use 'tnr create' to create a Thunder Compute instance."))
 				return nil
 			}
 			return err
