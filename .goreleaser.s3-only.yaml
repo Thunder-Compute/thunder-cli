@@ -32,6 +32,24 @@ archives:
       - LICENSE
       - README.md
 
+nfpms:
+  - id: macos_pkg
+    builds:
+      - tnr
+    formats: [pkg]
+    vendor: "Thunder Compute"
+    maintainer: "Thunder Compute <support@thundercompute.com>"
+    description: "Thunder Compute CLI - manage cloud instances, deployments, and configs."
+    license: MIT
+    homepage: "https://thundercompute.com"
+    package_name: "tnr"
+    bindir: /usr/local/bin
+    replacements:
+      darwin: macos
+    formats_overrides:
+      darwin: pkg
+    dependencies: []
+
 checksum:
   name_template: "checksums.txt"
 
@@ -45,4 +63,5 @@ blobs:
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}"
-    ids: [archive, checksum]
+    ids: [archive, checksum, macos_pkg]
+
