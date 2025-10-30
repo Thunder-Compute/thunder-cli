@@ -1,5 +1,3 @@
-# https://goreleaser.com/customization/blob/
-
 version: 2
 
 project_name: tnr
@@ -34,34 +32,26 @@ archives:
 
 nfpms:
   - id: macos_pkg
-    builds:
-      - tnr
+    builds: [tnr]
     formats: [pkg]
     vendor: "Thunder Compute"
     maintainer: "Thunder Compute <support@thundercompute.com>"
-    description: "Thunder Compute CLI - manage cloud instances, deployments, and configs."
+    description: "Thunder Compute CLI — manage cloud instances, deployments, and configs."
     license: MIT
     homepage: "https://thundercompute.com"
     package_name: "tnr"
     bindir: /usr/local/bin
-    replacements:
-      darwin: macos
-    formats_overrides:
-      darwin: pkg
     dependencies: []
 
 checksum:
   name_template: "checksums.txt"
 
-# Disable GitHub release
 release:
   disable: true
 
-# Upload to S3 only
 blobs:
   - provider: s3
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}"
     ids: [archive, checksum, macos_pkg]
-
