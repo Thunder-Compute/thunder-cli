@@ -10,15 +10,8 @@ permissions:
   id-token: write
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - runner: ubuntu-latest
-            config: .goreleaser.linux-windows.yaml
-          - runner: macos-latest
-            config: .goreleaser.macos-only.yaml
-    runs-on: ${{ matrix.runner }}
+  goreleaser:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,46 +33,15 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Import Apple Certificate (macOS only)
-        if: matrix.runner == 'macos-latest'
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: |
-          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
-          security create-keychain -p "$APPLE_CERTIFICATE_PASSWORD" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$APPLE_CERTIFICATE_PASSWORD" build.keychain
-          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$APPLE_CERTIFICATE_PASSWORD" build.keychain
-          rm certificate.p12
-
       - name: GoReleaser (S3 only)
         uses: goreleaser/goreleaser-action@v6.4.0
         with:
           version: latest
-          args: release --clean --config ${{ matrix.config }}
+          args: release --clean --config .goreleaser.s3-only.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-
-  generate-latest:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Generate latest.json
         run: |
