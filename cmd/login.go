@@ -223,7 +223,7 @@ var loginCmd = &cobra.Command{
 	Long:  `Login to Thunder Compute by authenticating through your browser. This will open your default browser to complete the authentication process.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runLogin(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			PrintError(err)
 			os.Exit(1)
 		}
 	},
@@ -254,7 +254,7 @@ func runLogin() error {
 			if err := saveConfig(authResp); err != nil {
 				return fmt.Errorf("failed to save credentials: %w", err)
 			}
-			fmt.Println("✓ Successfully authenticated with Thunder Compute using TNR_API_TOKEN!")
+			PrintSuccessSimple("Successfully authenticated with Thunder Compute using TNR_API_TOKEN!")
 			return nil
 		}
 	}
@@ -266,7 +266,7 @@ func runLogin() error {
 		if err := saveConfig(authResp); err != nil {
 			return fmt.Errorf("failed to save credentials: %w", err)
 		}
-		fmt.Println("✓ Successfully authenticated with Thunder Compute!")
+		PrintSuccessSimple("Successfully authenticated with Thunder Compute!")
 		return nil
 	}
 
@@ -314,7 +314,7 @@ func runInteractiveLogin() error {
 	_, err = p.Run()
 	if err != nil {
 		if model.State() == tui.LoginStateCancelled {
-			fmt.Println("User cancelled authentication")
+			PrintWarningSimple("User cancelled authentication")
 			return nil
 		}
 		return fmt.Errorf("TUI error: %w", err)
@@ -331,7 +331,7 @@ func runInteractiveLogin() error {
 	}
 
 	if model.State() == tui.LoginStateCancelled {
-		fmt.Println("User cancelled authentication")
+		PrintWarningSimple("User cancelled authentication")
 		return nil
 	}
 	if model.State() == tui.LoginStateError {
@@ -492,7 +492,7 @@ var logoutCmd = &cobra.Command{
 	Long:  `Log out from Thunder Compute and remove saved authentication credentials.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runLogout(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			PrintError(err)
 			os.Exit(1)
 		}
 	},
@@ -523,6 +523,6 @@ func runLogout() error {
 		return fmt.Errorf("failed to remove config file: %w", err)
 	}
 
-	fmt.Println("✓ Successfully logged out from Thunder Compute!")
+	PrintSuccessSimple("Successfully logged out from Thunder Compute!")
 	return nil
 }

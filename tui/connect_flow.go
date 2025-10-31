@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -58,41 +59,44 @@ type ConnectErrorMsg struct{ Err error }
 type connectQuitNow struct{}
 
 var (
-	connectTitleStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("#0391ff")).
-				MarginTop(1).
-				MarginBottom(1)
-
-	phaseStyle = lipgloss.NewStyle().
-			PaddingLeft(2)
-
-	completedStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#00D787"))
-
-	inProgressStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#0391ff"))
-
-	pendingStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888888"))
-
-	connectWarningStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FFB86C"))
-
-	connectErrorStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FF5555"))
-
-	skippedStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6272A4"))
-
-	durationStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888888")).
-			Italic(true)
-
-	helpStyleConnect = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("8")).
-				Italic(true)
+	connectTitleStyle lipgloss.Style
+	phaseStyle        lipgloss.Style
+	inProgressStyle   lipgloss.Style
+	pendingStyle      lipgloss.Style
+	skippedStyle      lipgloss.Style
+	durationStyle     lipgloss.Style
+	helpStyleConnect  lipgloss.Style
 )
+
+func InitConnectFlowStyles(out io.Writer) {
+	r := lipgloss.NewRenderer(out)
+
+	connectTitleStyle = r.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#0391ff")).
+		MarginTop(1).
+		MarginBottom(1)
+
+	phaseStyle = r.NewStyle().
+		PaddingLeft(2)
+
+	inProgressStyle = r.NewStyle().
+		Foreground(lipgloss.Color("#0391ff"))
+
+	pendingStyle = r.NewStyle().
+		Foreground(lipgloss.Color("#888888"))
+
+	skippedStyle = r.NewStyle().
+		Foreground(lipgloss.Color("#6272A4"))
+
+	durationStyle = r.NewStyle().
+		Foreground(lipgloss.Color("#888888")).
+		Italic(true)
+
+	helpStyleConnect = r.NewStyle().
+		Foreground(lipgloss.Color("8")).
+		Italic(true)
+}
 
 func NewConnectFlowModel(instanceID string) ConnectFlowModel {
 	s := spinner.New()
@@ -205,7 +209,7 @@ func (m ConnectFlowModel) View() string {
 	var b strings.Builder
 
 	b.WriteString(connectTitleStyle.Render("⚡ Connecting to Thunder Instance"))
-	b.WriteString("\n\n")
+	b.WriteString("\n")
 
 	for i, phase := range m.phases {
 		var icon string
@@ -220,7 +224,7 @@ func (m ConnectFlowModel) View() string {
 		switch status {
 		case PhaseCompleted:
 			icon = "✓"
-			style = completedStyle
+			style = successStyle
 		case PhaseInProgress:
 			icon = m.spinner.View()
 			style = inProgressStyle
@@ -229,10 +233,10 @@ func (m ConnectFlowModel) View() string {
 			style = skippedStyle
 		case PhaseWarning:
 			icon = "⚠"
-			style = connectWarningStyle
+			style = warningStyleTUI
 		case PhaseError:
 			icon = "✗"
-			style = connectErrorStyle
+			style = errorStyleTUI
 		default: // PhasePending
 			icon = "○"
 			style = pendingStyle
@@ -254,17 +258,17 @@ func (m ConnectFlowModel) View() string {
 
 	if m.err != nil {
 		b.WriteString("\n")
-		b.WriteString(connectErrorStyle.Render(fmt.Sprintf("✗ Connection failed: %v", m.err)))
+		b.WriteString(errorStyleTUI.Render(fmt.Sprintf("✗ Error: Connection failed: %v", m.err)))
 		b.WriteString("\n")
 	}
 	if m.cancelled {
 		b.WriteString("\n")
-		b.WriteString(connectWarningStyle.Render("✗ Cancelled"))
+		b.WriteString(warningStyleTUI.Render("⚠ Cancelled"))
 		b.WriteString("\n")
 	}
 	if m.done {
 		b.WriteString("\n")
-		b.WriteString(completedStyle.Render("✓ Connection established successfully"))
+		b.WriteString(successStyle.Render("✓ Connection established successfully"))
 		b.WriteString("\n")
 	}
 

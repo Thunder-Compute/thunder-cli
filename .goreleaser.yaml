@@ -49,7 +49,7 @@ brews:
     repository:
       owner: Thunder-Compute
       name: homebrew-tnr
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+      token: "{{ .Env.GH_PAT }}"
     url_template: "https://{{ .Env.TNR_S3_BUCKET }}.s3.{{ .Env.AWS_REGION }}.amazonaws.com/tnr/releases/{{ .Version }}/{{ .ArtifactName }}"
     directory: Formula
     commit_author:
@@ -73,7 +73,7 @@ scoops:
     repository:
       owner: Thunder-Compute
       name: scoop-bucket
-      token: "{{ .Env.SCOOP_BUCKET_TOKEN }}"
+      token: "{{ .Env.GH_PAT }}"
       pull_request:
         enabled: true
 
@@ -90,7 +90,7 @@ winget:
       owner: Thunder-Compute
       name: winget-pkgs
       branch: "tnr-{{ .Version }}"
-      token: "{{ .Env.WINGET_TOKEN }}"
+      token: "{{ .Env.GH_PAT }}"
       pull_request:
         enabled: true
         base:

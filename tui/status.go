@@ -16,16 +16,12 @@ import (
 )
 
 var (
-	headerStyle     lipgloss.Style
-	runningStyle    lipgloss.Style
-	startingStyle   lipgloss.Style
-	deletingStyle   lipgloss.Style
-	cellStyle       lipgloss.Style
-	timestampStyle  lipgloss.Style
-	successStyle    lipgloss.Style
-	errorStyleTUI   lipgloss.Style
-	warningStyleTUI lipgloss.Style
-	helpStyleTUI    lipgloss.Style
+	headerStyle    lipgloss.Style
+	runningStyle   lipgloss.Style
+	startingStyle  lipgloss.Style
+	deletingStyle  lipgloss.Style
+	cellStyle      lipgloss.Style
+	timestampStyle lipgloss.Style
 )
 
 type StatusModel struct {
@@ -140,13 +136,6 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, deferQuit()
 		}
 
-		// Commented out: logic to stop polling when not in transition states
-		// Now it always polls
-		// hasTransitionStates := m.hasTransitionStates()
-		// if !hasTransitionStates && !m.firstRender && m.monitoring {
-		// 	m.monitoring = false
-		// }
-
 		m.firstRender = false
 	}
 
@@ -155,15 +144,14 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m StatusModel) View() string {
 	if m.err != nil {
-		return fmt.Sprintf("Error: %v\n", m.err)
+		return errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v\n", m.err))
 	}
 
 	var b strings.Builder
 
 	if len(m.instances) == 0 && m.err == nil && !m.done && !m.cancelled && m.firstRender {
-		b.WriteString("\n  ")
 		b.WriteString(m.spinner.View())
-		b.WriteString(" Fetching instances...\n\n")
+		b.WriteString(" Fetching instances...\n")
 		b.WriteString(helpStyleTUI.Render("Press 'Q' to cancel\n"))
 		return b.String()
 	}
@@ -190,7 +178,7 @@ func (m StatusModel) View() string {
 		b.WriteString(errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v\n", m.err)))
 	}
 	if m.cancelled {
-		b.WriteString(warningStyleTUI.Render("✗ Cancelled\n"))
+		b.WriteString(warningStyleTUI.Render("⚠ Cancelled\n"))
 	}
 	if m.done {
 		b.WriteString(successStyle.Render("✓ Done\n"))
@@ -210,9 +198,7 @@ func (m StatusModel) View() string {
 
 func (m StatusModel) renderTable() string {
 	if len(m.instances) == 0 {
-		return lipgloss.NewStyle().
-			Foreground(lipgloss.Color("11")).
-			Render("No instances found. Use 'tnr create' to create a Thunder Compute instance.")
+		return warningStyleTUI.Render("⚠ No instances found. Use 'tnr create' to create a Thunder Compute instance.")
 	}
 
 	colWidths := map[string]int{

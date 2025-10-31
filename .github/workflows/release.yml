@@ -40,9 +40,7 @@ jobs:
           args: release --clean --config .goreleaser.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
-          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
           TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
 

@@ -59,7 +59,7 @@ Examples:
   tnr create --mode production --num-gpus 2 --template pytorch --disk-size-gb 500`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runCreate(cmd); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			PrintError(err)
 			os.Exit(1)
 		}
 	},
@@ -173,15 +173,13 @@ func (m createProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m createProgressModel) View() string {
 	if m.done {
 		if m.cancelled {
-			return "\nOperation cancelled.\n"
+			return ""
 		}
 
 		if m.err != nil {
-			errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F5F")).Bold(true)
-			return fmt.Sprintf("\n%s\n\n", errorStyle.Render(fmt.Sprintf("✗ Failed to create instance: %v", m.err)))
+			return ""
 		}
 
-		titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00D787")).Bold(true)
 		headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
 		labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 		valueStyle := lipgloss.NewStyle().Bold(true)
@@ -192,7 +190,8 @@ func (m createProgressModel) View() string {
 			Padding(1, 2)
 
 		var lines []string
-		lines = append(lines, titleStyle.Render("✓ Instance created successfully!"))
+		successTitleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00D787")).Bold(true)
+		lines = append(lines, successTitleStyle.Render("✓ Instance created successfully!"))
 		lines = append(lines, "")
 		lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(fmt.Sprintf("%d", m.resp.Identifier)))
 		if m.resp.Message != "" {
@@ -230,7 +229,7 @@ func runCreate(cmd *cobra.Command) error {
 		createConfig, err = tui.RunCreateInteractive(client)
 		if err != nil {
 			if _, ok := err.(*tui.CancellationError); ok {
-				fmt.Println("Operation cancelled.")
+				PrintWarningSimple("User cancelled creation process")
 				return nil
 			}
 			return err
@@ -272,9 +271,10 @@ func runCreate(cmd *cobra.Command) error {
 		}
 
 		if createConfig.Mode == "prototyping" {
-			fmt.Println("\nPROTOTYPING MODE DISCLAIMER")
+			fmt.Println()
+			PrintWarningSimple("PROTOTYPING MODE DISCLAIMER")
 			fmt.Println("Prototyping instances are designed for development and testing.")
-			fmt.Println("They may experience incompatibilities with some workloads.")
+			fmt.Println("They may experience incompatibilities with some workloads")
 			fmt.Println("for production inference or long-running tasks.")
 		}
 	}
@@ -301,7 +301,7 @@ func runCreate(cmd *cobra.Command) error {
 	}
 
 	if result.cancelled {
-		fmt.Println("Operation cancelled.")
+		PrintWarningSimple("User cancelled creation process")
 		return nil
 	}
 

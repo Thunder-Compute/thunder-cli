@@ -12,9 +12,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
@@ -204,7 +204,7 @@ var presetSaveCmd = &cobra.Command{
 	Long:  `Create a new preset by configuring an instance. Run the interactive wizard to set up your configuration, then save it with a name.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runPresetSave(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			PrintError(err)
 			os.Exit(1)
 		}
 	},
@@ -216,7 +216,7 @@ var presetListCmd = &cobra.Command{
 	Long:  `Display all saved instance configuration presets in a table format.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runPresetList(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			PrintError(err)
 			os.Exit(1)
 		}
 	},
@@ -229,7 +229,7 @@ var presetDeleteCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runPresetDelete(args[0]); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			PrintError(err)
 			os.Exit(1)
 		}
 	},
@@ -242,7 +242,7 @@ var presetShowCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runPresetShow(args[0]); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			PrintError(err)
 			os.Exit(1)
 		}
 	},
@@ -288,7 +288,7 @@ func runPresetSave() error {
 		return fmt.Errorf("failed to save preset: %w", err)
 	}
 
-	fmt.Printf("✓ Preset '%s' saved successfully!\n", preset.Name)
+	PrintSuccessSimple(fmt.Sprintf("Preset '%s' saved successfully!", preset.Name))
 	return nil
 }
 
@@ -368,7 +368,7 @@ func runPresetDelete(name string) error {
 
 	result := finalModel.(tui.PresetDeleteModel)
 	if !result.Confirmed() {
-		fmt.Println("Deletion cancelled.")
+		PrintWarningSimple("Deletion cancelled.")
 		return nil
 	}
 
@@ -376,7 +376,7 @@ func runPresetDelete(name string) error {
 		return err
 	}
 
-	fmt.Printf("✓ Preset '%s' deleted successfully\n", name)
+	PrintSuccessSimple(fmt.Sprintf("Preset '%s' deleted successfully", name))
 	return nil
 }
 

@@ -6,6 +6,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+var (
+	helpStyleTUI    lipgloss.Style
+	errorStyleTUI   lipgloss.Style
+	warningStyleTUI lipgloss.Style
+	successStyle    lipgloss.Style
+)
+
 func InitCommonStyles(out io.Writer) {
 	r := lipgloss.NewRenderer(out)
 	helpStyleTUI = r.NewStyle().Foreground(lipgloss.Color("8")).Italic(true)

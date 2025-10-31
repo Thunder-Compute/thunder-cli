@@ -52,7 +52,7 @@ Examples:
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 2 {
-			fmt.Fprintf(os.Stderr, "Error: requires at least a source and destination\n")
+			PrintError(fmt.Errorf("requires at least a source and destination"))
 			os.Exit(1)
 		}
 
@@ -60,7 +60,7 @@ Examples:
 		destination := args[len(args)-1]
 
 		if err := runSCP(sources, destination); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			PrintError(err)
 			os.Exit(1)
 		}
 	},
@@ -132,8 +132,6 @@ func isValidInstanceID(s string) bool {
 }
 
 func runSCP(sources []string, destination string) error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
 	config, err := LoadConfig()
 	if err != nil {
 		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
@@ -162,29 +160,6 @@ func runSCP(sources []string, destination string) error {
 		return err
 	}
 
-	client := api.NewClient(config.Token)
-	instances, err := client.ListInstances()
-	if err != nil {
-		return fmt.Errorf("failed to list instances: %w", err)
-	}
-
-	var targetInstance *api.Instance
-	for i, inst := range instances {
-		if inst.ID == instanceID || inst.UUID == instanceID {
-			targetInstance = &instances[i]
-			break
-		}
-	}
-
-	if targetInstance == nil {
-		return fmt.Errorf("instance '%s' not found", instanceID)
-	}
-
-	if targetInstance.Status != "RUNNING" {
-		return fmt.Errorf("instance '%s' is not running (status: %s)", instanceID, targetInstance.Status)
-	}
-
-	// Multiple files require destination to end with / (must be a directory)
 	if len(sourcePaths) > 1 {
 		if direction == "upload" {
 			if !strings.HasSuffix(destPath.path, "/") {
@@ -197,25 +172,13 @@ func runSCP(sources []string, destination string) error {
 		}
 	}
 
-	keyFile := utils.GetKeyFile(targetInstance.UUID)
-	if !utils.KeyExists(targetInstance.UUID) {
-		keyResp, err := client.AddSSHKey(targetInstance.ID)
-		if err != nil {
-			return fmt.Errorf("failed to add SSH key: %w", err)
-		}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 
-		if err := utils.SavePrivateKey(targetInstance.UUID, keyResp.Key); err != nil {
-			return fmt.Errorf("failed to save private key: %w", err)
-		}
-		keyFile = utils.GetKeyFile(targetInstance.UUID)
-	}
-
-	// Initialize renderer-based styles for consistent colors
 	tui.InitCommonStyles(os.Stdout)
 	tui.InitSCPStyles(os.Stdout)
 
-	instanceName := fmt.Sprintf("%s (%s)", targetInstance.Name, targetInstance.ID)
-	scpModel := tui.NewSCPModel(direction, instanceName)
+	scpModel := tui.NewSCPModel(direction, "Validating...")
 	p := tea.NewProgram(
 		scpModel,
 		tea.WithContext(ctx),
@@ -223,18 +186,100 @@ func runSCP(sources []string, destination string) error {
 	)
 
 	tuiDone := make(chan error, 1)
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	var finalModel tea.Model
+	var wasCancelled bool
+
 	go func() {
-		_, err := p.Run()
+		var err error
+		finalModel, err = p.Run()
 		if err != nil {
 			tuiDone <- err
+		}
+		if scpModel, ok := finalModel.(tui.SCPModel); ok && scpModel.Cancelled() {
+			wasCancelled = true
+			cancel()
 		}
 		close(tuiDone)
 	}()
 
 	time.Sleep(50 * time.Millisecond)
 
+	client := api.NewClient(config.Token)
+
 	p.Send(tui.SCPPhaseMsg{Phase: tui.SCPPhaseConnecting})
-	sshClient, err := utils.RobustSSHConnect(targetInstance.IP, keyFile, targetInstance.Port, 60)
+
+	instances, err := client.ListInstances()
+	if err != nil {
+		p.Send(tui.SCPErrorMsg{Err: fmt.Errorf("failed to list instances: %w", err)})
+		<-tuiDone
+		return fmt.Errorf("failed to list instances: %w", err)
+	}
+
+	var targetInstance *api.Instance
+	for i, inst := range instances {
+		if inst.ID == instanceID || inst.UUID == instanceID {
+			targetInstance = &instances[i]
+			break
+		}
+	}
+
+	if targetInstance == nil {
+		p.Send(tui.SCPErrorMsg{Err: fmt.Errorf("instance '%s' not found", instanceID)})
+		<-tuiDone
+		return fmt.Errorf("instance '%s' not found", instanceID)
+	}
+
+	if targetInstance.Status != "RUNNING" {
+		p.Send(tui.SCPErrorMsg{Err: fmt.Errorf("instance '%s' is not running (status: %s)", instanceID, targetInstance.Status)})
+		<-tuiDone
+		return fmt.Errorf("instance '%s' is not running (status: %s)", instanceID, targetInstance.Status)
+	}
+
+	instanceName := fmt.Sprintf("%s (%s)", targetInstance.Name, targetInstance.ID)
+	p.Send(tui.SCPInstanceNameMsg{InstanceName: instanceName})
+
+	keyFile := utils.GetKeyFile(targetInstance.UUID)
+	if !utils.KeyExists(targetInstance.UUID) {
+		keyResp, err := client.AddSSHKey(targetInstance.ID)
+		if err != nil {
+			p.Send(tui.SCPErrorMsg{Err: fmt.Errorf("failed to add SSH key: %w", err)})
+			<-tuiDone
+			return fmt.Errorf("failed to add SSH key: %w", err)
+		}
+
+		if err := utils.SavePrivateKey(targetInstance.UUID, keyResp.Key); err != nil {
+			p.Send(tui.SCPErrorMsg{Err: fmt.Errorf("failed to save private key: %w", err)})
+			<-tuiDone
+			return fmt.Errorf("failed to save private key: %w", err)
+		}
+		keyFile = utils.GetKeyFile(targetInstance.UUID)
+	}
+
+	checkCancelled := func() bool {
+		select {
+		case <-cancelCtx.Done():
+			return true
+		case <-ctx.Done():
+			cancel()
+			return true
+		default:
+			return false
+		}
+	}
+
+	if checkCancelled() {
+		<-tuiDone
+		PrintWarningSimple("User cancelled scp process")
+		return nil
+	}
+
+	sshClient, err := utils.RobustSSHConnectCtx(cancelCtx, targetInstance.IP, keyFile, targetInstance.Port, 60)
+	if checkCancelled() {
+		<-tuiDone
+		PrintWarningSimple("User cancelled scp process")
+		return nil
+	}
 	if err != nil {
 		p.Send(tui.SCPErrorMsg{Err: fmt.Errorf("SSH connection failed: %w", err)})
 		<-tuiDone
@@ -242,12 +287,29 @@ func runSCP(sources []string, destination string) error {
 	}
 	defer sshClient.Close()
 
+	if checkCancelled() {
+		<-tuiDone
+		PrintWarningSimple("User cancelled scp process")
+		return nil
+	}
+
 	p.Send(tui.SCPPhaseMsg{Phase: tui.SCPPhaseCalculatingSize})
 	_, err = calculateTotalSize(sshClient, sourcePaths, direction)
+	if checkCancelled() {
+		<-tuiDone
+		PrintWarningSimple("User cancelled scp process")
+		return nil
+	}
 	if err != nil {
 		p.Send(tui.SCPErrorMsg{Err: err})
 		<-tuiDone
 		return err
+	}
+
+	if checkCancelled() {
+		<-tuiDone
+		PrintWarningSimple("User cancelled scp process")
+		return nil
 	}
 
 	startTime := time.Now()
@@ -257,6 +319,9 @@ func runSCP(sources []string, destination string) error {
 	var totalBytes int64
 
 	progressCallback := func(bytesSent, bytesTotal int64) {
+		if checkCancelled() {
+			return
+		}
 		p.Send(tui.SCPProgressMsg{
 			BytesSent:  bytesSent,
 			BytesTotal: bytesTotal,
@@ -265,6 +330,12 @@ func runSCP(sources []string, destination string) error {
 
 	if direction == "upload" {
 		for _, src := range sourcePaths {
+			if checkCancelled() {
+				<-tuiDone
+				PrintWarningSimple("User cancelled scp process")
+				return nil
+			}
+
 			localPath := src.path
 			if strings.HasPrefix(localPath, "~/") {
 				homeDir, _ := os.UserHomeDir()
@@ -273,7 +344,6 @@ func runSCP(sources []string, destination string) error {
 			localPath = filepath.Clean(localPath)
 
 			remotePath := destPath.path
-			// Trailing slash means directory - append source filename
 			if len(sourcePaths) > 1 || strings.HasSuffix(remotePath, "/") {
 				remotePath = strings.TrimSuffix(remotePath, "/") + "/" + filepath.Base(localPath)
 			}
@@ -284,7 +354,18 @@ func runSCP(sources []string, destination string) error {
 				return fmt.Errorf("local path not found: %s", localPath)
 			}
 
-			err := utils.PerformSCPUpload(sshClient, localPath, remotePath, progressCallback)
+			if checkCancelled() {
+				<-tuiDone
+				PrintWarningSimple("User cancelled scp process")
+				return nil
+			}
+
+			err := utils.PerformSCPUploadCtx(cancelCtx, sshClient, localPath, remotePath, progressCallback)
+			if checkCancelled() {
+				<-tuiDone
+				PrintWarningSimple("User cancelled scp process")
+				return nil
+			}
 			if err != nil {
 				p.Send(tui.SCPErrorMsg{Err: err})
 				<-tuiDone
@@ -297,9 +378,20 @@ func runSCP(sources []string, destination string) error {
 		}
 	} else {
 		for _, src := range sourcePaths {
+			if checkCancelled() {
+				<-tuiDone
+				PrintWarningSimple("User cancelled scp process")
+				return nil
+			}
+
 			remotePath := src.path
 
 			exists, err := utils.VerifyRemotePath(sshClient, remotePath)
+			if checkCancelled() {
+				<-tuiDone
+				PrintWarningSimple("User cancelled scp process")
+				return nil
+			}
 			if err != nil {
 				p.Send(tui.SCPErrorMsg{Err: err})
 				<-tuiDone
@@ -333,7 +425,18 @@ func runSCP(sources []string, destination string) error {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
 
-			err = utils.PerformSCPDownload(sshClient, remotePath, localPath, progressCallback)
+			if checkCancelled() {
+				<-tuiDone
+				PrintWarningSimple("User cancelled scp process")
+				return nil
+			}
+
+			err = utils.PerformSCPDownloadCtx(cancelCtx, sshClient, remotePath, localPath, progressCallback)
+			if checkCancelled() {
+				<-tuiDone
+				PrintWarningSimple("User cancelled scp process")
+				return nil
+			}
 			if err != nil {
 				p.Send(tui.SCPErrorMsg{Err: err})
 				<-tuiDone
@@ -346,6 +449,12 @@ func runSCP(sources []string, destination string) error {
 		}
 	}
 
+	if checkCancelled() {
+		<-tuiDone
+		PrintWarningSimple("User cancelled scp process")
+		return nil
+	}
+
 	duration := time.Since(startTime)
 
 	p.Send(tui.SCPCompleteMsg{
@@ -356,6 +465,11 @@ func runSCP(sources []string, destination string) error {
 
 	if err := <-tuiDone; err != nil {
 		return err
+	}
+
+	if wasCancelled {
+		PrintWarningSimple("User cancelled scp process")
+		return nil
 	}
 
 	return nil

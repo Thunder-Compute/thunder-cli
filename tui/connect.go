@@ -7,29 +7,41 @@ import (
 	"os/signal"
 	"strings"
 
+	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type ConnectModel struct {
-	instances []string
-	cursor    int
-	selected  string
-	quitting  bool
-	done      bool
-	cancelled bool
-	loading   bool
-	spin      spinner.Model
+	instances   []string
+	cursor      int
+	selected    string
+	quitting    bool
+	done        bool
+	cancelled   bool
+	loading     bool
+	spin        spinner.Model
+	client      *api.Client
+	err         error
+	displayToID map[string]string
+	noInstances bool
 }
 
 var (
+	connectMainTitleStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#0391ff")).
+				MarginTop(1).
+				MarginBottom(1)
+
 	connectCursorStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#0391ff"))
+
 	connectSelectedStyle = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("#50FA7B")).
-				Background(lipgloss.Color("#44475A"))
+				Foreground(lipgloss.Color("#0391ff"))
+
 	connectHelpStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("8")).
 				Italic(true)
@@ -53,15 +65,65 @@ func NewConnectModel(instances []string) ConnectModel {
 	}
 }
 
+func NewConnectFetchModel(client *api.Client) ConnectModel {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
+	return ConnectModel{
+		loading:     true,
+		spin:        s,
+		client:      client,
+		displayToID: make(map[string]string),
+	}
+}
+
 func (m ConnectModel) Init() tea.Cmd {
 	if m.loading {
-		return m.spin.Tick
+		return tea.Batch(m.spin.Tick, fetchConnectInstancesCmd(m.client))
 	}
 	return nil
 }
 
+type connectInstancesMsg struct {
+	instances []api.Instance
+	err       error
+}
+
+func fetchConnectInstancesCmd(client *api.Client) tea.Cmd {
+	return func() tea.Msg {
+		instances, err := client.ListInstances()
+		return connectInstancesMsg{instances: instances, err: err}
+	}
+}
+
 func (m ConnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case connectInstancesMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+			m.quitting = true
+			return m, tea.Quit
+		}
+
+		var items []string
+		for _, inst := range msg.instances {
+			if inst.Status == "RUNNING" {
+				displayName := fmt.Sprintf("%s (%s) - %s GPU: %s", inst.Name, inst.ID, inst.NumGPUs, inst.GPUType)
+				items = append(items, displayName)
+				if m.displayToID == nil {
+					m.displayToID = make(map[string]string)
+				}
+				m.displayToID[displayName] = inst.ID
+			}
+		}
+		if len(items) == 0 {
+			m.noInstances = true
+			m.quitting = true
+			return m, tea.Quit
+		}
+		m.instances = items
+		return m, nil
 	case spinner.TickMsg:
 		if m.loading {
 			var cmd tea.Cmd
@@ -111,38 +173,54 @@ func (m ConnectModel) View() string {
 	var b strings.Builder
 
 	if m.loading {
-		return "\n  " + m.spin.View() + " Fetching instances...\n" + helpStyle.Render("Press 'Q' to cancel") + "\n"
+		return ""
 	}
 
-	b.WriteString(connectTitleStyle.Render("⚡ Select Thunder Instance to Connect"))
+	if m.noInstances {
+		return ""
+	}
+
+	if m.err != nil {
+		return errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v\n", m.err))
+	}
+
+	if m.quitting {
+		return ""
+	}
+
+	b.WriteString(connectMainTitleStyle.Render("⚡ Select Thunder Instance to Connect"))
+	b.WriteString("\n")
+	b.WriteString("Select an instance to connect to:")
 	b.WriteString("\n\n")
 
 	for i, instance := range m.instances {
 		cursor := "  "
 		if m.cursor == i {
-			cursor = connectCursorStyle.Render("> ")
+			cursor = connectCursorStyle.Render("▶ ")
 		}
-		b.WriteString(fmt.Sprintf("%s%s\n", cursor, instance))
+		line := instance
+		if m.cursor == i {
+			line = connectSelectedStyle.Render(instance)
+		}
+		b.WriteString(fmt.Sprintf("%s%s\n", cursor, line))
 	}
 
 	if m.done && m.selected != "" {
 		b.WriteString("\n")
-		b.WriteString(completedStyle.Render(fmt.Sprintf("✓ Selected: %s", m.selected)))
+		b.WriteString(successStyle.Render(fmt.Sprintf("✓ Selected: %s", m.selected)))
 		b.WriteString("\n")
 	}
 	if m.cancelled {
 		b.WriteString("\n")
-		b.WriteString(connectWarningStyle.Render("✗ Cancelled"))
+		b.WriteString(warningStyleTUI.Render("⚠ Cancelled"))
 		b.WriteString("\n")
 	}
 
 	b.WriteString("\n")
-	if m.quitting {
-		b.WriteString(connectHelpStyle.Render("Closing..."))
-	} else if m.done || m.cancelled {
+	if m.done || m.cancelled {
 		b.WriteString(connectHelpStyle.Render("Press 'Q' to close"))
 	} else {
-		b.WriteString(connectHelpStyle.Render("↑/↓: Navigate  Enter: Select  Q/Esc: Cancel"))
+		b.WriteString("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n")
 	}
 
 	return b.String()
@@ -151,17 +229,6 @@ func (m ConnectModel) View() string {
 func RunConnect(instances []string) (string, error) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-
-	r := lipgloss.NewRenderer(os.Stdout)
-
-	connectSelectedStyle = r.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#50FA7B")).
-		Background(lipgloss.Color("#44475A"))
-
-	connectHelpStyle = r.NewStyle().
-		Foreground(lipgloss.Color("8")).
-		Italic(true)
 
 	m := NewConnectModel(instances)
 	p := tea.NewProgram(
@@ -178,6 +245,94 @@ func RunConnect(instances []string) (string, error) {
 	if m, ok := finalModel.(ConnectModel); ok {
 		if m.cancelled {
 			return "", &CancellationError{}
+		}
+		return m.selected, nil
+	}
+
+	return "", nil
+}
+
+func RunConnectInteractiveSelect(client *api.Client) (string, error) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	InitCommonStyles(os.Stdout)
+
+	m := NewConnectFetchModel(client)
+	p := tea.NewProgram(
+		m,
+		tea.WithContext(ctx),
+		tea.WithOutput(os.Stdout),
+	)
+
+	finalModel, err := p.Run()
+	if err != nil {
+		return "", fmt.Errorf("error running connect TUI: %w", err)
+	}
+
+	if m, ok := finalModel.(ConnectModel); ok {
+		if m.cancelled {
+			return "", &CancellationError{}
+		}
+		if m.err != nil {
+			return "", m.err
+		}
+		if m.noInstances {
+			return "", fmt.Errorf("no running instances")
+		}
+		if m.displayToID != nil && m.selected != "" {
+			if id, ok := m.displayToID[m.selected]; ok {
+				return id, nil
+			}
+		}
+		return m.selected, nil
+	}
+
+	return "", nil
+}
+
+func RunConnectSelectWithInstances(instances []api.Instance) (string, error) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	InitCommonStyles(os.Stdout)
+
+	var items []string
+	displayToID := make(map[string]string)
+	for _, inst := range instances {
+		if inst.Status == "RUNNING" {
+			displayName := fmt.Sprintf("(%s) %s - %s GPU: %s", inst.ID, inst.Name, inst.NumGPUs, inst.GPUType)
+			items = append(items, displayName)
+			displayToID[displayName] = inst.ID
+		}
+	}
+
+	if len(items) == 0 {
+		return "", fmt.Errorf("no running instances")
+	}
+
+	m := NewConnectModel(items)
+	m.displayToID = displayToID
+
+	p := tea.NewProgram(
+		m,
+		tea.WithContext(ctx),
+		tea.WithOutput(os.Stdout),
+	)
+
+	finalModel, err := p.Run()
+	if err != nil {
+		return "", fmt.Errorf("error running connect TUI: %w", err)
+	}
+
+	if m, ok := finalModel.(ConnectModel); ok {
+		if m.cancelled {
+			return "", &CancellationError{}
+		}
+		if m.displayToID != nil && m.selected != "" {
+			if id, ok := m.displayToID[m.selected]; ok {
+				return id, nil
+			}
 		}
 		return m.selected, nil
 	}

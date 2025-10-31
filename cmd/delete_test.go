@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/internal/testutils"
 	"github.com/stretchr/testify/assert"
@@ -175,41 +174,6 @@ func TestRemoveSSHHostEntryNonExistent(t *testing.T) {
 
 	configContent := string(configData)
 	assert.Contains(t, configContent, "tnr-existing")
-}
-
-// TestDeleteSpinnerModel verifies that the delete spinner model initializes
-// correctly with the provided message and proper state.
-func TestDeleteSpinnerModel(t *testing.T) {
-	model := newDeleteSpinnerModel("Test message")
-	assert.Equal(t, "Test message", model.message)
-	assert.False(t, model.quitting)
-}
-
-// TestDeleteSpinnerModelView verifies that the delete spinner model renders
-// correctly in both normal and quitting states.
-func TestDeleteSpinnerModelView(t *testing.T) {
-	model := newDeleteSpinnerModel("Deleting instance...")
-
-	view := model.View()
-	assert.Contains(t, view, "Deleting instance...")
-
-	model.quitting = true
-	view = model.View()
-	assert.Empty(t, view)
-}
-
-// TestDeleteSpinnerModelUpdate verifies that the delete spinner model
-// correctly handles key press events and state updates.
-func TestDeleteSpinnerModelUpdate(t *testing.T) {
-	model := newDeleteSpinnerModel("Test message")
-
-	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
-	newModel, cmd := model.Update(keyMsg)
-
-	updatedModel, ok := newModel.(deleteSpinnerModel)
-	require.True(t, ok)
-	assert.True(t, updatedModel.quitting)
-	assert.NotNil(t, cmd)
 }
 
 // TestDeleteInstanceResponse verifies that the delete instance response

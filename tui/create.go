@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -67,21 +68,12 @@ var (
 	cursorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#0391ff"))
 
-	errorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF0000")).
-			Bold(true)
-
 	panelStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#0391ff")).
 			Padding(1, 2).
 			MarginTop(1).
 			MarginBottom(1)
-
-	warningStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFA500")).
-			Italic(true).
-			Padding(0, 1)
 )
 
 func NewCreateModel(client *api.Client) createModel {
@@ -306,7 +298,7 @@ func (m createModel) getMaxCursor() int {
 
 func (m createModel) View() string {
 	if m.err != nil {
-		return fmt.Sprintf("Error: %v\n", m.err)
+		return ""
 	}
 
 	if m.quitting {
@@ -449,7 +441,7 @@ func (m createModel) View() string {
 		s.WriteString(m.diskInput.View())
 		s.WriteString("\n\n")
 		if m.err != nil {
-			s.WriteString(errorStyle.Render(m.err.Error()))
+			s.WriteString(errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v", m.err)))
 			s.WriteString("\n")
 		}
 		s.WriteString("Press Enter to continue\n")
@@ -478,7 +470,7 @@ func (m createModel) View() string {
 
 		if m.config.Mode == "prototyping" {
 			warning := "⚠ Prototyping mode: for dev/testing; not for production inference or long-running tasks.\n"
-			s.WriteString(warningStyle.Render(warning))
+			s.WriteString(warningStyleTUI.Render(warning))
 			s.WriteString("\n")
 		}
 
@@ -519,6 +511,7 @@ func (m createModel) getTemplateName() string {
 }
 
 func RunCreateInteractive(client *api.Client) (*CreateConfig, error) {
+	InitCommonStyles(os.Stdout)
 	m := NewCreateModel(client)
 	p := tea.NewProgram(m)
 	finalModel, err := p.Run()

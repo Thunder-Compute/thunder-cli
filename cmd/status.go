@@ -28,7 +28,7 @@ Press q to cancel.
 Use --no-wait to display status once and exit immediately.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runStatus(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			PrintError(err)
 			os.Exit(1)
 		}
 	},

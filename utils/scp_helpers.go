@@ -112,7 +112,7 @@ func ExpandRemotePath(client *SSHClient, path string) (string, error) {
 	return strings.TrimSpace(output), nil
 }
 
-func PerformSCPUpload(client *SSHClient, localPath, remotePath string, progressCallback func(int64, int64)) error {
+func PerformSCPUploadCtx(ctx context.Context, client *SSHClient, localPath, remotePath string, progressCallback func(int64, int64)) error {
 	if client == nil || client.GetClient() == nil {
 		return fmt.Errorf("SSH client is not connected")
 	}
@@ -135,13 +135,13 @@ func PerformSCPUpload(client *SSHClient, localPath, remotePath string, progressC
 	}
 
 	if info.IsDir() {
-		return uploadDirectory(scpClient, localPath, expandedRemote, progressCallback)
+		return uploadDirectoryCtx(ctx, scpClient, localPath, expandedRemote, progressCallback)
 	}
 
-	return uploadFile(scpClient, localPath, expandedRemote, progressCallback)
+	return uploadFileCtx(ctx, scpClient, localPath, expandedRemote, progressCallback)
 }
 
-func PerformSCPDownload(client *SSHClient, remotePath, localPath string, progressCallback func(int64, int64)) error {
+func PerformSCPDownloadCtx(ctx context.Context, client *SSHClient, remotePath, localPath string, progressCallback func(int64, int64)) error {
 	if client == nil || client.GetClient() == nil {
 		return fmt.Errorf("SSH client is not connected")
 	}
@@ -170,13 +170,17 @@ func PerformSCPDownload(client *SSHClient, remotePath, localPath string, progres
 	}
 
 	if pathType == "dir" {
-		return downloadDirectory(client, scpClient, expandedRemote, localPath, progressCallback)
+		return downloadDirectoryCtx(ctx, client, scpClient, expandedRemote, localPath, progressCallback)
 	}
 
-	return downloadFile(scpClient, expandedRemote, localPath, progressCallback)
+	return downloadFileCtx(ctx, scpClient, expandedRemote, localPath, progressCallback)
 }
 
-func uploadFile(scpClient scp.Client, localPath, remotePath string, progressCallback func(int64, int64)) error {
+func PerformSCPUpload(client *SSHClient, localPath, remotePath string, progressCallback func(int64, int64)) error {
+	return PerformSCPUploadCtx(context.Background(), client, localPath, remotePath, progressCallback)
+}
+
+func uploadFileCtx(ctx context.Context, scpClient scp.Client, localPath, remotePath string, progressCallback func(int64, int64)) error {
 	file, err := os.Open(localPath)
 	if err != nil {
 		return fmt.Errorf("failed to open local file: %w", err)
@@ -191,9 +195,16 @@ func uploadFile(scpClient scp.Client, localPath, remotePath string, progressCall
 	fileSize := info.Size()
 	var bytesSent int64
 
+	var cancelErr error
 	reader := &progressReader{
 		reader: file,
 		callback: func(n int) {
+			select {
+			case <-ctx.Done():
+				cancelErr = ctx.Err()
+				return
+			default:
+			}
 			bytesSent += int64(n)
 			if progressCallback != nil {
 				progressCallback(bytesSent, fileSize)
@@ -201,8 +212,20 @@ func uploadFile(scpClient scp.Client, localPath, remotePath string, progressCall
 		},
 	}
 
-	ctx := context.Background()
+	// Check for cancellation before starting transfer
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("upload cancelled: %w", ctx.Err())
+	default:
+	}
+
 	err = scpClient.CopyFile(ctx, reader, remotePath, fmt.Sprintf("0%o", info.Mode().Perm()))
+	if cancelErr != nil {
+		return fmt.Errorf("upload cancelled: %w", cancelErr)
+	}
+	if err != nil && ctx.Err() != nil {
+		return fmt.Errorf("upload cancelled: %w", ctx.Err())
+	}
 	if err != nil {
 		return fmt.Errorf("SCP upload failed: %w", err)
 	}
@@ -210,7 +233,11 @@ func uploadFile(scpClient scp.Client, localPath, remotePath string, progressCall
 	return nil
 }
 
-func uploadDirectory(scpClient scp.Client, localPath, remotePath string, progressCallback func(int64, int64)) error {
+func PerformSCPDownload(client *SSHClient, remotePath, localPath string, progressCallback func(int64, int64)) error {
+	return PerformSCPDownloadCtx(context.Background(), client, remotePath, localPath, progressCallback)
+}
+
+func uploadDirectoryCtx(ctx context.Context, scpClient scp.Client, localPath, remotePath string, progressCallback func(int64, int64)) error {
 	totalSize, err := GetLocalSize(localPath)
 	if err != nil {
 		return err
@@ -219,6 +246,13 @@ func uploadDirectory(scpClient scp.Client, localPath, remotePath string, progres
 	var bytesSent int64
 
 	err = filepath.Walk(localPath, func(path string, info fs.FileInfo, err error) error {
+		// Check for cancellation before processing each file
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("upload cancelled: %w", ctx.Err())
+		default:
+		}
+
 		if err != nil {
 			return err
 		}
@@ -251,23 +285,35 @@ func uploadDirectory(scpClient scp.Client, localPath, remotePath string, progres
 			},
 		}
 
-		ctx := context.Background()
-		return scpClient.CopyFile(ctx, reader, targetPath, fmt.Sprintf("0%o", info.Mode().Perm()))
+		err = scpClient.CopyFile(ctx, reader, targetPath, fmt.Sprintf("0%o", info.Mode().Perm()))
+		if err != nil && ctx.Err() != nil {
+			return fmt.Errorf("upload cancelled: %w", ctx.Err())
+		}
+		return err
 	})
 
 	return err
 }
 
-func downloadFile(scpClient scp.Client, remotePath, localPath string, progressCallback func(int64, int64)) error {
+func downloadFileCtx(ctx context.Context, scpClient scp.Client, remotePath, localPath string, progressCallback func(int64, int64)) error {
 	file, err := os.Create(localPath)
 	if err != nil {
 		return fmt.Errorf("failed to create local file: %w", err)
 	}
 	defer file.Close()
 
+	// Check for cancellation before starting transfer
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("download cancelled: %w", ctx.Err())
+	default:
+	}
+
 	// Note: go-scp doesn't provide download progress callbacks
-	ctx := context.Background()
 	err = scpClient.CopyFromRemote(ctx, file, remotePath)
+	if err != nil && ctx.Err() != nil {
+		return fmt.Errorf("download cancelled: %w", ctx.Err())
+	}
 	if err != nil {
 		return fmt.Errorf("SCP download failed: %w", err)
 	}
@@ -280,7 +326,7 @@ func downloadFile(scpClient scp.Client, remotePath, localPath string, progressCa
 	return nil
 }
 
-func downloadDirectory(client *SSHClient, scpClient scp.Client, remotePath, localPath string, progressCallback func(int64, int64)) error {
+func downloadDirectoryCtx(ctx context.Context, client *SSHClient, scpClient scp.Client, remotePath, localPath string, progressCallback func(int64, int64)) error {
 	if err := os.MkdirAll(localPath, 0755); err != nil {
 		return fmt.Errorf("failed to create local directory: %w", err)
 	}
@@ -304,6 +350,13 @@ func downloadDirectory(client *SSHClient, scpClient scp.Client, remotePath, loca
 	var bytesReceived int64
 
 	for _, remoteFile := range files {
+		// Check for cancellation before processing each file
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("download cancelled: %w", ctx.Err())
+		default:
+		}
+
 		if remoteFile == "" {
 			continue
 		}
@@ -321,11 +374,13 @@ func downloadDirectory(client *SSHClient, scpClient scp.Client, remotePath, loca
 			return fmt.Errorf("failed to create local file: %w", err)
 		}
 
-		ctx := context.Background()
 		err = scpClient.CopyFromRemote(ctx, file, remoteFile)
 		file.Close()
 
 		if err != nil {
+			if ctx.Err() != nil {
+				return fmt.Errorf("download cancelled: %w", ctx.Err())
+			}
 			return fmt.Errorf("failed to download %s: %w", remoteFile, err)
 		}
 

@@ -51,14 +51,6 @@ var (
 				Foreground(lipgloss.Color("#a3a3a3")).
 				MarginBottom(1)
 
-	loginErrorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF5555")).
-			MarginBottom(1)
-
-	loginSuccessStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#00D787")).
-				MarginBottom(1)
-
 	loginHelpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#888888")).
 			Italic(true).
@@ -163,9 +155,9 @@ func (m LoginModel) View() string {
 	if m.quitting {
 		switch m.state {
 		case LoginStateSuccess:
-			return loginSuccessStyle.Render("✓ Successfully authenticated with Thunder Compute!")
+			return successStyle.Render("✓ Successfully authenticated with Thunder Compute!")
 		case LoginStateError:
-			return loginErrorStyle.Render(fmt.Sprintf("✗ Authentication failed: %v", m.err))
+			return errorStyleTUI.Render(fmt.Sprintf("✗ Error: Authentication failed: %v", m.err))
 		case LoginStateCancelled:
 			return ""
 		}

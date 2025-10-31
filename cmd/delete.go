@@ -14,9 +14,7 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -43,7 +41,7 @@ Examples:
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runDelete(args); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			PrintError(err)
 			os.Exit(1)
 		}
 	},
@@ -55,80 +53,6 @@ func init() {
 	})
 
 	rootCmd.AddCommand(deleteCmd)
-}
-
-type deleteSpinnerModel struct {
-	spinner    spinner.Model
-	message    string
-	quitting   bool
-	success    bool
-	successMsg string
-	err        error
-	client     *api.Client
-	instanceID string
-}
-
-type deleteResultMsg struct {
-	err error
-}
-
-func deleteInstanceCmd(client *api.Client, instanceID string) tea.Cmd {
-	return func() tea.Msg {
-		_, err := client.DeleteInstance(instanceID)
-		return deleteResultMsg{err: err}
-	}
-}
-
-func newDeleteSpinnerModel(client *api.Client, instanceID, message string) deleteSpinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
-	return deleteSpinnerModel{
-		spinner:    s,
-		message:    message,
-		client:     client,
-		instanceID: instanceID,
-	}
-}
-
-func (m deleteSpinnerModel) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, deleteInstanceCmd(m.client, m.instanceID))
-}
-
-func (m deleteSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case deleteResultMsg:
-		if msg.err != nil {
-			m.err = msg.err
-			m.quitting = true
-			return m, tea.Quit
-		}
-		m.success = true
-		m.successMsg = fmt.Sprintf("✓ Successfully deleted Thunder Compute instance %s", m.instanceID)
-		m.quitting = true
-		return m, tea.Quit
-	case tea.KeyMsg:
-		m.quitting = true
-		return m, tea.Quit
-	case tea.QuitMsg:
-		m.quitting = true
-		return m, nil
-	default:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-	}
-}
-
-func (m deleteSpinnerModel) View() string {
-	if m.success {
-		successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
-		return successStyle.Render(m.successMsg) + "\n\n"
-	}
-	if m.quitting {
-		return ""
-	}
-	return fmt.Sprintf(" %s %s\n", m.spinner.View(), m.message)
 }
 
 func runDelete(args []string) error {
@@ -147,15 +71,31 @@ func runDelete(args []string) error {
 	var selectedInstance *api.Instance
 
 	if len(args) == 0 {
-		selectedInstance, err = tui.RunDeleteInteractive(client)
+		busy := tui.NewBusyModel("Fetching instances...")
+		bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
+		busyDone := make(chan struct{})
+		go func() {
+			_, _ = bp.Run()
+			close(busyDone)
+		}()
+
+		instances, err := client.ListInstances()
+		bp.Send(tui.BusyDoneMsg{})
+		<-busyDone
+
+		if err != nil {
+			return fmt.Errorf("failed to fetch instances: %w", err)
+		}
+
+		if len(instances) == 0 {
+			PrintWarningSimple("No instances found. Use 'tnr create' to create a Thunder Compute instance.")
+			return nil
+		}
+
+		selectedInstance, err = tui.RunDeleteInteractive(client, instances)
 		if err != nil {
 			if _, ok := err.(*tui.CancellationError); ok {
-				fmt.Println("User cancelled delete process")
-				return nil
-			}
-			if strings.Contains(err.Error(), "no instances available to delete") {
-				emptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
-				fmt.Println(emptyStyle.Render("No instances found. Use 'tnr create' to create a Thunder Compute instance."))
+				PrintWarningSimple("User cancelled delete process")
 				return nil
 			}
 			return err
@@ -164,7 +104,18 @@ func runDelete(args []string) error {
 	} else {
 		instanceID = args[0]
 
+		busy := tui.NewBusyModel("Fetching instances...")
+		bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
+		busyDone := make(chan struct{})
+		go func() {
+			_, _ = bp.Run()
+			close(busyDone)
+		}()
+
 		instances, err := client.ListInstances()
+		bp.Send(tui.BusyDoneMsg{})
+		<-busyDone
+
 		if err != nil {
 			return fmt.Errorf("failed to fetch instances: %w", err)
 		}
@@ -186,25 +137,24 @@ func runDelete(args []string) error {
 	}
 
 	if selectedInstance.Status == "STARTING" {
-		fmt.Printf("\nWarning: Instance '%s' is currently STARTING.\n", instanceID)
+		fmt.Println()
+		PrintWarning(fmt.Sprintf("Instance '%s' is currently STARTING.", instanceID))
 		fmt.Println("Deletion may fail. It's recommended to wait until the instance is RUNNING.")
 		fmt.Println("\nAttempting deletion anyway...")
 	}
 
 	fmt.Println()
-	p := tea.NewProgram(newDeleteSpinnerModel(client, instanceID, fmt.Sprintf("Deleting instance %s...", instanceID)))
-	finalModel, err := p.Run()
+	successMsg, err := tui.RunDeleteProgress(client, instanceID)
 	if err != nil {
-		return fmt.Errorf("error running deletion: %w", err)
+		return fmt.Errorf("failed to delete instance: %w\n\nPossible reasons:\n• Instance may be in STARTING state (wait for it to fully start first)\n• Instance may already be deleted\n• Server error occurred\n\nTry running 'tnr status' to check the instance state", err)
 	}
 
-	result := finalModel.(deleteSpinnerModel)
-	if result.err != nil {
-		return fmt.Errorf("failed to delete instance: %w\n\nPossible reasons:\n• Instance may be in STARTING state (wait for it to fully start first)\n• Instance may already be deleted\n• Server error occurred\n\nTry running 'tnr status' to check the instance state", result.err)
+	if successMsg != "" {
+		PrintSuccessSimple(successMsg)
 	}
 
 	if err := cleanupSSHConfig(instanceID, selectedInstance.IP); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to clean up SSH configuration: %v\n", err)
+		PrintWarning(fmt.Sprintf("Failed to clean up SSH configuration: %v", err))
 	}
 
 	return nil

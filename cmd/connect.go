@@ -11,17 +11,14 @@ import (
 	"os/signal"
 	"runtime"
 	"strconv"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/utils"
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	termx "github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
 
@@ -29,40 +26,6 @@ var (
 	tunnelPorts []string
 	debugMode   bool
 )
-
-type connectFetchSpinnerModel struct {
-	spinner  spinner.Model
-	message  string
-	quitting bool
-}
-
-func newConnectFetchSpinnerModel(message string) connectFetchSpinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
-	return connectFetchSpinnerModel{spinner: s, message: message}
-}
-
-func (m connectFetchSpinnerModel) Init() tea.Cmd { return m.spinner.Tick }
-func (m connectFetchSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "Q", "ctrl+c", "esc":
-			m.quitting = true
-			return m, tea.Quit
-		}
-	}
-	var cmd tea.Cmd
-	m.spinner, cmd = m.spinner.Update(msg)
-	return m, cmd
-}
-func (m connectFetchSpinnerModel) View() string {
-	if m.quitting {
-		return ""
-	}
-	return fmt.Sprintf("\n  %s %s\n", m.spinner.View(), m.message)
-}
 
 // connectCmd represents the connect command
 var connectCmd = &cobra.Command{
@@ -81,112 +44,12 @@ After initial setup, you can reconnect using: ssh tnr-{instance_id}
 If no instance ID is provided, an interactive selection menu will be displayed.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var instanceID string
-
 		if len(args) > 0 {
 			instanceID = args[0]
-		} else {
-			config, err := LoadConfig()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: not authenticated. Please run 'tnr login' first\n")
-				os.Exit(1)
-			}
-
-			if config.Token == "" {
-				fmt.Fprintf(os.Stderr, "Error: no authentication token found. Please run 'tnr login'\n")
-				os.Exit(1)
-			}
-
-			fetchProg := tea.NewProgram(newConnectFetchSpinnerModel("Fetching instances..."))
-			fetchDone := make(chan struct{})
-			cancelled := make(chan bool, 1)
-			go func() {
-				final, _ := fetchProg.Run()
-				if fm, ok := final.(connectFetchSpinnerModel); ok && fm.quitting {
-					cancelled <- true
-				}
-				close(fetchDone)
-			}()
-
-			client := api.NewClient(config.Token)
-			type apiResult struct {
-				instances []api.Instance
-				err       error
-			}
-			resultChan := make(chan apiResult, 1)
-			go func() {
-				insts, err := client.ListInstances()
-				resultChan <- apiResult{insts, err}
-			}()
-
-			var instances []api.Instance
-			var apiErr error
-			select {
-			case <-cancelled:
-				fetchProg.Quit()
-				<-fetchDone
-				fmt.Println("Operation cancelled.")
-				os.Exit(0)
-			case res := <-resultChan:
-				fetchProg.Quit()
-				<-fetchDone
-				instances, apiErr = res.instances, res.err
-			}
-			if apiErr != nil {
-				fmt.Fprintf(os.Stderr, "Error: failed to list instances: %v\n", apiErr)
-				os.Exit(1)
-			}
-
-			if len(instances) == 0 {
-				fmt.Println("No instances found. Create an instance first using 'tnr create'")
-				os.Exit(0)
-			}
-
-			var runningInstances []api.Instance
-			for _, inst := range instances {
-				if inst.Status == "RUNNING" {
-					runningInstances = append(runningInstances, inst)
-				}
-			}
-
-			if len(runningInstances) == 0 {
-				fmt.Println("No running instances found.")
-				fmt.Println("\nYou have the following instances:")
-				for _, inst := range instances {
-					fmt.Printf("  - %s (%s) - Status: %s\n", inst.Name, inst.UUID, inst.Status)
-				}
-				fmt.Println("\nStart an instance using 'tnr start <instance_id>' or create a new one with 'tnr create'")
-				os.Exit(0)
-			}
-
-			var instanceList []string
-			instanceMap := make(map[string]api.Instance)
-			for _, inst := range runningInstances {
-				displayName := fmt.Sprintf("%s (%s) - %s GPU: %s", inst.Name, inst.ID, inst.NumGPUs, inst.GPUType)
-				instanceList = append(instanceList, displayName)
-				instanceMap[displayName] = inst
-			}
-
-			selected, err := selectInstanceTUI(instanceList)
-			if err != nil {
-				if strings.Contains(strings.ToLower(err.Error()), "cancelled") {
-					fmt.Println("Operation cancelled.")
-					os.Exit(0)
-				}
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
-
-			if selected == "" {
-				fmt.Println("User cancelled instance connection")
-				os.Exit(0)
-			}
-
-			selectedInst := instanceMap[selected]
-			instanceID = selectedInst.ID
 		}
 
 		if err := runConnect(instanceID, tunnelPorts, debugMode); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			PrintError(err)
 			os.Exit(1)
 		}
 	},
@@ -204,10 +67,77 @@ func init() {
 }
 
 func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
+	config, err := LoadConfig()
+	if err != nil {
+		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
+	}
+
+	if config.Token == "" {
+		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
+	}
+
+	if !termx.IsTerminal(os.Stdout.Fd()) {
+		return fmt.Errorf("error running connect TUI: not a TTY")
+	}
+
+	client := api.NewClient(config.Token)
+
+	busy := tui.NewBusyModel("Fetching instances...")
+	bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
+	busyDone := make(chan struct{})
+	go func() { _, _ = bp.Run(); close(busyDone) }()
+
+	instances, err := client.ListInstances()
+	bp.Send(tui.BusyDoneMsg{})
+	<-busyDone
+	if err != nil {
+		return fmt.Errorf("failed to list instances: %w", err)
+	}
+	if len(instances) == 0 {
+		PrintWarningSimple("No instances found. Create an instance first using 'tnr create'")
+		return nil
+	}
+
+	if instanceID == "" {
+		instanceID, err = tui.RunConnectSelectWithInstances(instances)
+		if err != nil {
+			if _, ok := err.(*tui.CancellationError); ok {
+				PrintWarningSimple("User cancelled instance connection")
+				return nil
+			}
+			if err.Error() == "no running instances" {
+				PrintWarningSimple("No running instances found.")
+				return nil
+			}
+			return err
+		}
+	} else {
+		var foundInstance *api.Instance
+		for i := range instances {
+			if instances[i].ID == instanceID || instances[i].UUID == instanceID || instances[i].Name == instanceID {
+				foundInstance = &instances[i]
+				break
+			}
+		}
+
+		if foundInstance == nil {
+			return fmt.Errorf("instance '%s' not found", instanceID)
+		}
+
+		if foundInstance.Status != "RUNNING" {
+			return fmt.Errorf("instance '%s' is not running (status: %s)", instanceID, foundInstance.Status)
+		}
+
+		if foundInstance.IP == "" {
+			return fmt.Errorf("instance '%s' has no IP address", instanceID)
+		}
+
+		instanceID = foundInstance.ID
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	startTime := time.Now()
 	phaseTimings := make(map[string]time.Duration)
 
 	var tunnelPorts []int
@@ -219,6 +149,9 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 		tunnelPorts = append(tunnelPorts, port)
 	}
 
+	tui.InitCommonStyles(os.Stdout)
+	tui.InitConnectFlowStyles(os.Stdout)
+
 	flowModel := tui.NewConnectFlowModel(instanceID)
 	p := tea.NewProgram(
 		flowModel,
@@ -228,9 +161,7 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 
 	tuiDone := make(chan error, 1)
 	cancelCtx, cancel := context.WithCancel(context.Background())
-	var cancelledMu sync.Mutex
-	cancelled := false
-	printedCancel := false
+	var wasCancelled bool
 
 	go func() {
 		finalModel, err := p.Run()
@@ -239,34 +170,25 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 		}
 		close(tuiDone)
 		if fm, ok := finalModel.(tui.ConnectFlowModel); ok && fm.Cancelled() {
+			wasCancelled = true
 			cancel()
-			cancelledMu.Lock()
-			cancelled = true
-			cancelledMu.Unlock()
 		}
 	}()
 
 	time.Sleep(50 * time.Millisecond)
 
+	shutdownTUI := func() {
+		cancel()
+		stop()
+		<-tuiDone
+	}
+
 	checkCancelled := func() bool {
-		cancelledMu.Lock()
-		isCancelled := cancelled
-		alreadyPrinted := printedCancel
-		if isCancelled && !alreadyPrinted {
-			fmt.Println("User cancelled instance connection")
-			printedCancel = true
-			cancelledMu.Unlock()
-			return true
-		}
-		cancelledMu.Unlock()
 		select {
 		case <-cancelCtx.Done():
-			cancelledMu.Lock()
-			if cancelled && !printedCancel {
-				fmt.Println("User cancelled instance connection")
-				printedCancel = true
-			}
-			cancelledMu.Unlock()
+			return true
+		case <-ctx.Done():
+			cancel()
 			return true
 		default:
 			return false
@@ -278,7 +200,7 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 	}
 
 	phase1Start := time.Now()
-	tui.SendPhaseUpdate(p, 0, tui.PhaseInProgress, "Checking prerequisites...", 0)
+	tui.SendPhaseUpdate(p, 0, tui.PhaseInProgress, "Fetching instances...", 0)
 
 	hashChan := make(chan string, 1)
 	hashErrChan := make(chan error, 1)
@@ -292,12 +214,6 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 	if checkCancelled() {
 		return nil
 	}
-	if err := utils.AcquireLock(instanceID); err != nil {
-		tui.SendConnectError(p, err)
-		<-tuiDone
-		return fmt.Errorf("failed to acquire lock: %w", err)
-	}
-	defer utils.ReleaseLock(instanceID)
 
 	phaseTimings["pre_connection"] = time.Since(phase1Start)
 	tui.SendPhaseComplete(p, 0, phaseTimings["pre_connection"])
@@ -305,24 +221,9 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 	phase2Start := time.Now()
 	tui.SendPhaseUpdate(p, 1, tui.PhaseInProgress, "Validating instance...", 0)
 
-	config, err := LoadConfig()
-	if err != nil {
-		tui.SendConnectError(p, err)
-		<-tuiDone
-		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
-	}
-
-	if config.Token == "" {
-		err := fmt.Errorf("no authentication token found")
-		tui.SendConnectError(p, err)
-		<-tuiDone
-		return err
-	}
-
 	if checkCancelled() {
 		return nil
 	}
-	client := api.NewClient(config.Token)
 
 	// Fetch binary hash in background for potential virtualization setup
 	go func() {
@@ -337,13 +238,12 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 	if checkCancelled() {
 		return nil
 	}
-	instances, err := client.ListInstancesWithIPUpdateCtx(cancelCtx)
+	instances, err = client.ListInstancesWithIPUpdateCtx(cancelCtx)
 	if checkCancelled() {
 		return nil
 	}
 	if err != nil {
-		tui.SendConnectError(p, err)
-		<-tuiDone
+		shutdownTUI()
 		return fmt.Errorf("failed to list instances: %w", err)
 	}
 
@@ -357,22 +257,19 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 
 	if instance == nil {
 		err := fmt.Errorf("instance %s not found", instanceID)
-		tui.SendConnectError(p, err)
-		<-tuiDone
+		shutdownTUI()
 		return err
 	}
 
 	if instance.Status != "RUNNING" {
 		err := fmt.Errorf("instance %s is not running (status: %s)", instanceID, instance.Status)
-		tui.SendConnectError(p, err)
-		<-tuiDone
+		shutdownTUI()
 		return err
 	}
 
 	if instance.IP == "" {
 		err := fmt.Errorf("instance %s has no IP address", instanceID)
-		tui.SendConnectError(p, err)
-		<-tuiDone
+		shutdownTUI()
 		return err
 	}
 
@@ -398,14 +295,12 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 			return nil
 		}
 		if err != nil {
-			tui.SendConnectError(p, err)
-			<-tuiDone
+			shutdownTUI()
 			return fmt.Errorf("failed to add SSH key: %w", err)
 		}
 
 		if err := utils.SavePrivateKey(instance.UUID, keyResp.Key); err != nil {
-			tui.SendConnectError(p, err)
-			<-tuiDone
+			shutdownTUI()
 			return fmt.Errorf("failed to save private key: %w", err)
 		}
 	}
@@ -425,8 +320,7 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 		return nil
 	}
 	if err != nil {
-		tui.SendConnectError(p, err)
-		<-tuiDone
+		shutdownTUI()
 		return fmt.Errorf("failed to establish SSH connection: %w", err)
 	}
 	defer sshClient.Close()
@@ -527,18 +421,6 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 		return nil
 	}
 
-	if debug {
-		fmt.Println("\n=== Timing Breakdown ===")
-		totalTime := time.Since(startTime)
-		for phase, duration := range phaseTimings {
-			percentage := float64(duration) / float64(totalTime) * 100
-			fmt.Printf("%-25s: %10s (%5.1f%%)\n", phase, duration.Round(time.Millisecond), percentage)
-		}
-		fmt.Printf("%-25s: %10s\n", "Total", totalTime.Round(time.Millisecond))
-		fmt.Println("========================")
-		fmt.Println()
-	}
-
 	sshClient.Close()
 
 	// Build SSH command with port forwarding and connection multiplexing
@@ -585,8 +467,6 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 
 	err = sshCmd.Run()
 
-	fmt.Println("\n⚡ Exiting Thunder instance ⚡")
-
 	// Handle SSH exit codes (130 = Ctrl+C, 255 = connection closed)
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -595,6 +475,11 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 				return fmt.Errorf("SSH session failed with exit code %d", exitCode)
 			}
 		}
+	}
+
+	if wasCancelled {
+		PrintWarningSimple("User cancelled instance connection")
+		return nil
 	}
 
 	return nil
@@ -606,8 +491,4 @@ func checkWindowsOpenSSH() error {
 		return fmt.Errorf("OpenSSH not found. Please install OpenSSH on Windows")
 	}
 	return nil
-}
-
-func selectInstanceTUI(instanceList []string) (string, error) {
-	return tui.RunConnect(instanceList)
 }

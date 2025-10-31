@@ -66,6 +66,10 @@ type SCPErrorMsg struct {
 	Err error
 }
 
+type SCPInstanceNameMsg struct {
+	InstanceName string
+}
+
 var (
 	scpTitleStyle = lipgloss.NewStyle().
 			Bold(true).
@@ -96,10 +100,6 @@ var (
 				Foreground(lipgloss.Color("#00D787")).
 				Bold(true)
 
-	scpErrorStyleTUI = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FF5555")).
-				Bold(true)
-
 	scpSuccessBoxStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("#0391ff")).
@@ -117,7 +117,6 @@ func InitSCPStyles(out io.Writer) {
 	scpStatsStyle = r.NewStyle().Foreground(lipgloss.Color("#CCCCCC"))
 	scpSpeedStyle = r.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
 	scpCompleteStyle = r.NewStyle().Foreground(lipgloss.Color("#00D787")).Bold(true)
-	scpErrorStyleTUI = r.NewStyle().Foreground(lipgloss.Color("#FF5555")).Bold(true)
 	scpSuccessBoxStyle = r.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#0391ff")).
@@ -158,7 +157,7 @@ func (m SCPModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "q" || msg.String() == "Q" || msg.String() == "ctrl+c" {
 			m.cancelled = true
 			m.quitting = true
-			return m, deferQuit()
+			return m, tea.Quit
 		}
 
 	case SCPPhaseMsg:
@@ -217,6 +216,10 @@ func (m SCPModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, deferQuit()
 
+	case SCPInstanceNameMsg:
+		m.instanceName = msg.InstanceName
+		return m, nil
+
 	case quitNow:
 		return m, tea.Quit
 
@@ -233,6 +236,10 @@ func (m SCPModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m SCPModel) View() string {
+	if m.cancelled {
+		return ""
+	}
+
 	var s string
 
 	action := "Upload"
@@ -273,23 +280,17 @@ func (m SCPModel) View() string {
 
 	case SCPPhaseError:
 		s += errorStyleTUI.Render("✗ Transfer Failed") + "\n\n"
-		s += errorStyleTUI.Render(fmt.Sprintf("Error: %v\n", m.err))
+		s += errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v\n", m.err))
 	}
 
 	if m.err != nil || m.phase == SCPPhaseError {
 		s += errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v\n", m.err))
 	}
-	if m.cancelled {
-		s += warningStyleTUI.Render("✗ Cancelled\n")
-	}
-	if m.done {
-		s += successStyle.Render("✓ Transfer complete\n")
-	}
 
 	s += "\n"
 	if m.quitting {
 		s += helpStyleTUI.Render("Closing...\n")
-	} else if m.done || m.err != nil || m.cancelled {
+	} else if m.done || m.err != nil {
 		s += helpStyleTUI.Render("Press 'Q' to close\n")
 	} else {
 		s += helpStyleTUI.Render("Press 'Q' to cancel\n")
@@ -370,4 +371,8 @@ func formatDuration(d time.Duration) string {
 	hours := int(d.Hours())
 	minutes := int(d.Minutes()) % 60
 	return fmt.Sprintf("%dh %dm", hours, minutes)
+}
+
+func (m SCPModel) Cancelled() bool {
+	return m.cancelled
 }
