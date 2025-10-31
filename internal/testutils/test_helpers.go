@@ -30,7 +30,7 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 		t.Fatalf("Failed to create credential file: %v", err)
 	}
 
-	configFile := filepath.Join(thunderDir, "config.json")
+	configFile := filepath.Join(thunderDir, "cli_config.json")
 	config := map[string]interface{}{
 		"token":         "test_token_12345",
 		"refresh_token": "test_refresh_token",

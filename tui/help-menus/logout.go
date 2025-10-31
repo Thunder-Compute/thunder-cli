@@ -83,7 +83,7 @@ func RenderLogoutHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Config File"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("~/.thunder-cli-draft/config.json"))
+	output.WriteString(DescStyle.Render("~/.thunder/cli_config.json"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

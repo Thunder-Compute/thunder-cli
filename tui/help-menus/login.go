@@ -90,7 +90,7 @@ func RenderLoginHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("3. Save"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Credentials saved to ~/.thunder-cli-draft/config.json"))
+	output.WriteString(DescStyle.Render("Credentials saved to ~/.thunder/cli_config.json"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

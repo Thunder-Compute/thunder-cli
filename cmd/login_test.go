@@ -28,7 +28,7 @@ func TestLoginSuccess(t *testing.T) {
 	err := saveConfig(authResp)
 	require.NoError(t, err)
 
-	configPath := filepath.Join(tmpDir, ".thunder", "config.json")
+	configPath := filepath.Join(tmpDir, ".thunder", "cli_config.json")
 	assert.FileExists(t, configPath)
 
 	configData, err := os.ReadFile(configPath)
@@ -54,7 +54,7 @@ func TestLoadConfig(t *testing.T) {
 	thunderDir := filepath.Join(tmpDir, ".thunder")
 	require.NoError(t, os.MkdirAll(thunderDir, 0700))
 
-	configFile := filepath.Join(thunderDir, "config.json")
+	configFile := filepath.Join(thunderDir, "cli_config.json")
 	testConfig := map[string]interface{}{
 		"token":         "test_token_12345",
 		"refresh_token": "test_refresh_token",
@@ -125,7 +125,7 @@ func TestSaveConfig(t *testing.T) {
 	err := saveConfig(authResp)
 	require.NoError(t, err)
 
-	configPath := filepath.Join(tmpDir, ".thunder", "config.json")
+	configPath := filepath.Join(tmpDir, ".thunder", "cli_config.json")
 	assert.FileExists(t, configPath)
 
 	configData, err := os.ReadFile(configPath)
@@ -157,7 +157,7 @@ func TestSaveConfigWithExpiration(t *testing.T) {
 	err := saveConfig(authResp)
 	require.NoError(t, err)
 
-	configPath := filepath.Join(tmpDir, ".thunder", "config.json")
+	configPath := filepath.Join(tmpDir, ".thunder", "cli_config.json")
 	configData, err := os.ReadFile(configPath)
 	require.NoError(t, err)
 
@@ -188,7 +188,7 @@ func TestSaveConfigCreatesDirectory(t *testing.T) {
 	thunderDir := filepath.Join(tmpDir, ".thunder")
 	assert.DirExists(t, thunderDir)
 
-	configFile := filepath.Join(thunderDir, "config.json")
+	configFile := filepath.Join(thunderDir, "cli_config.json")
 	assert.FileExists(t, configFile)
 }
 
@@ -268,7 +268,7 @@ func TestLoginCommandTableDriven(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 
-				configPath := filepath.Join(tmpDir, ".thunder", "config.json")
+				configPath := filepath.Join(tmpDir, ".thunder", "cli_config.json")
 				configData, err := os.ReadFile(configPath)
 				require.NoError(t, err)
 

@@ -241,7 +241,7 @@ func init() {
 func runLogin() error {
 	config, err := LoadConfig()
 	if err == nil && config.Token != "" {
-		fmt.Println("User already logged in. Log out to sign into a different account.")
+		PrintWarningSimple("User already logged in. Log out to sign into a different account.")
 		return nil
 	}
 
@@ -327,6 +327,7 @@ func runInteractiveLogin() error {
 		if err := saveConfig(authResp); err != nil {
 			return fmt.Errorf("failed to save credentials: %w", err)
 		}
+		PrintSuccessSimple("Successfully authenticated with Thunder Compute!")
 		return nil
 	}
 
@@ -446,7 +447,7 @@ func saveConfig(authResp AuthResponse) error {
 		return err
 	}
 
-	configPath := filepath.Join(configDir, "config.json")
+	configPath := filepath.Join(configDir, "cli_config.json")
 
 	config := Config{
 		Token:        authResp.Token,
@@ -471,7 +472,7 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
-	configPath := filepath.Join(homeDir, ".thunder", "config.json")
+	configPath := filepath.Join(homeDir, ".thunder", "cli_config.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, err
@@ -512,10 +513,10 @@ func runLogout() error {
 		return fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	configPath := filepath.Join(homeDir, ".thunder", "config.json")
+	configPath := filepath.Join(homeDir, ".thunder", "cli_config.json")
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		fmt.Println("You are not logged in.")
+		PrintWarningSimple("You are not logged in.")
 		return nil
 	}
 
