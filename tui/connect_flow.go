@@ -248,7 +248,7 @@ func (m ConnectFlowModel) View() string {
 			line += durationStyle.Render(fmt.Sprintf(" (%s)", phase.Duration.Round(time.Millisecond)))
 		}
 
-		if phase.Message != "" {
+		if phase.Message != "" && status != PhaseInProgress {
 			line += "\n  " + style.Render(phase.Message)
 		}
 
@@ -270,13 +270,7 @@ func (m ConnectFlowModel) View() string {
 		b.WriteString("\n")
 		b.WriteString(successStyle.Render("✓ Connection established successfully"))
 		b.WriteString("\n")
-	}
-
-	b.WriteString("\n")
-	if m.quitting {
-		b.WriteString(helpStyleConnect.Render("Closing...\n"))
-	} else {
-		b.WriteString(helpStyleConnect.Render("Press 'Q' to cancel\n"))
+		b.WriteString("\n")
 	}
 
 	return b.String()
