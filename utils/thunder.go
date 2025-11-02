@@ -56,11 +56,8 @@ func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpu
 	}
 
 	if !needsUpdate {
-		fmt.Println("Thunder virtualization already configured")
 		return nil
 	}
-
-	// fmt.Println("Configuring Thunder virtualization...")
 
 	// Create Thunder directory
 	if _, err := ExecuteSSHCommand(client, fmt.Sprintf("mkdir -p %s", thunderConfigDir)); err != nil {
@@ -68,7 +65,6 @@ func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpu
 	}
 
 	// Download Thunder binary
-	// fmt.Println("Downloading Thunder binary...")
 	downloadCmd := fmt.Sprintf("curl -L %s -o /tmp/libthunder.tmp && mv /tmp/libthunder.tmp %s", thunderBinaryURL, thunderLibPath)
 	if _, err := ExecuteSSHCommand(client, downloadCmd); err != nil {
 		return fmt.Errorf("failed to download Thunder binary: %w", err)
@@ -110,14 +106,11 @@ func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpu
 		return fmt.Errorf("failed to write token: %w", err)
 	}
 
-	fmt.Println("✓ Thunder virtualization configured")
 	return nil
 }
 
 // RemoveThunderVirtualization cleans up Thunder virtualization for production mode
 func RemoveThunderVirtualization(client *SSHClient, token string) error {
-	fmt.Println("Removing Thunder virtualization for production mode...")
-
 	// Clear LD_PRELOAD
 	if _, err := ExecuteSSHCommand(client, fmt.Sprintf("sudo rm -f %s", ldPreloadPath)); err != nil {
 		return fmt.Errorf("failed to clear LD_PRELOAD: %w", err)
@@ -139,6 +132,5 @@ func RemoveThunderVirtualization(client *SSHClient, token string) error {
 		return fmt.Errorf("failed to write token: %w", err)
 	}
 
-	fmt.Println("✓ Thunder virtualization removed")
 	return nil
 }
