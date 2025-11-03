@@ -37,12 +37,6 @@ checksum:
 release:
   disable: true
 
-signs:
-  - signature: "${artifact}.sig"
-    ids: [archive]
-    cmd: cosign
-    args: ["sign-blob", "--yes", "--output-signature", "${signature}", "${artifact}"]
-
 blobs:
   - provider: s3
     bucket: "{{ .Env.TNR_S3_BUCKET }}"

@@ -24,9 +24,6 @@ jobs:
       - name: Run tests
         run: go test ./... -v
 
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
-
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:

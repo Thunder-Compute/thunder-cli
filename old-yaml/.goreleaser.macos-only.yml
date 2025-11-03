@@ -56,12 +56,6 @@ checksum:
 release:
   disable: true
 
-signs:
-  - signature: "${artifact}.sig"
-    ids: [archive]
-    cmd: cosign
-    args: ["sign-blob", "--yes", "--output-signature", "${signature}", "${artifact}"]
-
 notarize:
   apple_id:
     username: '{{ .Env.APPLE_ID }}'
