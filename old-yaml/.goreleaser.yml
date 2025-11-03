@@ -41,12 +41,6 @@ changelog:
       - '^test:'
       - '^chore:'
 
-signs:
-  - cmd: cosign
-    signature: "${artifact}.sig"
-    args: ["sign-blob", "--yes", "--output-signature", "${signature}", "${artifact}"]
-    artifacts: [checksum, archive]
-
 sboms:
   - artifacts: [archive]
     id: cyclonedx

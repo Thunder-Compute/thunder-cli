@@ -83,7 +83,7 @@ winget:
     publisher: Thunder
     short_description: "Thunder Compute CLI"
     license: MIT
-    publisher_url: "https://thundercompute.com"
+    publisher_url: "https://www.thundercompute.com"
     package_identifier: Thunder.tnr
     url_template: "https://{{ .Env.TNR_S3_BUCKET }}.s3.{{ .Env.AWS_REGION }}.amazonaws.com/tnr/releases/{{ .Version }}/{{ .ArtifactName }}"
     repository:
