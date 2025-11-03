@@ -97,8 +97,8 @@ const authSuccessHTML = `
 	<body>
 		<div class="logo-container">
 			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
-				<path d="M122.5 112.5L20 256L236 68H174L222.5 0L72.5 83.5L193 84L113.5 153.5L154.5 96H50L20 112.5H122.5Z" fill="#369EFF"/>
-				<path d="M222.5 0L73 83.5L193 84L113.5 153.5L154.5 96H50L20 112.5H122.5L20 256L236 68H174L222.5 0Z" fill="#369EFF"/>
+				<path d="M122.5 112.5L20 256L236 68H174L222.5 0L72.5 83.5L193 84L113.5 153.5L154.5 96H50L20 112.5H122.5Z" fill="#8cc8ff"/>
+				<path d="M222.5 0L73 83.5L193 84L113.5 153.5L154.5 96H50L20 112.5H122.5L20 256L236 68H174L222.5 0Z" fill="#8cc8ff"/>
 			</svg>
 		</div>
 		
@@ -185,8 +185,8 @@ const authFailedHTML = `
 	<body>
 		<div class="logo-container">
 			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
-				<path d="M122.5 112.5L20 256L236 68H174L222.5 0L72.5 83.5L193 84L113.5 153.5L154.5 96H50L20 112.5H122.5Z" fill="#369EFF"/>
-				<path d="M222.5 0L73 83.5L193 84L113.5 153.5L154.5 96H50L20 112.5H122.5L20 256L236 68H174L222.5 0Z" fill="#369EFF"/>
+				<path d="M122.5 112.5L20 256L236 68H174L222.5 0L72.5 83.5L193 84L113.5 153.5L154.5 96H50L20 112.5H122.5Z" fill="#8cc8ff"/>
+				<path d="M222.5 0L73 83.5L193 84L113.5 153.5L154.5 96H50L20 112.5H122.5L20 256L236 68H174L222.5 0Z" fill="#8cc8ff"/>
 			</svg>
 		</div>
 
@@ -467,6 +467,12 @@ func saveConfig(authResp AuthResponse) error {
 }
 
 func LoadConfig() (*Config, error) {
+	if envToken := os.Getenv("TNR_API_TOKEN"); envToken != "" {
+		return &Config{
+			Token: envToken,
+		}, nil
+	}
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
@@ -508,15 +514,24 @@ func init() {
 }
 
 func runLogout() error {
+	envToken := os.Getenv("TNR_API_TOKEN")
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %w", err)
 	}
 
 	configPath := filepath.Join(homeDir, ".thunder", "cli_config.json")
-
+	configExists := true
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		configExists = false
+	}
+
+	if !configExists && envToken == "" {
 		PrintWarningSimple("You are not logged in.")
+		return nil
+	} else if envToken != "" {
+		PrintWarningSimple("You are authenticated via TNR_API_TOKEN environment variable.")
 		return nil
 	}
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -74,6 +75,10 @@ var (
 			Padding(1, 2).
 			MarginTop(1).
 			MarginBottom(1)
+
+	createLabelStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#FFFFFF"))
 )
 
 func NewCreateModel(client *api.Client) createModel {
@@ -444,28 +449,21 @@ func (m createModel) View() string {
 			s.WriteString(errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v", m.err)))
 			s.WriteString("\n")
 		}
-		s.WriteString("Press Enter to continue\n")
+		s.WriteString(helpStyleTUI.Render("Press Enter to continue\n"))
 
 	case stepConfirmation:
 		s.WriteString("Review your configuration:\n")
 
-		panel := fmt.Sprintf(
-			"Mode:       %s\n"+
-				"GPU Type:   %s\n"+
-				"GPUs:       %d\n"+
-				"vCPUs:      %d\n"+
-				"RAM:        %d GB\n"+
-				"Template:   %s\n"+
-				"Disk Size:  %d GB",
-			strings.Title(m.config.Mode),
-			strings.ToUpper(m.config.GPUType),
-			m.config.NumGPUs,
-			m.config.VCPUs,
-			m.config.VCPUs*8,
-			m.getTemplateName(),
-			m.config.DiskSizeGB,
-		)
-		s.WriteString(panelStyle.Render(panel))
+		var panel strings.Builder
+		panel.WriteString(createLabelStyle.Render("Mode:       ") + utils.Capitalize(m.config.Mode) + "\n")
+		panel.WriteString(createLabelStyle.Render("GPU Type:   ") + strings.ToUpper(m.config.GPUType) + "\n")
+		panel.WriteString(createLabelStyle.Render("GPUs:       ") + strconv.Itoa(m.config.NumGPUs) + "\n")
+		panel.WriteString(createLabelStyle.Render("vCPUs:      ") + strconv.Itoa(m.config.VCPUs) + "\n")
+		panel.WriteString(createLabelStyle.Render("RAM:        ") + strconv.Itoa(m.config.VCPUs*8) + " GB\n")
+		panel.WriteString(createLabelStyle.Render("Template:   ") + utils.Capitalize(m.config.Template) + "\n")
+		panel.WriteString(createLabelStyle.Render("Disk Size:  ") + strconv.Itoa(m.config.DiskSizeGB) + " GB")
+
+		s.WriteString(panelStyle.Render(panel.String()))
 		s.WriteString("\n")
 
 		if m.config.Mode == "prototyping" {
@@ -492,22 +490,13 @@ func (m createModel) View() string {
 
 	if m.step != stepConfirmation {
 		s.WriteString("\n")
-		s.WriteString("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n")
+		s.WriteString(helpStyleTUI.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n"))
 	} else {
 		s.WriteString("\n")
-		s.WriteString("↑/↓: Navigate  Enter: Confirm  Q: Cancel\n")
+		s.WriteString(helpStyleTUI.Render("↑/↓: Navigate  Enter: Confirm  Q: Cancel\n"))
 	}
 
 	return s.String()
-}
-
-func (m createModel) getTemplateName() string {
-	for _, t := range m.templates {
-		if t.Key == m.config.Template {
-			return t.DisplayName
-		}
-	}
-	return m.config.Template
 }
 
 func RunCreateInteractive(client *api.Client) (*CreateConfig, error) {

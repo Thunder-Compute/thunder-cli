@@ -136,17 +136,10 @@ func runDelete(args []string) error {
 		return fmt.Errorf("instance '%s' is already being deleted", instanceID)
 	}
 
-	if selectedInstance.Status == "STARTING" {
-		fmt.Println()
-		PrintWarning(fmt.Sprintf("Instance '%s' is currently STARTING.", instanceID))
-		fmt.Println("Deletion may fail. It's recommended to wait until the instance is RUNNING.")
-		fmt.Println("\nAttempting deletion anyway...")
-	}
-
 	fmt.Println()
 	successMsg, err := tui.RunDeleteProgress(client, instanceID)
 	if err != nil {
-		return fmt.Errorf("failed to delete instance: %w\n\nPossible reasons:\n• Instance may be in STARTING state (wait for it to fully start first)\n• Instance may already be deleted\n• Server error occurred\n\nTry running 'tnr status' to check the instance state", err)
+		return fmt.Errorf("failed to delete instance: %w\n\nPossible reasons:\n• Instance may already be deleted\n• Server error occurred\n\nTry running 'tnr status' to check the instance state", err)
 	}
 
 	if successMsg != "" {

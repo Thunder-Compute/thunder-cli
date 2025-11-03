@@ -10,6 +10,7 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
+	tea "github.com/charmbracelet/bubbletea"
 	termx "github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
@@ -62,5 +63,22 @@ func runStatus() error {
 		}
 	}
 
-	return tui.RunStatus(client, monitoring, nil)
+	// Show busy spinner while fetching instances
+	busy := tui.NewBusyModel("Fetching instances...")
+	bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
+	busyDone := make(chan struct{})
+	go func() {
+		_, _ = bp.Run()
+		close(busyDone)
+	}()
+
+	instances, err := client.ListInstances()
+	bp.Send(tui.BusyDoneMsg{})
+	<-busyDone
+
+	if err != nil {
+		return fmt.Errorf("failed to fetch instances: %w", err)
+	}
+
+	return tui.RunStatus(client, monitoring, instances)
 }

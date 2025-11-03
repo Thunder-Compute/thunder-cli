@@ -220,7 +220,7 @@ func (m ConnectModel) View() string {
 	if m.done || m.cancelled {
 		b.WriteString(connectHelpStyle.Render("Press 'Q' to close"))
 	} else {
-		b.WriteString("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n")
+		b.WriteString(connectHelpStyle.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n"))
 	}
 
 	return b.String()

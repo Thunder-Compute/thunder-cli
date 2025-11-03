@@ -1,16 +1,17 @@
 package tui
 
 import (
+	"os"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 var (
-	helpStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#888888")).
-		Italic(true).
-		MarginTop(1)
+	busyTextStyle = lipgloss.NewStyle().
+		// Bold(true).
+		Foreground(lipgloss.Color("#FFFFFF"))
 )
 
 type BusyDoneMsg struct{}
@@ -22,6 +23,7 @@ type BusyModel struct {
 }
 
 func NewBusyModel(text string) BusyModel {
+	InitCommonStyles(os.Stdout)
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
@@ -54,5 +56,5 @@ func (m BusyModel) View() string {
 	if m.Quitting {
 		return ""
 	}
-	return m.spin.View() + " " + m.text + helpStyle.Render("Press 'Q' to cancel") + "\n"
+	return m.spin.View() + " " + busyTextStyle.Render(m.text) + "\n" + helpStyleTUI.Render("Press 'Q' to cancel\n")
 }

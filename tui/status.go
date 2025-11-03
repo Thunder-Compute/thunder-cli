@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -25,16 +26,15 @@ var (
 )
 
 type StatusModel struct {
-	instances   []api.Instance
-	client      *api.Client
-	monitoring  bool
-	lastUpdate  time.Time
-	quitting    bool
-	spinner     spinner.Model
-	err         error
-	firstRender bool
-	done        bool
-	cancelled   bool
+	instances  []api.Instance
+	client     *api.Client
+	monitoring bool
+	lastUpdate time.Time
+	quitting   bool
+	spinner    spinner.Model
+	err        error
+	done       bool
+	cancelled  bool
 }
 
 type tickMsg time.Time
@@ -52,17 +52,16 @@ func NewStatusModel(client *api.Client, monitoring bool, instances []api.Instanc
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
 
 	return StatusModel{
-		client:      client,
-		monitoring:  monitoring,
-		instances:   instances,
-		lastUpdate:  time.Now(),
-		spinner:     s,
-		firstRender: true,
+		client:     client,
+		monitoring: monitoring,
+		instances:  instances,
+		lastUpdate: time.Now(),
+		spinner:    s,
 	}
 }
 
 func (m StatusModel) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.spinner.Tick, fetchInstancesCmd(m.client)}
+	cmds := []tea.Cmd{m.spinner.Tick}
 	if m.monitoring {
 		cmds = append(cmds, tickCmd())
 	}
@@ -125,18 +124,14 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if len(m.instances) == 0 {
 			m.monitoring = false
-			m.firstRender = false
 			m.quitting = true
 			return m, deferQuit()
 		}
 
 		if !m.monitoring {
-			m.firstRender = false
 			m.quitting = true
 			return m, deferQuit()
 		}
-
-		m.firstRender = false
 	}
 
 	return m, nil
@@ -148,13 +143,6 @@ func (m StatusModel) View() string {
 	}
 
 	var b strings.Builder
-
-	if len(m.instances) == 0 && m.err == nil && !m.done && !m.cancelled && m.firstRender {
-		b.WriteString(m.spinner.View())
-		b.WriteString(" Fetching instances...\n")
-		b.WriteString(helpStyleTUI.Render("Press 'Q' to cancel\n"))
-		return b.String()
-	}
 
 	b.WriteString(m.renderTable())
 	b.WriteString("\n")
@@ -246,12 +234,12 @@ func (m StatusModel) renderTable() string {
 		name := truncate(instance.Name, colWidths["Name"])
 		status := m.formatStatus(instance.Status, colWidths["Status"])
 		address := truncate(instance.IP, colWidths["Address"])
-		mode := truncate(capitalize(instance.Mode), colWidths["Mode"])
+		mode := truncate(utils.Capitalize(instance.Mode), colWidths["Mode"])
 		disk := truncate(fmt.Sprintf("%dGB", instance.Storage), colWidths["Disk"])
 		gpu := truncate(fmt.Sprintf("%sx%s", instance.NumGPUs, instance.GPUType), colWidths["GPU"])
 		vcpus := truncate(instance.CPUCores, colWidths["vCPUs"])
 		ram := truncate(fmt.Sprintf("%sGB", instance.Memory), colWidths["RAM"])
-		template := truncate(instance.Template, colWidths["Template"])
+		template := truncate(utils.Capitalize(instance.Template), colWidths["Template"])
 
 		row := []string{
 			cellStyle.Width(colWidths["ID"]).Render(id),
@@ -270,20 +258,6 @@ func (m StatusModel) renderTable() string {
 	}
 
 	return b.String()
-}
-
-func (m StatusModel) hasTransitionStates() bool {
-	transitionStates := map[string]bool{
-		"STARTING": true,
-		"DELETING": true,
-	}
-
-	for _, instance := range m.instances {
-		if transitionStates[instance.Status] {
-			return true
-		}
-	}
-	return false
 }
 
 func (m StatusModel) formatStatus(status string, width int) string {
@@ -309,13 +283,6 @@ func truncate(s string, maxLen int) string {
 		return s[:maxLen]
 	}
 	return s[:maxLen-3] + "..."
-}
-
-func capitalize(s string) string {
-	if len(s) == 0 {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 func RunStatus(client *api.Client, monitoring bool, instances []api.Instance) error {

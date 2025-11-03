@@ -51,6 +51,10 @@ func TestLoadConfig(t *testing.T) {
 	defer os.Setenv("HOME", originalHome)
 	os.Setenv("HOME", tmpDir)
 
+	originalEnv := os.Getenv("TNR_API_TOKEN")
+	defer os.Setenv("TNR_API_TOKEN", originalEnv)
+	os.Unsetenv("TNR_API_TOKEN")
+
 	thunderDir := filepath.Join(tmpDir, ".thunder")
 	require.NoError(t, os.MkdirAll(thunderDir, 0700))
 
@@ -73,6 +77,45 @@ func TestLoadConfig(t *testing.T) {
 	config, err = LoadConfig()
 	assert.Error(t, err)
 	assert.Nil(t, config)
+}
+
+// TestLoadConfigFromEnvironmentVariable verifies that the LoadConfig function
+// prioritizes the TNR_API_TOKEN environment variable over the saved config file.
+func TestLoadConfigFromEnvironmentVariable(t *testing.T) {
+	tmpDir := t.TempDir()
+	originalHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", originalHome)
+	os.Setenv("HOME", tmpDir)
+
+	originalEnv := os.Getenv("TNR_API_TOKEN")
+	defer os.Setenv("TNR_API_TOKEN", originalEnv)
+
+	// Set environment variable
+	os.Setenv("TNR_API_TOKEN", "env_token_from_variable")
+
+	// Also create a config file with different token
+	thunderDir := filepath.Join(tmpDir, ".thunder")
+	require.NoError(t, os.MkdirAll(thunderDir, 0700))
+	configFile := filepath.Join(thunderDir, "cli_config.json")
+	testConfig := map[string]interface{}{
+		"token":         "file_token_12345",
+		"refresh_token": "test_refresh_token",
+	}
+	configData, err := json.Marshal(testConfig)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(configFile, configData, 0600))
+
+	// Environment variable should take precedence
+	config, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, "env_token_from_variable", config.Token)
+	assert.Empty(t, config.RefreshToken, "env token config should not have refresh token")
+
+	// Test with env variable only (no config file)
+	os.Remove(configFile)
+	config, err = LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, "env_token_from_variable", config.Token)
 }
 
 // TestGenerateState verifies that the generateState function creates unique,

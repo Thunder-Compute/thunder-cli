@@ -14,10 +14,11 @@ import (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:     "tnr",
-	Short:   "Thunder Compute CLI",
-	Long:    "tnr is the command-line interface for Thunder Compute.\nUse it to manage and connect to your Thunder Compute instances.",
-	Version: version.BuildVersion,
+	Use:           "tnr",
+	Short:         "Thunder Compute CLI",
+	Long:          "tnr is the command-line interface for Thunder Compute.\nUse it to manage and connect to your Thunder Compute instances.",
+	Version:       version.BuildVersion,
+	SilenceErrors: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		tui.RenderCustomHelp(cmd)
 	},

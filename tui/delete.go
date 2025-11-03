@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -59,6 +60,10 @@ var (
 				Padding(1, 2).
 				MarginTop(1).
 				MarginBottom(1)
+
+	deleteLabelStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#FFFFFF"))
 )
 
 func NewDeleteModel(client *api.Client, instances []api.Instance) deleteModel {
@@ -99,10 +104,8 @@ func (m deleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.String() {
 		case "q", "ctrl+c":
-			if m.step != deleteStepConfirm {
-				m.quitting = true
-				return m, tea.Quit
-			}
+			m.quitting = true
+			return m, tea.Quit
 
 		case "esc":
 			if m.step == deleteStepConfirm {
@@ -187,7 +190,6 @@ func (m deleteModel) View() string {
 	case deleteStepSelect:
 		s.WriteString("Select an instance to delete:\n\n")
 
-		hasStartingInstances := false
 		for i, instance := range m.instances {
 			cursor := "  "
 			if m.cursor == i {
@@ -202,7 +204,6 @@ func (m deleteModel) View() string {
 				statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#00D787")).Bold(true) // Green (success color)
 			case "STARTING":
 				statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C")).Bold(true) // Yellow (warning color)
-				hasStartingInstances = true
 			case "DELETING":
 				statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Bold(true) // Red (error color)
 				statusSuffix = " (already deleting)"
@@ -222,19 +223,14 @@ func (m deleteModel) View() string {
 				instance.IP,
 				instance.NumGPUs,
 				instance.GPUType,
-				capitalize(instance.Mode),
+				utils.Capitalize(instance.Mode),
 			)
 
 			s.WriteString(fmt.Sprintf("%s%s%s\n", cursor, idAndName, rest))
 		}
 
-		if hasStartingInstances {
-			s.WriteString("\n")
-			s.WriteString(warningStyleTUI.Render("⚠ Note: Instances in STARTING state may fail to delete. Wait until RUNNING."))
-			s.WriteString("\n")
-		}
-
-		s.WriteString("\n↑/↓: Navigate  Enter: Select  Q: Cancel\n")
+		s.WriteString("\n")
+		s.WriteString(helpStyleTUI.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
 
 	case deleteStepConfirm:
 		warning := "WARNING: This action is IRREVERSIBLE!\n\n" +
@@ -245,22 +241,16 @@ func (m deleteModel) View() string {
 		s.WriteString(deleteWarningStyle.Render(warning))
 		s.WriteString("\n\n")
 
-		instanceInfo := fmt.Sprintf(
-			"Instance ID:  %s\n"+
-				"Status:       %s\n"+
-				"IP Address:   %s\n"+
-				"Mode:         %s\n"+
-				"GPU:          %sx%s\n"+
-				"Template:     %s",
-			m.selected.UUID,
-			m.selected.Status,
-			m.selected.IP,
-			capitalize(m.selected.Mode),
-			m.selected.NumGPUs,
-			m.selected.GPUType,
-			m.selected.Template,
-		)
-		s.WriteString(deleteInstanceStyle.Render(instanceInfo))
+		var instanceInfo strings.Builder
+		instanceInfo.WriteString(deleteLabelStyle.Render("ID:           ") + m.selected.ID + "\n")
+		instanceInfo.WriteString(deleteLabelStyle.Render("Name:         ") + m.selected.Name + "\n")
+		instanceInfo.WriteString(deleteLabelStyle.Render("Status:       ") + m.selected.Status + "\n")
+		instanceInfo.WriteString(deleteLabelStyle.Render("IP Address:   ") + m.selected.IP + "\n")
+		instanceInfo.WriteString(deleteLabelStyle.Render("Mode:         ") + utils.Capitalize(m.selected.Mode) + "\n")
+		instanceInfo.WriteString(deleteLabelStyle.Render("GPU:          ") + m.selected.NumGPUs + "x" + m.selected.GPUType + "\n")
+		instanceInfo.WriteString(deleteLabelStyle.Render("Template:     ") + utils.Capitalize(m.selected.Template))
+
+		s.WriteString(deleteInstanceStyle.Render(instanceInfo.String()))
 		s.WriteString("\n\n")
 
 		s.WriteString("Are you sure you want to delete this instance?\n\n")
@@ -272,19 +262,21 @@ func (m deleteModel) View() string {
 				cursor = deleteCursorStyle.Render("▶ ")
 			}
 			if i == 0 {
-				s.WriteString(fmt.Sprintf("%s%s\n", cursor, lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Render(option)))
+				s.WriteString(fmt.Sprintf("%s%s\n", cursor, lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Bold(true).Render(option)))
 			} else {
 				s.WriteString(fmt.Sprintf("%s%s\n", cursor, option))
 			}
 		}
 
-		s.WriteString("\n↑/↓: Navigate  Enter: Confirm  Esc: Back\n")
+		s.WriteString("\n")
+		s.WriteString(helpStyleTUI.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Cancel\n"))
 	}
 
 	return s.String()
 }
 
 func RunDeleteInteractive(client *api.Client, instances []api.Instance) (*api.Instance, error) {
+	InitCommonStyles(os.Stdout)
 	m := NewDeleteModel(client, instances)
 	p := tea.NewProgram(m)
 	finalModel, err := p.Run()

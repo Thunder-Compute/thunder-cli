@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -297,7 +298,8 @@ func (m presetSaveModel) View() string {
 			s.WriteString("\n")
 		}
 
-		s.WriteString("\nPress Enter to save, 'Esc' to go back\n")
+		s.WriteString("\n")
+		s.WriteString(helpStyleTUI.Render("Press Enter to save, 'Esc' to go back\n"))
 	}
 
 	return s.String()
@@ -400,15 +402,16 @@ func (m presetSaveModel) renderConfigStep(s *strings.Builder) {
 			s.WriteString(errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v", m.err)))
 			s.WriteString("\n")
 		}
-		s.WriteString("Press Enter to continue\n")
+		s.WriteString(helpStyleTUI.Render("Press Enter to continue\n"))
 	}
 
 	s.WriteString("\n")
-	s.WriteString("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n")
+	s.WriteString(helpStyleTUI.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n"))
 }
 
 // RunPresetSaveInteractive runs the preset save interactive flow
 func RunPresetSaveInteractive(client *api.Client) (*PresetSaveResult, error) {
+	InitCommonStyles(os.Stdout)
 	m := NewPresetSaveModel(client)
 	p := tea.NewProgram(m)
 	finalModel, err := p.Run()
@@ -505,7 +508,7 @@ func (m PresetDeleteModel) View() string {
 	s.WriteString(warningStyleTUI.Render("⚠ Warning: This action cannot be undone!"))
 	s.WriteString("\n\n")
 	s.WriteString(fmt.Sprintf("Are you sure you want to delete preset '%s'?\n\n", m.name))
-	s.WriteString("Press 'y' to confirm, 'Q' to cancel: ")
+	s.WriteString(helpStyleTUI.Render("Press 'y' to confirm, 'Q' to cancel: "))
 	return s.String()
 }
 
