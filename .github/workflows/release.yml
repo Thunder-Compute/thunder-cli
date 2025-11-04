@@ -101,3 +101,81 @@ jobs:
           aws s3 cp "dist/tnr_${CLEAN_VERSION}_macos_${ARCH}.pkg" \
             "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${CLEAN_VERSION}/" \
             --content-type "application/vnd.apple.installer+xml"
+
+  windows_msi:
+    needs: goreleaser
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: |
+          choco install wixtoolset -y
+          echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build MSI installer for Windows (${{ matrix.arch }})
+        shell: pwsh
+        run: |
+          $TAG_VERSION = "${{ github.ref_name }}"
+          $CLEAN_VERSION = $TAG_VERSION.TrimStart('v')
+          $ARCH = "${{ matrix.arch }}"
+          Write-Host "Building MSI for ${ARCH} (version ${CLEAN_VERSION})..."
+
+          New-Item -ItemType Directory -Force -Path dist/work
+          Write-Host "Downloading Windows binary from S3..."
+          aws s3 cp "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${CLEAN_VERSION}/tnr_${CLEAN_VERSION}_windows_${ARCH}.zip" dist/work/
+
+          Expand-Archive -Path "dist/work/tnr_${CLEAN_VERSION}_windows_${ARCH}.zip" -DestinationPath "dist/work/${ARCH}" -Force
+          
+          Write-Host "Preparing WiX template..."
+          $MSI_ARCH = if ($ARCH -eq "amd64") { "x64" } else { "arm64" }
+          
+          # Copy binary to working directory for WiX with arch-specific name
+          Copy-Item "dist/work/${ARCH}/tnr.exe" -Destination "dist/tnr-${MSI_ARCH}.exe"
+          
+          # Process the WiX template to replace GoReleaser variables
+          $wxsContent = Get-Content packaging/windows/app.wxs -Raw
+          $wxsContent = $wxsContent -replace '\{\{\.ProjectName\}\}', 'tnr'
+          $wxsContent = $wxsContent -replace '\{\{\.Version\}\}', $CLEAN_VERSION
+          $wxsContent = $wxsContent -replace '\{\{\.Binary\}\}', "tnr-${MSI_ARCH}"
+          $wxsContent = $wxsContent -replace '\{\{ if eq \.MsiArch "x64" \}\}', $(if ($MSI_ARCH -eq "x64") { "" } else { "<!--" })
+          $wxsContent = $wxsContent -replace '\{\{ else \}\}', $(if ($MSI_ARCH -eq "x64") { "<!--" } else { "" })
+          $wxsContent = $wxsContent -replace '\{\{ end \}\}', $(if ($MSI_ARCH -eq "x64") { "" } else { "-->" })
+          
+          # Save processed template
+          $wxsContent | Set-Content -Path "dist/tnr-${MSI_ARCH}.wxs"
+          
+          Write-Host "Building MSI with WiX..."
+          candle.exe -nologo `
+            -arch ${MSI_ARCH} `
+            -out "dist/tnr-${MSI_ARCH}.wixobj" `
+            "dist/tnr-${MSI_ARCH}.wxs"
+          
+          light.exe -nologo `
+            -out "dist/tnr-${MSI_ARCH}.msi" `
+            -ext WixUIExtension `
+            "dist/tnr-${MSI_ARCH}.wixobj"
+
+      - name: Upload MSI to S3 (${{ matrix.arch }})
+        shell: pwsh
+        run: |
+          $TAG_VERSION = "${{ github.ref_name }}"
+          $CLEAN_VERSION = $TAG_VERSION.TrimStart('v')
+          $ARCH = "${{ matrix.arch }}"
+          $MSI_ARCH = if ($ARCH -eq "amd64") { "x64" } else { "arm64" }
+          
+          Write-Host "Uploading MSI to S3..."
+          aws s3 cp "dist/tnr-${MSI_ARCH}.msi" `
+            "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${CLEAN_VERSION}/" `
+            --content-type "application/x-msi"
