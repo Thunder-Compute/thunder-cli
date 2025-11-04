@@ -230,3 +230,13 @@ func DownloadFile(client *SSHClient, remotePath, localPath string) error {
 
 	return nil
 }
+
+func IsAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errMsg := err.Error()
+	return strings.Contains(errMsg, "unable to authenticate") ||
+		strings.Contains(errMsg, "no supported methods remain") ||
+		strings.Contains(errMsg, "ssh: handshake failed")
+}

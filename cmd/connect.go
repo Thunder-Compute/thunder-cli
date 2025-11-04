@@ -319,7 +319,39 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 	if checkCancelled() {
 		return nil
 	}
-	if err != nil {
+	
+	// If authentication fails, try generating a new key and retry
+	if err != nil && utils.IsAuthError(err) {
+		tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH key not found, retrying. This typically occurs when your node crashes due to OOM, low disk space, or other reasons. Data may have been lost.", 0)
+		
+		keyResp, keyErr := client.AddSSHKeyCtx(cancelCtx, instanceID)
+		if checkCancelled() {
+			return nil
+		}
+		if keyErr != nil {
+			shutdownTUI()
+			return fmt.Errorf("failed to generate new SSH key: %w", keyErr)
+		}
+		
+		if saveErr := utils.SavePrivateKey(instance.UUID, keyResp.Key); saveErr != nil {
+			shutdownTUI()
+			return fmt.Errorf("failed to save new private key: %w", saveErr)
+		}
+		
+		tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Retrying connection with new key to %s:%d...", instance.IP, port), 0)
+		
+		if checkCancelled() {
+			return nil
+		}
+		sshClient, err = utils.RobustSSHConnectCtx(cancelCtx, instance.IP, keyFile, port, 120)
+		if checkCancelled() {
+			return nil
+		}
+		if err != nil {
+			shutdownTUI()
+			return fmt.Errorf("failed to establish SSH connection after retry: %w", err)
+		}
+	} else if err != nil {
 		shutdownTUI()
 		return fmt.Errorf("failed to establish SSH connection: %w", err)
 	}
