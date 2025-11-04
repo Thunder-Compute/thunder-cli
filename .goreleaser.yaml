@@ -42,20 +42,20 @@ msi:
     replace: false
     mod_timestamp: "{{ .CommitTimestamp }}"
 
+before_publish:
+  - cmd: bash
+    args:
+      - -lc
+      - |
+        printf '{"version":"%s"}\n' "{{ .Version }}" > dist/latest.json
+        aws s3 cp dist/latest.json "s3://{{ .Env.TNR_S3_BUCKET }}/tnr/releases/latest.json" \
+          --cache-control 'public, max-age=120' \
+          --content-type 'application/json'
+
 release:
   disable: false
   draft: false
   prerelease: auto
-  after:
-    hooks:
-      - cmd: bash
-        args:
-          - -lc
-          - |
-            printf '{"version":"%s"}\n' "{{ .Version }}" > dist/latest.json
-            aws s3 cp dist/latest.json "s3://{{ .Env.TNR_S3_BUCKET }}/tnr/releases/latest.json" \
-              --cache-control 'public, max-age=120' \
-              --content-type 'application/json'
 
 changelog:
   use: github
