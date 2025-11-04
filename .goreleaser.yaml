@@ -46,6 +46,16 @@ release:
   disable: false
   draft: false
   prerelease: auto
+  after:
+    hooks:
+      - cmd: bash
+        args:
+          - -lc
+          - |
+            printf '{"version":"%s"}\n' "{{ .Version }}" > dist/latest.json
+            aws s3 cp dist/latest.json "s3://{{ .Env.TNR_S3_BUCKET }}/tnr/releases/latest.json" \
+              --cache-control 'public, max-age=120' \
+              --content-type 'application/json'
 
 changelog:
   use: github
@@ -66,16 +76,6 @@ blobs:
     directory: "tnr/releases/{{ .Version }}"
     ids: [archive, checksum, sbom]
 
-publish:
-  hooks:
-    - cmd: bash
-      args:
-        - -lc
-        - |
-          printf '{"version":"%s"}\n' "{{ .Version }}" > dist/latest.json
-          aws s3 cp dist/latest.json "s3://{{ .Env.TNR_S3_BUCKET }}/tnr/releases/latest.json" \
-            --cache-control 'public, max-age=120' \
-            --content-type 'application/json'
 
 # brews:
 #   - name: tnr
