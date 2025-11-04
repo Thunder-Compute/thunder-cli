@@ -51,7 +51,6 @@ jobs:
           TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
 
-
   macos_pkg:
     needs: goreleaser
     runs-on: macos-latest
@@ -129,4 +128,3 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
           TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
-
