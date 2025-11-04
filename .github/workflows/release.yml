@@ -55,9 +55,6 @@ jobs:
   macos_pkg:
     needs: goreleaser
     runs-on: macos-latest
-    strategy:
-      matrix:
-        arch: [arm64, amd64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -68,114 +65,68 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Build .pkg installer for macOS (${{ matrix.arch }})
-        shell: bash
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+
+      - name: Import Apple certificate
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
         run: |
-          set -euo pipefail
-          TAG_VERSION="${{ github.ref_name }}"
-          CLEAN_VERSION="${TAG_VERSION#v}"  # remove leading 'v'
-          ARCH="${{ matrix.arch }}"
-          echo "Building .pkg for ${ARCH} (version ${CLEAN_VERSION})..."
+          echo "$MACOS_CERT_P12" | base64 --decode > certificate.p12
+          security create-keychain -p "" build.keychain
+          security import certificate.p12 -k ~/Library/Keychains/build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" ~/Library/Keychains/build.keychain
+          security default-keychain -s ~/Library/Keychains/build.keychain
 
-          mkdir -p dist/pkgbuild_root/usr/local/bin dist/work
-          echo "Downloading macOS binary from S3..."
-          aws s3 cp "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${CLEAN_VERSION}/tnr_${CLEAN_VERSION}_darwin_${ARCH}.tar.gz" dist/work/
+      - name: Run GoReleaser (build + sign + notarize + upload)
+        uses: goreleaser/goreleaser-action@v6.4.0
+        with:
+          distribution: goreleaser-pro
+          version: latest
+          args: release --clean --config .goreleaser.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PWD: ${{ secrets.APPLE_APP_PWD }}
+          DEVELOPER_ID_APP: ${{ secrets.DEVELOPER_ID_APP }}
 
-          tar -xzf "dist/work/tnr_${CLEAN_VERSION}_darwin_${ARCH}.tar.gz" -C dist/work tnr
-          install -m 0755 dist/work/tnr dist/pkgbuild_root/usr/local/bin/tnr
-
-          echo "Running pkgbuild..."
-          pkgbuild \
-            --root dist/pkgbuild_root \
-            --identifier com.thundercompute.tnr \
-            --version "${CLEAN_VERSION}" \
-            --install-location / \
-            "dist/tnr_${CLEAN_VERSION}_macos_${ARCH}.pkg"
-
-      - name: Upload .pkg to S3 (${{ matrix.arch }})
-        run: |
-          TAG_VERSION="${{ github.ref_name }}"
-          CLEAN_VERSION="${TAG_VERSION#v}"
-          ARCH="${{ matrix.arch }}"
-          echo "Uploading .pkg to S3..."
-          aws s3 cp "dist/tnr_${CLEAN_VERSION}_macos_${ARCH}.pkg" \
-            "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${CLEAN_VERSION}/" \
-            --content-type "application/vnd.apple.installer+xml"
-
-  windows_msi:
+  goreleaser_windows:
     needs: goreleaser
     runs-on: windows-latest
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Install WiX Toolset
+      - name: Install WiX
         shell: pwsh
         run: |
-          choco install wixtoolset -y
-          echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          winget install --id WixToolset.WixToolset --silent --accept-package-agreements --accept-source-agreements
+          $env:PATH += ";$Env:LOCALAPPDATA\Microsoft\WinGet\Packages\WixToolset.WixToolset_Microsoft.Winget.Source_8wekyb3d8bbwe\wix"
+          echo $env:PATH
+          wix --version
+          # If using extensions, install them too (names per WiX v4):
+          # wix extension add -g WixToolset.UI.wixext
+          # wix extension add -g WixToolset.Util.wixext
+      - name: GoReleaser (build + publish)
+        uses: goreleaser/goreleaser-action@v6.4.0
+        with:
+          distribution: goreleaser-pro
+          version: latest
+          args: release --clean --config .goreleaser.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
 
-      - name: Build MSI installer for Windows (${{ matrix.arch }})
-        shell: pwsh
-        run: |
-          $TAG_VERSION = "${{ github.ref_name }}"
-          $CLEAN_VERSION = $TAG_VERSION.TrimStart('v')
-          $ARCH = "${{ matrix.arch }}"
-          Write-Host "Building MSI for ${ARCH} (version ${CLEAN_VERSION})..."
-
-          New-Item -ItemType Directory -Force -Path dist/work
-          Write-Host "Downloading Windows binary from S3..."
-          aws s3 cp "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${CLEAN_VERSION}/tnr_${CLEAN_VERSION}_windows_${ARCH}.zip" dist/work/
-
-          Expand-Archive -Path "dist/work/tnr_${CLEAN_VERSION}_windows_${ARCH}.zip" -DestinationPath "dist/work/${ARCH}" -Force
-          
-          Write-Host "Preparing WiX template..."
-          $MSI_ARCH = if ($ARCH -eq "amd64") { "x64" } else { "arm64" }
-          
-          # Copy binary to working directory for WiX with arch-specific name
-          Copy-Item "dist/work/${ARCH}/tnr.exe" -Destination "dist/tnr-${MSI_ARCH}.exe"
-          
-          # Process the WiX template to replace GoReleaser variables
-          $wxsContent = Get-Content packaging/windows/app.wxs -Raw
-          $wxsContent = $wxsContent -replace '\{\{\.ProjectName\}\}', 'tnr'
-          $wxsContent = $wxsContent -replace '\{\{\.Version\}\}', $CLEAN_VERSION
-          $wxsContent = $wxsContent -replace '\{\{\.Binary\}\}', "tnr-${MSI_ARCH}"
-          $wxsContent = $wxsContent -replace '\{\{ if eq \.MsiArch "x64" \}\}', $(if ($MSI_ARCH -eq "x64") { "" } else { "<!--" })
-          $wxsContent = $wxsContent -replace '\{\{ else \}\}', $(if ($MSI_ARCH -eq "x64") { "<!--" } else { "" })
-          $wxsContent = $wxsContent -replace '\{\{ end \}\}', $(if ($MSI_ARCH -eq "x64") { "" } else { "-->" })
-          
-          # Save processed template
-          $wxsContent | Set-Content -Path "dist/tnr-${MSI_ARCH}.wxs"
-          
-          Write-Host "Building MSI with WiX..."
-          candle.exe -nologo `
-            -arch ${MSI_ARCH} `
-            -out "dist/tnr-${MSI_ARCH}.wixobj" `
-            "dist/tnr-${MSI_ARCH}.wxs"
-          
-          light.exe -nologo `
-            -out "dist/tnr-${MSI_ARCH}.msi" `
-            -ext WixUIExtension `
-            "dist/tnr-${MSI_ARCH}.wixobj"
-
-      - name: Upload MSI to S3 (${{ matrix.arch }})
-        shell: pwsh
-        run: |
-          $TAG_VERSION = "${{ github.ref_name }}"
-          $CLEAN_VERSION = $TAG_VERSION.TrimStart('v')
-          $ARCH = "${{ matrix.arch }}"
-          $MSI_ARCH = if ($ARCH -eq "amd64") { "x64" } else { "arm64" }
-          
-          Write-Host "Uploading MSI to S3..."
-          aws s3 cp "dist/tnr-${MSI_ARCH}.msi" `
-            "s3://${{ secrets.TNR_S3_BUCKET }}/tnr/releases/${CLEAN_VERSION}/" `
-            --content-type "application/x-msi"

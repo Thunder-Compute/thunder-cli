@@ -19,6 +19,32 @@ builds:
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildCommit={{ .Commit }}
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildDate={{ .Date }}
 
+signs:
+  - id: macos-sign
+    cmd: codesign
+    args:
+      - "--force"
+      - "--timestamp"
+      - "--options"
+      - "runtime"
+      - "--sign"
+      - "{{ .Env.DEVELOPER_ID_APP }}"
+      - "{{ .ArtifactPath }}"
+    artifacts: all
+    env:
+      - "PATH=/usr/bin:/usr/local/bin"
+
+notarize:
+  - id: macos-notarize
+    tool: notarytool
+    bundle_id: "com.thundercompute.tnr"
+    apple_id: "{{ .Env.APPLE_ID }}"
+    team_id: "{{ .Env.APPLE_TEAM_ID }}"
+    password: "{{ .Env.APPLE_APP_PWD }}"
+    wait: true
+    staple: true
+    timeout: 30m
+
 archives:
   - id: archive
     ids: [tnr]
@@ -39,8 +65,10 @@ msi:
     wxs: ./packaging/windows/app.wxs
     ids: [archive]
     goamd64: v1
+    version: v4
     replace: false
     mod_timestamp: "{{ .CommitTimestamp }}"
+    disable: '{{ ne .Runtime.Goos "windows" }}'
 
 before_publish:
   - cmd: |
@@ -73,7 +101,7 @@ blobs:
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}"
-    ids: [archive, checksum, sbom]
+    ids: [archive, checksum, sbom, tnr-msi]
   
 
 brews:
