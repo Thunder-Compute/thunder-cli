@@ -1,0 +1,50 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+  <!-- Template variables are provided by GoReleaser (v3 schema). -->
+  {{ if eq .MsiArch "x64" }}
+  <?define Win64 = "yes" ?>
+  <?define ProgramFilesFolder = "ProgramFiles64Folder" ?>
+  {{ else }}
+  <?define Win64 = "no" ?>
+  <?define ProgramFilesFolder = "ProgramFilesFolder" ?>
+  {{ end }}
+
+  <Product
+    Name='{{.ProjectName}} {{.Version}}'
+    Id='*'
+    UpgradeCode='ABCDDCBA-7349-453F-94F6-BCB5110BA8FD'
+    Language='1033'
+    Codepage='1252'
+    Version='{{.Version}}'
+    Manufacturer='{{.ProjectName}}'>
+
+    <Package
+      InstallerVersion='500'
+      Compressed='yes'
+      InstallScope='perMachine'
+      Keywords='Installer'
+      Description='{{.ProjectName}} installer'
+      Platform='{{ if eq .MsiArch "x64" }}x64{{ else }}x86{{ end }}'
+      Languages='1033'
+      SummaryCodepage='1252' />
+
+    <Media Id='1' Cabinet='app.cab' EmbedCab='yes' />
+
+    <Directory Id='TARGETDIR' Name='SourceDir'>
+      <Directory Id='<?define ProgramFilesFolder ?>' Name='PFiles'>
+        <Directory Id='{{.ProjectName}}Dir' Name='{{.ProjectName}}'>
+          <Component Id='MainExecutable' Guid='ABCDDCBA-83F1-4F22-985B-FDB3C8ABD474' Win64='$(var.Win64)'>
+            <File Id='{{.Binary}}.exe' Name='{{.Binary}}.exe' Source='{{.Binary}}.exe' KeyPath='yes' />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id='Complete' Level='1'>
+      <ComponentRef Id='MainExecutable' />
+    </Feature>
+
+  </Product>
+</Wix>
+
+

@@ -33,70 +33,104 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+msi:
+  - id: tnr-msi
+    name: "tnr-{{ .MsiArch }}"
+    wxs: ./packaging/windows/app.wxs
+    ids: [archive]
+    goamd64: v1
+    replace: false
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
 release:
-  disable: true
+  disable: false
+  draft: false
+  prerelease: auto
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+sboms:
+  - id: sbom
+    artifacts: archive
 
 blobs:
   - provider: s3
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}"
-    ids: [archive, checksum]
+    ids: [archive, checksum, sbom]
 
-brews:
-  - name: tnr
-    ids: [archive]
-    repository:
-      owner: Thunder-Compute
-      name: homebrew-tnr
-      token: "{{ .Env.GH_PAT }}"
-    url_template: "https://{{ .Env.TNR_S3_BUCKET }}.s3.{{ .Env.AWS_REGION }}.amazonaws.com/tnr/releases/{{ .Version }}/{{ .ArtifactName }}"
-    directory: Formula
-    commit_author:
-      name: goreleaser
-      email: goreleaser@users.noreply.github.com
-    description: "Thunder Compute CLI"
-    homepage: "https://github.com/Thunder-Compute/thunder-cli"
-    license: MIT
-    test: |
-      system "#{bin}/tnr", "--version"
-    install: |
-      bin.install "tnr"
+publish:
+  hooks:
+    - cmd: bash
+      args:
+        - -lc
+        - |
+          printf '{"version":"%s"}\n' "{{ .Version }}" > dist/latest.json
+          aws s3 cp dist/latest.json "s3://{{ .Env.TNR_S3_BUCKET }}/tnr/releases/latest.json" \
+            --cache-control 'public, max-age=120' \
+            --content-type 'application/json'
 
-scoops:
-  - name: tnr
-    ids: [archive]
-    url_template: "https://{{ .Env.TNR_S3_BUCKET }}.s3.{{ .Env.AWS_REGION }}.amazonaws.com/tnr/releases/{{ .Version }}/{{ .ArtifactName }}"
-    homepage: "https://github.com/Thunder-Compute/thunder-cli"
-    description: "Thunder Compute CLI"
-    license: MIT
-    repository:
-      owner: Thunder-Compute
-      name: scoop-bucket
-      token: "{{ .Env.GH_PAT }}"
-      pull_request:
-        enabled: true
+# brews:
+#   - name: tnr
+#     ids: [archive]
+#     repository:
+#       owner: Thunder-Compute
+#       name: homebrew-tnr
+#       token: "{{ .Env.GH_PAT }}"
+#     url_template: "https://{{ .Env.TNR_S3_BUCKET }}.s3.{{ .Env.AWS_REGION }}.amazonaws.com/tnr/releases/{{ .Version }}/{{ .ArtifactName }}"
+#     directory: Formula
+#     commit_author:
+#       name: goreleaser
+#       email: goreleaser@users.noreply.github.com
+#     description: "Thunder Compute CLI"
+#     homepage: "https://github.com/Thunder-Compute/thunder-cli"
+#     license: MIT
+#     test: |
+#       system "#{bin}/tnr", "--version"
+#     install: |
+#       bin.install "tnr"
 
-winget:
-  - name: tnr
-    ids: [archive]
-    publisher: Thunder
-    short_description: "Thunder Compute CLI"
-    license: MIT
-    publisher_url: "https://www.thundercompute.com"
-    package_identifier: Thunder.tnr
-    url_template: "https://{{ .Env.TNR_S3_BUCKET }}.s3.{{ .Env.AWS_REGION }}.amazonaws.com/tnr/releases/{{ .Version }}/{{ .ArtifactName }}"
-    repository:
-      owner: Thunder-Compute
-      name: winget-pkgs
-      branch: "tnr-{{ .Version }}"
-      token: "{{ .Env.GH_PAT }}"
-      pull_request:
-        enabled: true
-        base:
-          owner: microsoft
-          name: winget-pkgs
-          branch: master
-    commit_author:
-      name: goreleaser
-      email: goreleaser@users.noreply.github.com
+# scoops:
+#   - name: tnr
+#     ids: [archive]
+#     url_template: "https://{{ .Env.TNR_S3_BUCKET }}.s3.{{ .Env.AWS_REGION }}.amazonaws.com/tnr/releases/{{ .Version }}/{{ .ArtifactName }}"
+#     homepage: "https://github.com/Thunder-Compute/thunder-cli"
+#     description: "Thunder Compute CLI"
+#     license: MIT
+#     repository:
+#       owner: Thunder-Compute
+#       name: scoop-bucket
+#       token: "{{ .Env.GH_PAT }}"
+#       pull_request:
+#         enabled: true
+
+# winget:
+#   - name: tnr
+#     ids: [archive]
+#     publisher: Thunder
+#     short_description: "Thunder Compute CLI"
+#     license: MIT
+#     publisher_url: "https://www.thundercompute.com"
+#     package_identifier: Thunder.tnr
+#     url_template: "https://{{ .Env.TNR_S3_BUCKET }}.s3.{{ .Env.AWS_REGION }}.amazonaws.com/tnr/releases/{{ .Version }}/{{ .ArtifactName }}"
+#     repository:
+#       owner: Thunder-Compute
+#       name: winget-pkgs
+#       branch: "tnr-{{ .Version }}"
+#       token: "{{ .Env.GH_PAT }}"
+#       pull_request:
+#         enabled: true
+#         base:
+#           owner: microsoft
+#           name: winget-pkgs
+#           branch: master
+#     commit_author:
+#       name: goreleaser
+#       email: goreleaser@users.noreply.github.com
