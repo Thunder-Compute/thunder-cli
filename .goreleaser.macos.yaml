@@ -1,0 +1,104 @@
+version: 2
+project_name: tnr
+
+before:
+  hooks: []
+
+builds:
+  - id: tnr
+    main: ./main.go
+    binary: tnr
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildVersion={{ .Version }}
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildCommit={{ .Commit }}
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildDate={{ .Date }}
+
+signs:
+  - id: macos-sign
+    cmd: codesign
+    args:
+      - "--force"
+      - "--timestamp"
+      - "--options"
+      - "runtime"
+      - "--sign"
+      - "{{ .Env.DEVELOPER_ID_APP }}"
+      - "{{ .ArtifactPath }}"
+    artifacts: binary
+    ids: [tnr]
+    env:
+      - "PATH=/usr/bin:/usr/local/bin"
+
+# notarize:
+#   macos:
+#     - enabled: true
+#       ids: [tnr]
+#       sign:
+#         certificate: "{{ .Env.MACOS_SIGN_P12_PATH }}"
+#         password: "{{ .Env.MACOS_CERT_PASSWORD }}"
+#       notarize:
+#         issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+#         key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+#         key: "{{ .Env.MACOS_NOTARY_KEY_PATH }}"
+#         wait: true
+#         timeout: 20m
+
+archives:
+  - id: archive
+    ids: [tnr]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+sboms:
+  - id: sbom
+    artifacts: archive
+
+blobs:
+  - provider: s3
+    bucket: "{{ .Env.TNR_S3_BUCKET }}"
+    region: "{{ .Env.AWS_REGION }}"
+    directory: "tnr/releases/{{ .Version }}"
+    ids: [archive, checksum, sbom]
+
+brews:
+  - name: tnr
+    ids: [archive]
+    repository:
+      owner: Thunder-Compute
+      name: homebrew-tnr
+      token: "{{ .Env.GH_PAT }}"
+    url_template: "https://{{ .Env.TNR_S3_BUCKET }}.s3.{{ .Env.AWS_REGION }}.amazonaws.com/tnr/releases/{{ .Version }}/{{ .ArtifactName }}"
+    directory: Formula
+    commit_author:
+      name: goreleaser
+      email: goreleaser@users.noreply.github.com
+    description: "Thunder Compute CLI"
+    homepage: "https://github.com/Thunder-Compute/thunder-cli"
+    license: MIT
+    test: |
+      system "#{bin}/tnr", "--version"
+    install: |
+      bin.install "tnr"
+
+release:
+  disable: false
+  draft: false
+  prerelease: auto
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'

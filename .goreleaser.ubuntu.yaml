@@ -1,0 +1,77 @@
+version: 2
+project_name: tnr
+
+before:
+  hooks: []
+
+builds:
+  - id: tnr
+    main: ./main.go
+    binary: tnr
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildVersion={{ .Version }}
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildCommit={{ .Commit }}
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildDate={{ .Date }}
+
+archives:
+  - id: archive
+    ids: [tnr]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+msi:
+  - id: tnr-msi
+    name: "tnr-{{ .MsiArch }}"
+    wxs: ./packaging/windows/app.wxs
+    ids: [archive]
+    goamd64: v1
+    version: v4
+    replace: false
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    disable: '{{ ne .Runtime.Goos "windows" }}'
+
+sboms:
+  - id: sbom
+    artifacts: archive
+
+blobs:
+  - provider: s3
+    bucket: "{{ .Env.TNR_S3_BUCKET }}"
+    region: "{{ .Env.AWS_REGION }}"
+    directory: "tnr/releases/{{ .Version }}"
+    ids: [archive, checksum, sbom, tnr-msi]
+
+before_publish:
+  - cmd: |
+      bash -lc '
+        printf "{\"version\":\"%s\"}\n" "{{ .Version }}" > dist/latest.json &&
+        aws s3 cp dist/latest.json "s3://{{ .Env.TNR_S3_BUCKET }}/tnr/releases/latest.json" \
+          --cache-control "public, max-age=120" \
+          --content-type "application/json"
+      '
+
+release:
+  disable: false
+  draft: false
+  prerelease: auto
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
