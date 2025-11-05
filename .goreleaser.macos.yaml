@@ -40,59 +40,77 @@ before_publish:
     output: true
     cmd: |
       bash -euxo pipefail <<'EOF'
-      echo "🟢 Running before_publish hook"
-      ROOT="$(pwd)"
-      echo "Current directory: $ROOT"
+      echo "🟢 before_publish: start"
+      echo "whoami=$(whoami)"
+      echo "pwd=$(pwd)"
+      echo "go env GOOS=$(go env GOOS) GOARCH=$(go env GOARCH)"
 
-      OUTDIR="$ROOT/dist"
-      mkdir -p "$OUTDIR"
-
-      BIN="{{ .ArtifactPath }}"
-      ARCH="{{ .Arch }}"
+      # Use GoReleaser-provided values so paths are always correct:
+      OUTDIR="{{ .Dist }}"                 # GoReleaser's dist dir (usually 'dist')
+      BIN="{{ .ArtifactPath }}"            # e.g. dist/tnr_darwin_arm64_v8.0/tnr
+      ARCH="{{ .Arch }}"                   # arm64 | amd64
       VERSION="{{ .Version }}"
       NAME="{{ .ProjectName }}"
 
-      echo "Building pkg for $ARCH ($BIN)"
+      echo "OUTDIR=$OUTDIR"
+      echo "BIN=$BIN"
+      echo "ARCH=$ARCH VERSION=$VERSION NAME=$NAME"
+
+      # Sanity: show inputs
+      ls -al "$OUTDIR" || true
+      test -f "$BIN" || { echo "❌ Missing BIN: $BIN"; exit 1; }
+
+      # Ensure tools exist (absolute paths to avoid PATH oddities)
+      /usr/bin/which /usr/bin/pkgbuild
+      /usr/bin/which /usr/bin/productsign
+      /usr/bin/which /usr/sbin/pkgutil
+
+      # If you imported your P12 earlier, this will show the signing identity
+      /usr/bin/security find-identity -v -p codesigning || true
 
       # Stage payload
-      WORK="$ROOT/pkg-${ARCH}"
+      WORK="$(/usr/bin/mktemp -d -t tnr.pkg.${ARCH}.XXXXXX)"
       PKGROOT="$WORK/root"
-      rm -rf "$WORK"
-      mkdir -p "$PKGROOT/usr/local/bin"
-      install -m 0755 "$BIN" "$PKGROOT/usr/local/bin/tnr"
+      /bin/mkdir -p "$PKGROOT/usr/local/bin"
+      /usr/bin/install -m 0755 "$BIN" "$PKGROOT/usr/local/bin/tnr"
 
       PKG_UNSIGNED="$OUTDIR/${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg"
       PKG_SIGNED="$OUTDIR/${NAME}_${VERSION}_darwin_${ARCH}.pkg"
 
-      echo "🔧 Building unsigned package: $PKG_UNSIGNED"
-      pkgbuild \
+      echo "🔧 Building unsigned: $PKG_UNSIGNED"
+      /usr/bin/pkgbuild \
         --root "$PKGROOT" \
         --identifier "com.thundercompute.tnr" \
         --version "$VERSION" \
         --install-location "/" \
         "$PKG_UNSIGNED"
 
-      echo "🔏 Signing package to: $PKG_SIGNED"
-      productsign \
+      test -f "$PKG_UNSIGNED" || { echo "❌ pkgbuild did not create $PKG_UNSIGNED"; /bin/ls -al "$OUTDIR"; exit 1; }
+
+      echo "🔏 Signing -> $PKG_SIGNED"
+      /usr/bin/productsign \
         --sign "{{ .Env.DEVELOPER_ID_INSTALLER }}" \
         "$PKG_UNSIGNED" "$PKG_SIGNED"
 
       # Fail fast if signing didn’t produce the file
-      if [ ! -f "$PKG_SIGNED" ]; then
-        echo "❌ missing $PKG_SIGNED"
-        ls -al "$OUTDIR"
-        exit 1
-      fi
+      [ -f "$PKG_SIGNED" ] || { echo "❌ missing $PKG_SIGNED"; /bin/ls -al "$OUTDIR"; exit 1; }
 
-      echo "✅ Signed package created: $PKG_SIGNED"
-      pkgutil --check-signature "$PKG_SIGNED" || exit 1
+      echo "🔎 Checking signature:"
+      /usr/sbin/pkgutil --check-signature "$PKG_SIGNED" || exit 1
 
-      # Clean up
-      rm -rf "$WORK" "$PKG_UNSIGNED"
+      # Clean staging and unsigned
+      /bin/rm -rf "$WORK" "$PKG_UNSIGNED"
 
-      echo "📦 dist contents after build:"
-      ls -al "$OUTDIR"
+      echo "📦 OUTDIR contents after build:"
+      /bin/ls -al "$OUTDIR"
+
+      # Last-ditch: show any .pkg anywhere (helps if cwd shenanigans happen)
+      echo "🔍 find any .pkg under repo:"
+      /usr/bin/find . -maxdepth 4 -name "*.pkg" -print -ls || true
+
+      echo "✅ before_publish: done"
       EOF
+
 
 
 

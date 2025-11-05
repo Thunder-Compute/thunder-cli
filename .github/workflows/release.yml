@@ -172,6 +172,15 @@ jobs:
         run: |
           echo "After GoReleaser, dist contains:"
           ls -al dist || true
+
+      - name: After GoReleaser, show dist and any .pkg
+        if: runner.os == 'macOS'
+        run: |
+          echo "After GoReleaser, dist contains:"
+          ls -al dist || true
+          echo "Search for any .pkg anywhere:"
+          find . -maxdepth 4 -name "*.pkg" -print -ls || true
+        
         
 
 
