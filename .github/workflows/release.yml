@@ -69,46 +69,15 @@ jobs:
       - name: Install WiX v4
         shell: pwsh
         run: |
-          winget install --id WixToolset.WixToolset --silent --accept-package-agreements --accept-source-agreements
+          # Install WiX v4 as a .NET tool (the proper way for WiX v4)
+          dotnet tool install --global wix --version 4.*
           
-          # Refresh environment variables to get updated PATH
-          $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
+          # Add .NET tools to PATH
+          $dotnetToolsPath = "$env:USERPROFILE\.dotnet\tools"
+          $env:PATH = "$dotnetToolsPath;$env:PATH"
+          echo "$dotnetToolsPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           
-          # Try common WiX installation locations
-          $wixLocations = @(
-            "$env:USERPROFILE\.dotnet\tools",
-            "$env:LOCALAPPDATA\Microsoft\WinGet\Links",
-            "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\WixToolset.WixToolset_Microsoft.Winget.Source_8wekyb3d8bbwe"
-          )
-          
-          $wixFound = $false
-          foreach ($location in $wixLocations) {
-            if (Test-Path "$location\wix.exe") {
-              Write-Host "Found wix.exe at: $location"
-              $env:PATH = "$location;$env:PATH"
-              echo "$location" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              $wixFound = $true
-              break
-            }
-          }
-          
-          if (-not $wixFound) {
-            Write-Host "Searching for wix.exe in WinGet packages..."
-            $wixExe = Get-ChildItem -Path "$env:LOCALAPPDATA\Microsoft\WinGet" -Recurse -Filter "wix.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($wixExe) {
-              $wixDir = $wixExe.DirectoryName
-              Write-Host "Found wix.exe at: $wixDir"
-              $env:PATH = "$wixDir;$env:PATH"
-              echo "$wixDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              $wixFound = $true
-            }
-          }
-          
-          if (-not $wixFound) {
-            Write-Error "Could not locate wix.exe after installation"
-            exit 1
-          }
-          
+          # Verify installation
           wix --version
 
       - name: "GoReleaser (Windows: build MSI + publish)"

@@ -38,9 +38,9 @@ before_publish:
   - ids: [tnr]
     artifacts: [binary]
     output: true
-    # dir: "{{ .ProjectDir }}" # optional: force repo root
+    # dir: "{{ .ProjectDir }}"   # optional, keeps CWD sane
     cmd: |
-      bash -Eeuo pipefail
+      bash -Eeuo pipefail <<'PKG'
       set -x
       echo "🟢 before_publish: start (pwd=$(pwd))"
       OUTDIR="dist"
@@ -64,12 +64,14 @@ before_publish:
       PKG_SIGNED="$OUTDIR/${NAME}_${VERSION}_darwin_${ARCH}.pkg"
 
       echo "🔧 Building unsigned: $PKG_UNSIGNED"
-      /usr/bin/pkgbuild --root "$PKGROOT" \
+      /usr/bin/pkgbuild \
+        --root "$PKGROOT" \
         --identifier "com.thundercompute.tnr" \
         --version "$VERSION" \
         --install-location "/" \
         "$PKG_UNSIGNED"
 
+      # Sign if Installer cert present; otherwise keep unsigned so S3 can still upload it
       if [ -n "${DEVELOPER_ID_INSTALLER:-}" ]; then
         echo "🔏 Signing PKG with: $DEVELOPER_ID_INSTALLER"
         if /usr/bin/productsign --sign "$DEVELOPER_ID_INSTALLER" "$PKG_UNSIGNED" "$PKG_SIGNED"; then
@@ -86,9 +88,11 @@ before_publish:
       fi
 
       echo "📦 OUTDIR listing:"
-      /bin/ls -al "$OUTDIR"
+      /bin/ls -al "$OUTDIR" || true
       /usr/bin/find . -maxdepth 4 -name "*.pkg" -print -ls || true
       echo "✅ before_publish: done"
+      PKG
+
 
 
 
