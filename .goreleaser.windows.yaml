@@ -32,9 +32,9 @@ checksum:
 
 msi:
   - id: tnr-msi
-    name: "tnr-{{ .MsiArch }}"
+    name: "tnr-{{ .Version }}-{{ .Arch }}"
     wxs: ./packaging/windows/app.wxs
-    ids: [archive]
+    ids: [tnr]
     goamd64: v1
     version: v4
     replace: false
