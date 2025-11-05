@@ -38,30 +38,34 @@ before_publish:
   - ids: [tnr]
     artifacts: [binary]
     output: true
-    # dir: "{{ .ProjectDir }}"   # optional, keeps CWD sane
+    dir: "{{ .ProjectDir }}"   # <— force CWD to the repo root
     cmd: |
       bash -Eeuo pipefail <<'PKG'
       set -x
       echo "🟢 before_publish: start (pwd=$(pwd))"
-      OUTDIR="dist"
+
+      # Absolute OUTDIR so we always write under the workspace 'dist'
+      OUTDIR="{{ .Env.GITHUB_WORKSPACE }}/dist"
+      mkdir -p "$OUTDIR"
+
       BIN="{{ .ArtifactPath }}"
       ARCH="{{ .Arch }}"
       VERSION="{{ .Version }}"
       NAME="{{ .ProjectName }}"
 
-      test -f "$BIN" || { echo "❌ Missing BIN: $BIN"; exit 1; }
-      /bin/test -x /usr/bin/pkgbuild
-      /bin/test -x /usr/bin/productsign
-      /bin/test -x /usr/sbin/pkgutil
+      echo "BIN=$BIN"
+      echo "ARCH=$ARCH VERSION=$VERSION NAME=$NAME"
+      echo "OUTDIR=$OUTDIR"
 
+      # Stage files for pkgbuild
       WORK="$(/usr/bin/mktemp -d -t tnr.pkg.${ARCH}.XXXXXX)"
       trap 'rm -rf "$WORK"' EXIT
       PKGROOT="$WORK/root"
-      /bin/mkdir -p "$PKGROOT/usr/local/bin"
-      /usr/bin/install -m 0755 "$BIN" "$PKGROOT/usr/local/bin/tnr"
+      mkdir -p "$PKGROOT/usr/local/bin"
+      install -m 0755 "$BIN" "$PKGROOT/usr/local/bin/tnr"
 
       PKG_UNSIGNED="$OUTDIR/${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg"
-      PKG_SIGNED="$OUTDIR/${NAME}_${VERSION}_darwin_${ARCH}.pkg"
+      PKG_FINAL="$OUTDIR/${NAME}_${VERSION}_darwin_${ARCH}.pkg"
 
       echo "🔧 Building unsigned: $PKG_UNSIGNED"
       /usr/bin/pkgbuild \
@@ -71,27 +75,25 @@ before_publish:
         --install-location "/" \
         "$PKG_UNSIGNED"
 
-      # Sign if Installer cert present; otherwise keep unsigned so S3 can still upload it
-      if [ -n "${DEVELOPER_ID_INSTALLER:-}" ]; then
-        echo "🔏 Signing PKG with: $DEVELOPER_ID_INSTALLER"
-        if /usr/bin/productsign --sign "$DEVELOPER_ID_INSTALLER" "$PKG_UNSIGNED" "$PKG_SIGNED"; then
-          /usr/sbin/pkgutil --check-signature "$PKG_SIGNED"
-          rm -f "$PKG_UNSIGNED"
-          echo "✅ Signed PKG: $PKG_SIGNED"
-        else
-          echo "⚠️  Signing failed; keeping unsigned as fallback"
-          mv "$PKG_UNSIGNED" "$PKG_SIGNED"
-        fi
-      else
-        echo "⚠️  No DEVELOPER_ID_INSTALLER set; producing unsigned PKG"
-        mv "$PKG_UNSIGNED" "$PKG_SIGNED"
-      fi
+      # Make sure pkgbuild actually created it:
+      test -f "$PKG_UNSIGNED" || {
+        echo "❌ pkgbuild did not create $PKG_UNSIGNED"
+        ls -al "$OUTDIR" || true
+        exit 1
+      }
+
+      # No signing: just rename to the final name
+      mv "$PKG_UNSIGNED" "$PKG_FINAL"
+      test -f "$PKG_FINAL" || { echo "❌ $PKG_FINAL missing"; exit 1; }
 
       echo "📦 OUTDIR listing:"
-      /bin/ls -al "$OUTDIR" || true
-      /usr/bin/find . -maxdepth 4 -name "*.pkg" -print -ls || true
+      ls -al "$OUTDIR" || true
+      echo "🔎 Search for .pkg under workspace:"
+      find "{{ .Env.GITHUB_WORKSPACE }}" -maxdepth 3 -name "*.pkg" -print -ls || true
+
       echo "✅ before_publish: done"
       PKG
+
 
 
 

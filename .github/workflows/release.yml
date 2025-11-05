@@ -80,6 +80,25 @@ jobs:
           # Verify installation
           wix --version
 
+      - name: Install Syft (for SBOM)
+        shell: pwsh
+        run: |
+          # Download and install Syft for Windows
+          $syftVersion = "v1.18.0"
+          $syftUrl = "https://github.com/anchore/syft/releases/download/$syftVersion/syft_1.18.0_windows_amd64.zip"
+          $syftZip = "$env:TEMP\syft.zip"
+          $syftDir = "$env:TEMP\syft"
+          
+          Invoke-WebRequest -Uri $syftUrl -OutFile $syftZip
+          Expand-Archive -Path $syftZip -DestinationPath $syftDir -Force
+          
+          # Add to PATH
+          $env:PATH = "$syftDir;$env:PATH"
+          echo "$syftDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          
+          # Verify installation
+          syft version
+
       - name: "GoReleaser (Windows: build MSI + publish)"
         uses: goreleaser/goreleaser-action@v6.4.0
         with:
