@@ -37,24 +37,22 @@ signs:
 before_publish:
   - ids: [tnr]
     artifacts: [binary]
-    # Force the hook to run from the repo root:
-    dir: "{{ .ProjectDir }}"
     output: true
     cmd: |
-      bash -euxo pipefail << 'EOF'
-      echo "PWD=$(pwd)"
-      ROOT="{{ .ProjectDir }}"
-      OUTDIR="$ROOT/dist"              # absolute dist
+      bash -euxo pipefail <<'EOF'
+      echo "🟢 Running before_publish hook"
+      ROOT="$(pwd)"
+      echo "Current directory: $ROOT"
+
+      OUTDIR="$ROOT/dist"
       mkdir -p "$OUTDIR"
 
-      # Per-artifact inputs from GoReleaser:
       BIN="{{ .ArtifactPath }}"
       ARCH="{{ .Arch }}"
       VERSION="{{ .Version }}"
       NAME="{{ .ProjectName }}"
 
-      echo "BIN=$BIN"
-      echo "ARCH=$ARCH VERSION=$VERSION NAME=$NAME"
+      echo "Building pkg for $ARCH ($BIN)"
 
       # Stage payload
       WORK="$ROOT/pkg-${ARCH}"
@@ -66,7 +64,7 @@ before_publish:
       PKG_UNSIGNED="$OUTDIR/${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg"
       PKG_SIGNED="$OUTDIR/${NAME}_${VERSION}_darwin_${ARCH}.pkg"
 
-      echo "🔧 Building unsigned: $PKG_UNSIGNED"
+      echo "🔧 Building unsigned package: $PKG_UNSIGNED"
       pkgbuild \
         --root "$PKGROOT" \
         --identifier "com.thundercompute.tnr" \
@@ -74,23 +72,28 @@ before_publish:
         --install-location "/" \
         "$PKG_UNSIGNED"
 
-      echo "🔏 Signing -> $PKG_SIGNED"
+      echo "🔏 Signing package to: $PKG_SIGNED"
       productsign \
         --sign "{{ .Env.DEVELOPER_ID_INSTALLER }}" \
         "$PKG_UNSIGNED" "$PKG_SIGNED"
 
-      # Fail fast if signing didn’t actually produce the file
-      [ -f "$PKG_SIGNED" ] || { echo "❌ missing $PKG_SIGNED"; ls -al "$OUTDIR"; exit 1; }
+      # Fail fast if signing didn’t produce the file
+      if [ ! -f "$PKG_SIGNED" ]; then
+        echo "❌ missing $PKG_SIGNED"
+        ls -al "$OUTDIR"
+        exit 1
+      fi
 
-      echo "✅ Signed package: $PKG_SIGNED"
+      echo "✅ Signed package created: $PKG_SIGNED"
       pkgutil --check-signature "$PKG_SIGNED" || exit 1
 
-      # Tidy staging
+      # Clean up
       rm -rf "$WORK" "$PKG_UNSIGNED"
 
-      echo "📦 OUTDIR listing:"
+      echo "📦 dist contents after build:"
       ls -al "$OUTDIR"
       EOF
+
 
 
 # notarize:
