@@ -132,13 +132,26 @@ jobs:
           echo "MACOS_SIGN_P12_PATH=$CERT_PATH" >> "$GITHUB_ENV"
           echo "✅ Exported MACOS_SIGN_P12_PATH for GoReleaser"
 
+      - name: Prepare Notary API key file (Part A)
+        env:
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: |
+          set -euo pipefail
+          KEY_PATH="$RUNNER_TEMP/notary-api-key.p8"
+          # Preserve newlines exactly:
+          printf "%s" "$MACOS_NOTARY_KEY" > "$KEY_PATH"
+          # Quick sanity check of headers
+          head -n1 "$KEY_PATH" || true
+          tail -n1 "$KEY_PATH" || true
+          echo "MACOS_NOTARY_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+
       # --- RUN GORELEASER WITH FULL ENV ---
       - name: Run GoReleaser (build + sign + notarize + upload)
         uses: goreleaser/goreleaser-action@v6.4.0
         with:
           distribution: goreleaser-pro
           version: latest
-          args: release --clean --config .goreleaser.yaml
+          args: release --clean --config .goreleaser.yaml --debug
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
@@ -149,39 +162,40 @@ jobs:
           MACOS_SIGN_P12_PATH: ${{ env.MACOS_SIGN_P12_PATH }}
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          # MACOS_NOTARY_KEY: {{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_KEY_PATH: ${{ env.MACOS_NOTARY_KEY_PATH }}
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
 
 
-  goreleaser_windows:
-    needs: goreleaser
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ secrets.AWS_REGION }}
-      - name: Install WiX
-        shell: pwsh
-        run: |
-          winget install --id WixToolset.WixToolset --silent --accept-package-agreements --accept-source-agreements
-          $env:PATH += ";$Env:LOCALAPPDATA\Microsoft\WinGet\Packages\WixToolset.WixToolset_Microsoft.Winget.Source_8wekyb3d8bbwe\wix"
-          echo $env:PATH
-          wix --version
-          # If using extensions, install them too (names per WiX v4):
-          # wix extension add -g WixToolset.UI.wixext
-          # wix extension add -g WixToolset.Util.wixext
-      - name: GoReleaser (build + publish)
-        uses: goreleaser/goreleaser-action@v6.4.0
-        with:
-          distribution: goreleaser-pro
-          version: latest
-          args: release --clean --config .goreleaser.yaml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-          GH_PAT: ${{ secrets.GH_PAT }}
-          TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
+  # goreleaser_windows:
+  #   needs: goreleaser
+  #   runs-on: windows-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: {{ secrets.AWS_ROLE_ARN }}
+  #         aws-region: {{ secrets.AWS_REGION }}
+  #     - name: Install WiX
+  #       shell: pwsh
+  #       run: |
+  #         winget install --id WixToolset.WixToolset --silent --accept-package-agreements --accept-source-agreements
+  #         $env:PATH += ";$Env:LOCALAPPDATA\Microsoft\WinGet\Packages\WixToolset.WixToolset_Microsoft.Winget.Source_8wekyb3d8bbwe\wix"
+  #         echo $env:PATH
+  #         wix --version
+  #         # If using extensions, install them too (names per WiX v4):
+  #         # wix extension add -g WixToolset.UI.wixext
+  #         # wix extension add -g WixToolset.Util.wixext
+  #     - name: GoReleaser (build + publish)
+  #       uses: goreleaser/goreleaser-action@v6.4.0
+  #       with:
+  #         distribution: goreleaser-pro
+  #         version: latest
+  #         args: release --clean --config .goreleaser.yaml
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #         GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+  #         GH_PAT: ${{ secrets.GH_PAT }}
+  #         TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
+  #         AWS_REGION: ${{ secrets.AWS_REGION }}
