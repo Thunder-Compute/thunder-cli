@@ -132,18 +132,39 @@ jobs:
           echo "MACOS_SIGN_P12_PATH=$CERT_PATH" >> "$GITHUB_ENV"
           echo "✅ Exported MACOS_SIGN_P12_PATH for GoReleaser"
 
-      - name: Prepare Notary API key file (Part A)
+      - name: Prepare Notary API key file (Part A + normalize)
         env:
           MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
         run: |
           set -euo pipefail
-          KEY_PATH="$RUNNER_TEMP/notary-api-key.p8"
-          # Preserve newlines exactly:
-          printf "%s" "$MACOS_NOTARY_KEY" > "$KEY_PATH"
-          # Quick sanity check of headers
-          head -n1 "$KEY_PATH" || true
-          tail -n1 "$KEY_PATH" || true
-          echo "MACOS_NOTARY_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+      
+          RAW_PATH="$RUNNER_TEMP/notary-api-key.raw"
+          OUT_PATH="$RUNNER_TEMP/notary-api-key.p8"
+        
+          # Preserve exact newlines (no extra quotes, no base64):
+          printf "%s" "$MACOS_NOTARY_KEY" > "$RAW_PATH"
+        
+          # Trim possible CRLFs just in case (safe for PEM):
+          tr -d '\r' < "$RAW_PATH" > "$OUT_PATH.tmp" && mv "$OUT_PATH.tmp" "$RAW_PATH"
+        
+          # Peek at header/footer (will be masked by GH):
+          head -n1 "$RAW_PATH" || true
+          tail -n1 "$RAW_PATH" || true
+        
+          HEADER="$(head -n1 "$RAW_PATH" || true)"
+        
+          if echo "$HEADER" | grep -q "BEGIN EC PRIVATE KEY"; then
+            echo "Key is SEC1 EC format; converting to PKCS#8..."
+            # Convert to unencrypted PKCS#8
+            /usr/bin/openssl pkcs8 -topk8 -nocrypt -inform PEM -outform PEM -in "$RAW_PATH" -out "$OUT_PATH"
+          else
+            echo "Key appears to be PKCS#8 already; copying as-is..."
+            cp "$RAW_PATH" "$OUT_PATH"
+          fi
+        
+          chmod 600 "$OUT_PATH"
+          echo "MACOS_NOTARY_KEY_PATH=$OUT_PATH" >> "$GITHUB_ENV"
+        
 
       # --- RUN GORELEASER WITH FULL ENV ---
       - name: Run GoReleaser (build + sign + notarize + upload)
