@@ -163,6 +163,11 @@ jobs:
           fi
         
           chmod 600 "$OUT_PATH"
+
+          echo "🔍 Verifying PEM format..."
+          /usr/bin/openssl pkey -in "$OUT_PATH" -noout -text >/dev/null
+          echo "✅ PEM parses OK for JWT"
+
           echo "MACOS_NOTARY_KEY_PATH=$OUT_PATH" >> "$GITHUB_ENV"
         
 
