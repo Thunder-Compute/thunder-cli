@@ -41,14 +41,10 @@ before_publish:
     cmd: |
       bash -euxo pipefail <<'EOF'
       echo "🟢 before_publish: start"
-      echo "whoami=$(whoami)"
       echo "pwd=$(pwd)"
-      echo "go env GOOS=$(go env GOOS) GOARCH=$(go env GOARCH)"
-
-      # Use GoReleaser-provided values so paths are always correct:
-      OUTDIR="{{ .Dist }}"                 # GoReleaser's dist dir (usually 'dist')
-      BIN="{{ .ArtifactPath }}"            # e.g. dist/tnr_darwin_arm64_v8.0/tnr
-      ARCH="{{ .Arch }}"                   # arm64 | amd64
+      OUTDIR="dist"
+      BIN="{{ .ArtifactPath }}"
+      ARCH="{{ .Arch }}"
       VERSION="{{ .Version }}"
       NAME="{{ .ProjectName }}"
 
@@ -56,19 +52,21 @@ before_publish:
       echo "BIN=$BIN"
       echo "ARCH=$ARCH VERSION=$VERSION NAME=$NAME"
 
-      # Sanity: show inputs
-      ls -al "$OUTDIR" || true
+      # Skip PKG building if SKIP_PKG_BUILD is set (for local testing)
+      if [ "${SKIP_PKG_BUILD:-}" = "true" ]; then
+        echo "⚠️  Skipping PKG build (SKIP_PKG_BUILD=true)"
+        exit 0
+      fi
+
       test -f "$BIN" || { echo "❌ Missing BIN: $BIN"; exit 1; }
 
-      # Ensure tools exist (absolute paths to avoid PATH oddities)
       /usr/bin/which /usr/bin/pkgbuild
       /usr/bin/which /usr/bin/productsign
       /usr/bin/which /usr/sbin/pkgutil
 
-      # If you imported your P12 earlier, this will show the signing identity
+      # Optional, helpful debug:
       /usr/bin/security find-identity -v -p codesigning || true
 
-      # Stage payload
       WORK="$(/usr/bin/mktemp -d -t tnr.pkg.${ARCH}.XXXXXX)"
       PKGROOT="$WORK/root"
       /bin/mkdir -p "$PKGROOT/usr/local/bin"
@@ -85,26 +83,54 @@ before_publish:
         --install-location "/" \
         "$PKG_UNSIGNED"
 
-      test -f "$PKG_UNSIGNED" || { echo "❌ pkgbuild did not create $PKG_UNSIGNED"; /bin/ls -al "$OUTDIR"; exit 1; }
+      test -f "$PKG_UNSIGNED" || { echo "❌ pkgbuild did not create $PKG_UNSIGNED"; ls -al "$OUTDIR"; exit 1; }
 
-      echo "🔏 Signing -> $PKG_SIGNED"
-      /usr/bin/productsign \
-        --sign "{{ .Env.DEVELOPER_ID_INSTALLER }}" \
-        "$PKG_UNSIGNED" "$PKG_SIGNED"
+      # Validate and sign PKG (required for production releases)
+      if [ -z "${DEVELOPER_ID_INSTALLER:-}" ]; then
+        echo "❌ ERROR: DEVELOPER_ID_INSTALLER not set!"
+        echo "   PKG signing is required for production releases."
+        echo "   Please set DEVELOPER_ID_INSTALLER in your environment."
+        /bin/rm -rf "$WORK"
+        exit 1
+      elif [[ "$DEVELOPER_ID_INSTALLER" =~ "Your Name" ]] || [[ "$DEVELOPER_ID_INSTALLER" =~ "TEAMID" ]]; then
+        echo "❌ ERROR: DEVELOPER_ID_INSTALLER contains placeholder values!"
+        echo "   Current value: $DEVELOPER_ID_INSTALLER"
+        echo "   Please update with your actual certificate identity."
+        echo "   Run: security find-identity -p codesigning -v"
+        /bin/rm -rf "$WORK"
+        exit 1
+      fi
 
-      # Fail fast if signing didn’t produce the file
-      [ -f "$PKG_SIGNED" ] || { echo "❌ missing $PKG_SIGNED"; /bin/ls -al "$OUTDIR"; exit 1; }
+      echo "🔏 Signing PKG with: $DEVELOPER_ID_INSTALLER"
+      if ! /usr/bin/productsign --sign "$DEVELOPER_ID_INSTALLER" "$PKG_UNSIGNED" "$PKG_SIGNED" 2>&1; then
+        echo "❌ ERROR: PKG signing failed!"
+        echo "   Certificate: $DEVELOPER_ID_INSTALLER"
+        echo "   Verify certificate is valid: security find-identity -p codesigning -v"
+        /bin/rm -rf "$WORK"
+        exit 1
+      fi
+      
+      if [ ! -f "$PKG_SIGNED" ]; then
+        echo "❌ ERROR: Signed PKG was not created: $PKG_SIGNED"
+        /bin/ls -al "$OUTDIR"
+        /bin/rm -rf "$WORK"
+        exit 1
+      fi
+      
+      echo "🔎 Verifying PKG signature..."
+      if ! /usr/sbin/pkgutil --check-signature "$PKG_SIGNED"; then
+        echo "❌ ERROR: PKG signature verification failed!"
+        /bin/rm -rf "$WORK"
+        exit 1
+      fi
+      
+      echo "✅ PKG signed successfully: $PKG_SIGNED"
+      /bin/rm -f "$PKG_UNSIGNED"
 
-      echo "🔎 Checking signature:"
-      /usr/sbin/pkgutil --check-signature "$PKG_SIGNED" || exit 1
-
-      # Clean staging and unsigned
-      /bin/rm -rf "$WORK" "$PKG_UNSIGNED"
-
+      /bin/rm -rf "$WORK"
       echo "📦 OUTDIR contents after build:"
       /bin/ls -al "$OUTDIR"
 
-      # Last-ditch: show any .pkg anywhere (helps if cwd shenanigans happen)
       echo "🔍 find any .pkg under repo:"
       /usr/bin/find . -maxdepth 4 -name "*.pkg" -print -ls || true
 

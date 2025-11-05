@@ -70,6 +70,11 @@ jobs:
         shell: pwsh
         run: |
           winget install --id WixToolset.WixToolset --silent --accept-package-agreements --accept-source-agreements
+          $wixPath = "$env:LOCALAPPDATA\Microsoft\WinGet\Links"
+          if (Test-Path $wixPath) {
+            $env:PATH = "$wixPath;$env:PATH"
+            echo "$wixPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
           wix --version
 
       - name: "GoReleaser (Windows: build MSI + publish)"
