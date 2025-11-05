@@ -19,26 +19,26 @@ builds:
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildCommit={{ .Commit }}
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildDate={{ .Date }}
 
-signs:
-  - id: macos-sign
-    cmd: codesign
-    args:
-      - "--force"
-      - "--timestamp"
-      - "--options"
-      - "runtime"
-      - "--sign"
-      - "{{ .Env.DEVELOPER_ID_APP }}"
-      - "{{ .ArtifactPath }}"
-    artifacts: all
-    env:
-      - "PATH=/usr/bin:/usr/local/bin"
+# signs:
+#   - id: macos-sign
+#     cmd: codesign
+#     args:
+#       - "--force"
+#       - "--timestamp"
+#       - "--options"
+#       - "runtime"
+#       - "--sign"
+#       - "{{ .Env.DEVELOPER_ID_APP }}"
+#       - "{{ .ArtifactPath }}"
+#     artifacts: all
+#     env:
+#       - "PATH=/usr/bin:/usr/local/bin"
 
 notarize:
   macos:
     # - enabled: '{{ isEnvSet "MACOS_SIGN_CERTIFICATE" }}'  # Ensures this is enabled only if cert is set
     - enabled: '{{ eq .Runtime.Goos "darwin" }}'
-      ids: [archive]  # Change from [tnr] to [archive]
+      # ids: [archive]  # Change from [tnr] to [archive]
       sign:
         certificate: "{{ .Env.MACOS_SIGN_P12_PATH }}"  # Use the file path
         password: "{{ .Env.MACOS_CERT_PASSWORD }}"     # Match workflow
