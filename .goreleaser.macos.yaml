@@ -8,7 +8,8 @@ builds:
   - id: tnr
     main: ./main.go
     binary: tnr
-    env: [CGO_ENABLED=0]
+    env:
+      - CGO_ENABLED=0
     goos: [darwin]
     goarch: [amd64, arm64]
     ldflags:
