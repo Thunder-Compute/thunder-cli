@@ -49,13 +49,13 @@ before_publish:
       NAME="{{ .ProjectName }}"
 
       # Stage a simple payload that installs to /usr/local/bin
-      WORK="dist/pkg-${ARCH}"
+      WORK="pkg-${ARCH}"
       PKGROOT="$WORK/root"
       mkdir -p "$PKGROOT/usr/local/bin"
       install -m 0755 "$BIN" "$PKGROOT/usr/local/bin/tnr"
 
-      PKG_UNSIGNED="dist/${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg"
-      PKG_SIGNED="dist/${NAME}_${VERSION}_darwin_${ARCH}.pkg"
+      PKG_UNSIGNED="${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg"
+      PKG_SIGNED="${NAME}_${VERSION}_darwin_${ARCH}.pkg"
 
       # Build component package
       pkgbuild \
