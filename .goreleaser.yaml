@@ -21,7 +21,6 @@ builds:
 
 signs:
   - id: macos-sign
-    disable: '{{ ne .Runtime.Goos "darwin" }}'
     cmd: codesign
     args:
       - "--force"
