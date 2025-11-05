@@ -94,6 +94,7 @@ release:
   disable: false
   draft: false
   prerelease: auto
+  skip_upload: true
 
 changelog:
   use: github
