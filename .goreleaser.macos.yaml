@@ -34,68 +34,61 @@ signs:
     env:
       - "PATH=/usr/bin:/usr/local/bin"
 
-before_publish:
-  - ids: [tnr]
-    artifacts: [binary]
-    output: true
-    dir: "{{ .ProjectDir }}"   # <— force CWD to the repo root
+after:
+  - id: build-pkgs
     cmd: |
       bash -Eeuo pipefail <<'PKG'
       set -x
-      echo "🟢 before_publish: start (pwd=$(pwd))"
-
-      # Absolute OUTDIR so we always write under the workspace 'dist'
-      OUTDIR="{{ .Env.GITHUB_WORKSPACE }}/dist"
-      mkdir -p "$OUTDIR"
-
-      BIN="{{ .ArtifactPath }}"
-      ARCH="{{ .Arch }}"
-      VERSION="{{ .Version }}"
-      NAME="{{ .ProjectName }}"
-
-      echo "BIN=$BIN"
-      echo "ARCH=$ARCH VERSION=$VERSION NAME=$NAME"
-      echo "OUTDIR=$OUTDIR"
-
-      # Stage files for pkgbuild
-      WORK="$(/usr/bin/mktemp -d -t tnr.pkg.${ARCH}.XXXXXX)"
-      trap 'rm -rf "$WORK"' EXIT
-      PKGROOT="$WORK/root"
-      mkdir -p "$PKGROOT/usr/local/bin"
-      install -m 0755 "$BIN" "$PKGROOT/usr/local/bin/tnr"
-
-      PKG_UNSIGNED="$OUTDIR/${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg"
-      PKG_FINAL="$OUTDIR/${NAME}_${VERSION}_darwin_${ARCH}.pkg"
-
-      echo "🔧 Building unsigned: $PKG_UNSIGNED"
-      /usr/bin/pkgbuild \
-        --root "$PKGROOT" \
-        --identifier "com.thundercompute.tnr" \
-        --version "$VERSION" \
-        --install-location "/" \
-        "$PKG_UNSIGNED"
-
-      # Make sure pkgbuild actually created it:
-      test -f "$PKG_UNSIGNED" || {
-        echo "❌ pkgbuild did not create $PKG_UNSIGNED"
-        ls -al "$OUTDIR" || true
-        exit 1
-      }
-
-      # No signing: just rename to the final name
-      mv "$PKG_UNSIGNED" "$PKG_FINAL"
-      test -f "$PKG_FINAL" || { echo "❌ $PKG_FINAL missing"; exit 1; }
-
-      echo "📦 OUTDIR listing:"
-      ls -al "$OUTDIR" || true
-      echo "🔎 Search for .pkg under workspace:"
-      find "{{ .Env.GITHUB_WORKSPACE }}" -maxdepth 3 -name "*.pkg" -print -ls || true
-
-      echo "✅ before_publish: done"
+      echo "🟢 Creating PKGs in dist/"
+      
+      for ARCH in amd64 arm64; do
+        if [ "$ARCH" = "amd64" ]; then
+          BIN="dist/tnr_darwin_amd64_v1/tnr"
+        else
+          BIN="dist/tnr_darwin_arm64_v8.0/tnr"
+        fi
+        
+        VERSION="{{ .Version }}"
+        NAME="{{ .ProjectName }}"
+        
+        test -f "$BIN" || { echo "❌ Missing BIN: $BIN"; exit 1; }
+        
+        WORK="$(/usr/bin/mktemp -d -t tnr.pkg.${ARCH}.XXXXXX)"
+        trap 'rm -rf "$WORK"' EXIT
+        PKGROOT="$WORK/root"
+        /bin/mkdir -p "$PKGROOT/usr/local/bin"
+        /usr/bin/install -m 0755 "$BIN" "$PKGROOT/usr/local/bin/tnr"
+        
+        PKG_UNSIGNED="dist/${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg"
+        PKG_SIGNED="dist/${NAME}_${VERSION}_darwin_${ARCH}.pkg"
+        
+        echo "🔧 Building unsigned PKG: $PKG_UNSIGNED"
+        /usr/bin/pkgbuild \
+          --root "$PKGROOT" \
+          --identifier "com.thundercompute.tnr" \
+          --version "$VERSION" \
+          --install-location "/" \
+          "$PKG_UNSIGNED"
+        
+        if [ -n "${DEVELOPER_ID_INSTALLER:-}" ]; then
+          echo "🔏 Signing PKG with: $DEVELOPER_ID_INSTALLER"
+          if /usr/bin/productsign --sign "$DEVELOPER_ID_INSTALLER" "$PKG_UNSIGNED" "$PKG_SIGNED"; then
+            /usr/sbin/pkgutil --check-signature "$PKG_SIGNED"
+            rm -f "$PKG_UNSIGNED"
+            echo "✅ Signed PKG: $PKG_SIGNED"
+          else
+            echo "⚠️  Signing failed; keeping unsigned"
+            mv "$PKG_UNSIGNED" "$PKG_SIGNED"
+          fi
+        else
+          echo "⚠️  No DEVELOPER_ID_INSTALLER; producing unsigned PKG"
+          mv "$PKG_UNSIGNED" "$PKG_SIGNED"
+        fi
+      done
+      
+      echo "📦 PKGs created:"
+      ls -lh dist/*.pkg
       PKG
-
-
-
 
 
 
@@ -136,7 +129,7 @@ blobs:
     directory: "tnr/releases/{{ .Version }}/macos"
     # ids: [archive, checksum, sbom]
     extra_files:
-      - glob: "dist/*_darwin_*.pkg"
+      - glob: "dist/*.pkg"
 
 brews:
   - name: tnr
@@ -162,7 +155,8 @@ release:
   disable: false
   draft: false
   prerelease: auto
-  skip_upload: true
+  extra_files:
+    - glob: "dist/*.pkg"
 
 changelog:
   use: github
