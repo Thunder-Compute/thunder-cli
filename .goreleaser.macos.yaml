@@ -115,10 +115,11 @@ sboms:
 
 blobs:
   - provider: s3
+    # if: '{{ eq .Os "darwin" }}'
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
-    directory: "tnr/releases/{{ .Version }}"
-    ids: [archive, checksum, sbom]
+    directory: "tnr/releases/{{ .Version }}/macos"
+    # ids: [archive, checksum, sbom]
     extra_files:
       - glob: "dist/{{ .ProjectName }}_{{ .Version }}_darwin_*.pkg"
 

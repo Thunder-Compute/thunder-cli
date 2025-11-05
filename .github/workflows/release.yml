@@ -37,7 +37,7 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
           syft version
 
-      - name: "GoReleaser (Ubuntu: linux+windows publish)"
+      - name: "GoReleaser (Ubuntu: linux publish)"
         uses: goreleaser/goreleaser-action@v6.4.0
         with:
           distribution: goreleaser-pro
@@ -49,6 +49,42 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
           TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
+
+  windows_release:
+    needs: ubuntu_release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.25.x' }
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install WiX v4
+        shell: pwsh
+        run: |
+          winget install --id WixToolset.WixToolset --silent --accept-package-agreements --accept-source-agreements
+          wix --version
+
+      - name: "GoReleaser (Windows: build MSI + publish)"
+        uses: goreleaser/goreleaser-action@v6.4.0
+        with:
+          distribution: goreleaser-pro
+          version: latest
+          args: release --clean --config .goreleaser.windows.yaml --skip=announce
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+
 
   macos_release:
     needs: ubuntu_release
