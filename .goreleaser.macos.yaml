@@ -54,6 +54,29 @@ builds:
             mv "$PKG_UNSIGNED" "$PKG_SIGNED";
           fi
 
+          # Notarize the .pkg file after signing
+          if [ -n "${MACOS_NOTARY_KEY_PATH:-}" ] && [ -n "${MACOS_NOTARY_KEY_ID:-}" ] && [ -n "${MACOS_NOTARY_ISSUER_ID:-}" ]; then
+            echo "🔐 Notarizing package: $PKG_SIGNED"
+            
+            # Submit for notarization (notarytool blocks until complete with --wait)
+            if xcrun notarytool submit "$PKG_SIGNED" \
+              --key "$MACOS_NOTARY_KEY_PATH" \
+              --key-id "$MACOS_NOTARY_KEY_ID" \
+              --issuer "$MACOS_NOTARY_ISSUER_ID" \
+              --wait \
+              --timeout 20m; then
+              
+              echo "✅ Notarization successful!"
+              # Staple the notarization ticket to the package
+              xcrun stapler staple "$PKG_SIGNED" || echo "⚠️  Stapling failed (ticket may not be available yet)"
+            else
+              echo "❌ Notarization failed!"
+              exit 1
+            fi
+          else
+            echo "⚠️  Skipping notarization (credentials not configured)"
+          fi
+
           ls -lh dist/*.pkg;
           '
 
