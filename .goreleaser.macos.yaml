@@ -34,6 +34,56 @@ signs:
     env:
       - "PATH=/usr/bin:/usr/local/bin"
 
+before_publish:
+  - ids: [tnr]
+    artifacts: binary
+    output: true
+    cmd: |
+      bash -euo pipefail << 'EOF'
+      # Only package on macOS artifacts
+      if [ "{{ .Os }}" != "darwin" ]; then exit 0; fi
+
+      BIN="{{ .ArtifactPath }}"
+      ARCH="{{ .Arch }}"
+      VERSION="{{ .Version }}"
+      NAME="{{ .ProjectName }}"
+
+      # Stage a simple payload that installs to /usr/local/bin
+      WORK="dist/pkg-${ARCH}"
+      PKGROOT="$WORK/root"
+      mkdir -p "$PKGROOT/usr/local/bin"
+      install -m 0755 "$BIN" "$PKGROOT/usr/local/bin/tnr"
+
+      PKG_UNSIGNED="dist/${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg"
+      PKG_SIGNED="dist/${NAME}_${VERSION}_darwin_${ARCH}.pkg"
+
+      # Build component package
+      pkgbuild \
+        --root "$PKGROOT" \
+        --identifier "com.thundercompute.tnr" \
+        --version "$VERSION" \
+        --install-location "/" \
+        "$PKG_UNSIGNED"
+
+      # Sign the installer package with your Developer ID Installer cert
+      productsign \
+        --sign "{{ .Env.DEVELOPER_ID_INSTALLER }}" \
+        "$PKG_UNSIGNED" "$PKG_SIGNED"
+
+      pkgutil --check-signature "$PKG_SIGNED" || exit 1
+      rm -rf "$WORK" "$PKG_UNSIGNED"
+
+      # Optional: notarize + staple if envs are present
+      if [ -n "${MACOS_NOTARY_KEY_ID:-}" ] && [ -n "${MACOS_NOTARY_ISSUER_ID:-}" ] && [ -n "${MACOS_NOTARY_KEY_PATH:-}" ]; then
+        xcrun notarytool submit "$PKG_SIGNED" \
+          --key "$MACOS_NOTARY_KEY_PATH" \
+          --key-id "$MACOS_NOTARY_KEY_ID" \
+          --issuer "$MACOS_NOTARY_ISSUER_ID" \
+          --wait
+        xcrun stapler staple "$PKG_SIGNED"
+      fi
+      EOF
+
 # notarize:
 #   macos:
 #     - enabled: true
@@ -69,6 +119,8 @@ blobs:
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}"
     ids: [archive, checksum, sbom]
+    extra_files:
+      - glob: "dist/{{ .ProjectName }}_{{ .Version }}_darwin_*.pkg"
 
 brews:
   - name: tnr
