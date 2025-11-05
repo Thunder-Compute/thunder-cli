@@ -51,154 +51,205 @@ jobs:
           TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
 
-  macos_pkg:
+  macos_sign_only:
     needs: goreleaser
     runs-on: macos-latest
     steps:
-      - name: Checkout
+      - name: Checkout (tag)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Install Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
 
-      - name: Install Syft (for SBOM generation)
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-            | sh -s -- -b /usr/local/bin
-          syft version
-
-      - name: Debug check Notary key structure
-        run: |
-          echo "$MACOS_NOTARY_KEY" | head -n1
-          echo "$MACOS_NOTARY_KEY" | tail -n1
+      # Prepare keychain + import Developer ID Application .p12
+      - name: Prepare Apple certificate and keychain
         env:
-          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-
-      # --- DEBUG + PREPARE CERTS/KEYCHAIN ---
-      - name: Prepare Apple certificate and keychain (with debug)
-        env:
-          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}           # base64 of .p12
-          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }} # export password of .p12
-          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}       # full PEM with BEGIN/END
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
         run: |
           set -euo pipefail
-
-          # Write the p12 to a temp file
           CERT_PATH="$RUNNER_TEMP/apple-cert.p12"
           echo "$MACOS_CERT_P12" | base64 -D > "$CERT_PATH"
 
-          # --- Sanity check: verify the file was actually written ---
-          if [ -f "$CERT_PATH" ]; then
-            echo "✅ p12 exists at: $CERT_PATH"
-            stat -f "📦 p12 size (bytes): %z" "$CERT_PATH"
-          else
-            echo "❌ ERROR: p12 file missing at $CERT_PATH"
-            exit 1
-          fi
-
-          # Verify the p12 + password (no output means success)
-          echo "🔍 Verifying .p12 integrity..."
           /usr/bin/openssl pkcs12 -in "$CERT_PATH" -noout -passin pass:"$MACOS_CERT_PASSWORD"
-          echo "✅ .p12 password verified successfully"
 
-          # Quick check the notary key looks like a PEM (headers only)
-          echo "🔑 Checking Notary API key format:"
-          echo "$MACOS_NOTARY_KEY" | head -n 1
-          echo "$MACOS_NOTARY_KEY" | tail -n 1
-
-          # Create and configure a dedicated build keychain
-          echo "🔐 Creating and unlocking temporary build keychain..."
           security create-keychain -p "" build.keychain
           security set-keychain-settings -lut 21600 build.keychain
           security unlock-keychain -p "" build.keychain
-
-          # Import p12 into the build keychain
-          echo "📥 Importing .p12 into keychain..."
           security import "$CERT_PATH" -k ~/Library/Keychains/build.keychain \
             -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
-
-          # Make the build keychain default and verify it’s active
           security list-keychains -d user -s ~/Library/Keychains/build.keychain
           security default-keychain -s ~/Library/Keychains/build.keychain
-
-          # Show available signing identities (for debugging)
-          echo "🔎 Listing available signing identities..."
           security find-identity -p codesigning -v || true
 
-          # Export the cert path for GoReleaser (so we can reference a FILE, not base64)
           echo "MACOS_SIGN_P12_PATH=$CERT_PATH" >> "$GITHUB_ENV"
-          echo "✅ Exported MACOS_SIGN_P12_PATH for GoReleaser"
 
-      - name: Prepare Notary API key file (Part A + normalize)
-        env:
-          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-        run: |
-          set -euo pipefail
-      
-          RAW_PATH="$RUNNER_TEMP/notary-api-key.raw"
-          OUT_PATH="$RUNNER_TEMP/notary-api-key.p8"
-        
-          # Preserve exact newlines (no extra quotes, no base64):
-          printf "%s" "$MACOS_NOTARY_KEY" > "$RAW_PATH"
-        
-          # Trim possible CRLFs just in case (safe for PEM):
-          tr -d '\r' < "$RAW_PATH" > "$OUT_PATH.tmp" && mv "$OUT_PATH.tmp" "$RAW_PATH"
-        
-          # Peek at header/footer (will be masked by GH):
-          head -n1 "$RAW_PATH" || true
-          tail -n1 "$RAW_PATH" || true
-        
-          HEADER="$(head -n1 "$RAW_PATH" || true)"
-        
-          if echo "$HEADER" | grep -q "BEGIN EC PRIVATE KEY"; then
-            echo "Key is SEC1 EC format; converting to PKCS#8..."
-            # Convert to unencrypted PKCS#8
-            /usr/bin/openssl pkcs8 -topk8 -nocrypt -inform PEM -outform PEM -in "$RAW_PATH" -out "$OUT_PATH"
-          else
-            echo "Key appears to be PKCS#8 already; copying as-is..."
-            cp "$RAW_PATH" "$OUT_PATH"
-          fi
-        
-          chmod 600 "$OUT_PATH"
-
-          echo "🔍 Verifying PEM format..."
-          /usr/bin/openssl pkey -in "$OUT_PATH" -noout -text >/dev/null
-          echo "✅ PEM parses OK for JWT"
-
-          echo "MACOS_NOTARY_KEY_PATH=$OUT_PATH" >> "$GITHUB_ENV"
-        
-
-      # --- RUN GORELEASER WITH FULL ENV ---
-      - name: Run GoReleaser (build + sign + notarize + upload)
+      # Run GoReleaser on macOS to sign binaries only; do NOT publish/announce/sbom again.
+      - name: GoReleaser (sign only; no publish/announce/sbom)
         uses: goreleaser/goreleaser-action@v6.4.0
         with:
           distribution: goreleaser-pro
           version: latest
-          args: release --clean --config .goreleaser.yaml
+          args: release --clean --config .goreleaser.yaml --skip=publish --skip=announce --skip=sbom --skip=notarize
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-          GH_PAT: ${{ secrets.GH_PAT }}
-          TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
           DEVELOPER_ID_APP: ${{ secrets.DEVELOPER_ID_APP }}
           MACOS_SIGN_P12_PATH: ${{ env.MACOS_SIGN_P12_PATH }}
-          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-          # MACOS_NOTARY_KEY: {{ secrets.MACOS_NOTARY_KEY }}
-          MACOS_NOTARY_KEY_PATH: ${{ env.MACOS_NOTARY_KEY_PATH }}
-          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
-          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+
+  # macos_pkg:
+  #   needs: goreleaser
+  #   runs-on: macos-latest
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
+
+  #     - name: Configure AWS credentials (OIDC)
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: {{ secrets.AWS_ROLE_ARN }}
+  #         aws-region: {{ secrets.AWS_REGION }}
+
+  #     - name: Install Go
+  #       uses: actions/setup-go@v5
+  #       with:
+  #         go-version: '1.25.x'
+
+  #     - name: Install Syft (for SBOM generation)
+  #       run: |
+  #         curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+  #           | sh -s -- -b /usr/local/bin
+  #         syft version
+
+  #     - name: Debug check Notary key structure
+  #       run: |
+  #         echo "$MACOS_NOTARY_KEY" | head -n1
+  #         echo "$MACOS_NOTARY_KEY" | tail -n1
+  #       env:
+  #         MACOS_NOTARY_KEY: {{ secrets.MACOS_NOTARY_KEY }}
+
+  #     # --- DEBUG + PREPARE CERTS/KEYCHAIN ---
+  #     - name: Prepare Apple certificate and keychain (with debug)
+  #       env:
+  #         MACOS_CERT_P12: {{ secrets.MACOS_CERT_P12 }}           # base64 of .p12
+  #         MACOS_CERT_PASSWORD: {{ secrets.MACOS_CERT_PASSWORD }} # export password of .p12
+  #         MACOS_NOTARY_KEY: {{ secrets.MACOS_NOTARY_KEY }}       # full PEM with BEGIN/END
+  #       run: |
+  #         set -euo pipefail
+
+  #         # Write the p12 to a temp file
+  #         CERT_PATH="$RUNNER_TEMP/apple-cert.p12"
+  #         echo "$MACOS_CERT_P12" | base64 -D > "$CERT_PATH"
+
+  #         # --- Sanity check: verify the file was actually written ---
+  #         if [ -f "$CERT_PATH" ]; then
+  #           echo "✅ p12 exists at: $CERT_PATH"
+  #           stat -f "📦 p12 size (bytes): %z" "$CERT_PATH"
+  #         else
+  #           echo "❌ ERROR: p12 file missing at $CERT_PATH"
+  #           exit 1
+  #         fi
+
+  #         # Verify the p12 + password (no output means success)
+  #         echo "🔍 Verifying .p12 integrity..."
+  #         /usr/bin/openssl pkcs12 -in "$CERT_PATH" -noout -passin pass:"$MACOS_CERT_PASSWORD"
+  #         echo "✅ .p12 password verified successfully"
+
+  #         # Quick check the notary key looks like a PEM (headers only)
+  #         echo "🔑 Checking Notary API key format:"
+  #         echo "$MACOS_NOTARY_KEY" | head -n 1
+  #         echo "$MACOS_NOTARY_KEY" | tail -n 1
+
+  #         # Create and configure a dedicated build keychain
+  #         echo "🔐 Creating and unlocking temporary build keychain..."
+  #         security create-keychain -p "" build.keychain
+  #         security set-keychain-settings -lut 21600 build.keychain
+  #         security unlock-keychain -p "" build.keychain
+
+  #         # Import p12 into the build keychain
+  #         echo "📥 Importing .p12 into keychain..."
+  #         security import "$CERT_PATH" -k ~/Library/Keychains/build.keychain \
+  #           -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+
+  #         # Make the build keychain default and verify it’s active
+  #         security list-keychains -d user -s ~/Library/Keychains/build.keychain
+  #         security default-keychain -s ~/Library/Keychains/build.keychain
+
+  #         # Show available signing identities (for debugging)
+  #         echo "🔎 Listing available signing identities..."
+  #         security find-identity -p codesigning -v || true
+
+  #         # Export the cert path for GoReleaser (so we can reference a FILE, not base64)
+  #         echo "MACOS_SIGN_P12_PATH=$CERT_PATH" >> "$GITHUB_ENV"
+  #         echo "✅ Exported MACOS_SIGN_P12_PATH for GoReleaser"
+
+  #     - name: Prepare Notary API key file (Part A + normalize)
+  #       env:
+  #         MACOS_NOTARY_KEY: {{ secrets.MACOS_NOTARY_KEY }}
+  #       run: |
+  #         set -euo pipefail
+      
+  #         RAW_PATH="$RUNNER_TEMP/notary-api-key.raw"
+  #         OUT_PATH="$RUNNER_TEMP/notary-api-key.p8"
+        
+  #         # Preserve exact newlines (no extra quotes, no base64):
+  #         printf "%s" "$MACOS_NOTARY_KEY" > "$RAW_PATH"
+        
+  #         # Trim possible CRLFs just in case (safe for PEM):
+  #         tr -d '\r' < "$RAW_PATH" > "$OUT_PATH.tmp" && mv "$OUT_PATH.tmp" "$RAW_PATH"
+        
+  #         # Peek at header/footer (will be masked by GH):
+  #         head -n1 "$RAW_PATH" || true
+  #         tail -n1 "$RAW_PATH" || true
+        
+  #         HEADER="$(head -n1 "$RAW_PATH" || true)"
+        
+  #         if echo "$HEADER" | grep -q "BEGIN EC PRIVATE KEY"; then
+  #           echo "Key is SEC1 EC format; converting to PKCS#8..."
+  #           # Convert to unencrypted PKCS#8
+  #           /usr/bin/openssl pkcs8 -topk8 -nocrypt -inform PEM -outform PEM -in "$RAW_PATH" -out "$OUT_PATH"
+  #         else
+  #           echo "Key appears to be PKCS#8 already; copying as-is..."
+  #           cp "$RAW_PATH" "$OUT_PATH"
+  #         fi
+        
+  #         chmod 600 "$OUT_PATH"
+
+  #         echo "🔍 Verifying PEM format..."
+  #         /usr/bin/openssl pkey -in "$OUT_PATH" -noout -text >/dev/null
+  #         echo "✅ PEM parses OK for JWT"
+
+  #         echo "MACOS_NOTARY_KEY_PATH=$OUT_PATH" >> "$GITHUB_ENV"
+        
+
+  #     # --- RUN GORELEASER WITH FULL ENV ---
+  #     - name: Run GoReleaser (build + sign + notarize + upload)
+  #       uses: goreleaser/goreleaser-action@v6.4.0
+  #       with:
+  #         distribution: goreleaser-pro
+  #         version: latest
+  #         args: release --clean --config .goreleaser.yaml
+  #       env:
+  #         GITHUB_TOKEN: {{ secrets.GITHUB_TOKEN }}
+  #         GORELEASER_KEY: {{ secrets.GORELEASER_KEY }}
+  #         GH_PAT: {{ secrets.GH_PAT }}
+  #         TNR_S3_BUCKET: {{ secrets.TNR_S3_BUCKET }}
+  #         AWS_REGION: {{ secrets.AWS_REGION }}
+  #         DEVELOPER_ID_APP: {{ secrets.DEVELOPER_ID_APP }}
+  #         MACOS_SIGN_P12_PATH: {{ env.MACOS_SIGN_P12_PATH }}
+  #         MACOS_CERT_P12: {{ secrets.MACOS_CERT_P12 }}
+  #         MACOS_CERT_PASSWORD: {{ secrets.MACOS_CERT_PASSWORD }}
+  #         # MACOS_NOTARY_KEY: {{ secrets.MACOS_NOTARY_KEY }}
+  #         MACOS_NOTARY_KEY_PATH: {{ env.MACOS_NOTARY_KEY_PATH }}
+  #         MACOS_NOTARY_KEY_ID: {{ secrets.MACOS_NOTARY_KEY_ID }}
+  #         MACOS_NOTARY_ISSUER_ID: {{ secrets.MACOS_NOTARY_ISSUER_ID }}
 
 
   # goreleaser_windows:
@@ -227,8 +278,8 @@ jobs:
   #         version: latest
   #         args: release --clean --config .goreleaser.yaml
   #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #         GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-  #         GH_PAT: ${{ secrets.GH_PAT }}
-  #         TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
-  #         AWS_REGION: ${{ secrets.AWS_REGION }}
+  #         GITHUB_TOKEN: {{ secrets.GITHUB_TOKEN }}
+  #         GORELEASER_KEY: {{ secrets.GORELEASER_KEY }}
+  #         GH_PAT: {{ secrets.GH_PAT }}
+  #         TNR_S3_BUCKET: {{ secrets.TNR_S3_BUCKET }}
+  #         AWS_REGION: {{ secrets.AWS_REGION }}
