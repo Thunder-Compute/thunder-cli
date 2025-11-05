@@ -58,7 +58,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-            fetch-depth: 0
+          fetch-depth: 0
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -71,19 +71,48 @@ jobs:
         with:
           go-version: '1.25.x'
 
-      - name: Import Apple certificate
+      # --- DEBUG + PREPARE CERTS/KEYCHAIN ---
+      - name: Prepare Apple certificate and keychain (with debug)
         env:
-          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}           # base64 of .p12
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }} # export password of .p12
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}       # full PEM with BEGIN/END
         run: |
-          CERT_PATH="$RUNNER_TEMP/apple-cert.p12"
-          echo "$MACOS_CERT_P12" | base64 -D > "$CERT_PATH"   # use -D on macOS
-          security create-keychain -p "" build.keychain
-          security import "$CERT_PATH" -k ~/Library/Keychains/build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" ~/Library/Keychains/build.keychain
-          security default-keychain -s ~/Library/Keychains/build.keychain
-          rm -f "$CERT_PATH"
+          set -euo pipefail
 
+          # Write the p12 to a temp file
+          CERT_PATH="$RUNNER_TEMP/apple-cert.p12"
+          echo "$MACOS_CERT_P12" | base64 -D > "$CERT_PATH"
+
+          # Debug: show size (bytes) so we know it's not empty
+          echo "p12 byte size: $(/bin/ls -l \"$CERT_PATH\" | awk '{print $5}')"
+
+          # Sanity check the p12 + password (no output on success)
+          /usr/bin/openssl pkcs12 -in "$CERT_PATH" -noout -passin pass:"$MACOS_CERT_PASSWORD"
+
+          # Quick check the notary key looks like a PEM (headers only)
+          echo "$MACOS_NOTARY_KEY" | head -n 1
+          echo "$MACOS_NOTARY_KEY" | tail -n 1
+
+          # Create and configure a dedicated build keychain
+          security create-keychain -p "" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "" build.keychain
+
+          # Import p12 into the build keychain
+          security import "$CERT_PATH" -k ~/Library/Keychains/build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+
+          # Make the build keychain the default and in search list
+          security list-keychains -d user -s ~/Library/Keychains/build.keychain
+          security default-keychain -s ~/Library/Keychains/build.keychain
+
+          # Show available signing identities for debugging
+          security find-identity -p codesigning -v || true
+
+          # Export the cert path for GoReleaser (so we can reference a FILE, not base64)
+          echo "MACOS_SIGN_P12_PATH=$CERT_PATH" >> "$GITHUB_ENV"
+
+      # --- RUN GORELEASER WITH FULL ENV ---
       - name: Run GoReleaser (build + sign + notarize + upload)
         uses: goreleaser/goreleaser-action@v6.4.0
         with:
@@ -96,15 +125,14 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
           TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_PWD: ${{ secrets.APPLE_APP_PWD }}
           DEVELOPER_ID_APP: ${{ secrets.DEVELOPER_ID_APP }}
+          MACOS_SIGN_P12_PATH: ${{ env.MACOS_SIGN_P12_PATH }}
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
           MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+
 
   goreleaser_windows:
     needs: goreleaser
