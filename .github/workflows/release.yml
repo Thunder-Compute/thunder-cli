@@ -68,6 +68,11 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: Install Syft (for SBOM)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft version
+
       - name: Prepare Apple certificate and keychain
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
