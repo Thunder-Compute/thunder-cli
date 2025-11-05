@@ -35,60 +35,60 @@ signs:
       - "PATH=/usr/bin:/usr/local/bin"
 
 after:
-  - id: build-pkgs
-    cmd: |
-      bash -Eeuo pipefail <<'PKG'
-      set -x
-      echo "🟢 Creating PKGs in dist/"
-      
-      for ARCH in amd64 arm64; do
-        if [ "$ARCH" = "amd64" ]; then
-          BIN="dist/tnr_darwin_amd64_v1/tnr"
-        else
-          BIN="dist/tnr_darwin_arm64_v8.0/tnr"
-        fi
+  hooks:
+    - cmd: |
+        bash -Eeuo pipefail <<'PKG'
+        set -x
+        echo "🟢 Creating PKGs in dist/"
         
-        VERSION="{{ .Version }}"
-        NAME="{{ .ProjectName }}"
-        
-        test -f "$BIN" || { echo "❌ Missing BIN: $BIN"; exit 1; }
-        
-        WORK="$(/usr/bin/mktemp -d -t tnr.pkg.${ARCH}.XXXXXX)"
-        trap 'rm -rf "$WORK"' EXIT
-        PKGROOT="$WORK/root"
-        /bin/mkdir -p "$PKGROOT/usr/local/bin"
-        /usr/bin/install -m 0755 "$BIN" "$PKGROOT/usr/local/bin/tnr"
-        
-        PKG_UNSIGNED="dist/${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg"
-        PKG_SIGNED="dist/${NAME}_${VERSION}_darwin_${ARCH}.pkg"
-        
-        echo "🔧 Building unsigned PKG: $PKG_UNSIGNED"
-        /usr/bin/pkgbuild \
-          --root "$PKGROOT" \
-          --identifier "com.thundercompute.tnr" \
-          --version "$VERSION" \
-          --install-location "/" \
-          "$PKG_UNSIGNED"
-        
-        if [ -n "${DEVELOPER_ID_INSTALLER:-}" ]; then
-          echo "🔏 Signing PKG with: $DEVELOPER_ID_INSTALLER"
-          if /usr/bin/productsign --sign "$DEVELOPER_ID_INSTALLER" "$PKG_UNSIGNED" "$PKG_SIGNED"; then
-            /usr/sbin/pkgutil --check-signature "$PKG_SIGNED"
-            rm -f "$PKG_UNSIGNED"
-            echo "✅ Signed PKG: $PKG_SIGNED"
+        for ARCH in amd64 arm64; do
+          if [ "$ARCH" = "amd64" ]; then
+            BIN="dist/tnr_darwin_amd64_v1/tnr"
           else
-            echo "⚠️  Signing failed; keeping unsigned"
+            BIN="dist/tnr_darwin_arm64_v8.0/tnr"
+          fi
+          
+          VERSION="{{ .Version }}"
+          NAME="{{ .ProjectName }}"
+          
+          test -f "$BIN" || { echo "❌ Missing BIN: $BIN"; exit 1; }
+          
+          WORK="$(/usr/bin/mktemp -d -t tnr.pkg.${ARCH}.XXXXXX)"
+          trap 'rm -rf "$WORK"' EXIT
+          PKGROOT="$WORK/root"
+          /bin/mkdir -p "$PKGROOT/usr/local/bin"
+          /usr/bin/install -m 0755 "$BIN" "$PKGROOT/usr/local/bin/tnr"
+          
+          PKG_UNSIGNED="dist/${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg"
+          PKG_SIGNED="dist/${NAME}_${VERSION}_darwin_${ARCH}.pkg"
+          
+          echo "🔧 Building unsigned PKG: $PKG_UNSIGNED"
+          /usr/bin/pkgbuild \
+            --root "$PKGROOT" \
+            --identifier "com.thundercompute.tnr" \
+            --version "$VERSION" \
+            --install-location "/" \
+            "$PKG_UNSIGNED"
+          
+          if [ -n "${DEVELOPER_ID_INSTALLER:-}" ]; then
+            echo "🔏 Signing PKG with: $DEVELOPER_ID_INSTALLER"
+            if /usr/bin/productsign --sign "$DEVELOPER_ID_INSTALLER" "$PKG_UNSIGNED" "$PKG_SIGNED"; then
+              /usr/sbin/pkgutil --check-signature "$PKG_SIGNED"
+              rm -f "$PKG_UNSIGNED"
+              echo "✅ Signed PKG: $PKG_SIGNED"
+            else
+              echo "⚠️  Signing failed; keeping unsigned"
+              mv "$PKG_UNSIGNED" "$PKG_SIGNED"
+            fi
+          else
+            echo "⚠️  No DEVELOPER_ID_INSTALLER; producing unsigned PKG"
             mv "$PKG_UNSIGNED" "$PKG_SIGNED"
           fi
-        else
-          echo "⚠️  No DEVELOPER_ID_INSTALLER; producing unsigned PKG"
-          mv "$PKG_UNSIGNED" "$PKG_SIGNED"
-        fi
-      done
-      
-      echo "📦 PKGs created:"
-      ls -lh dist/*.pkg
-      PKG
+        done
+        
+        echo "📦 PKGs created:"
+        ls -lh dist/*.pkg
+        PKG
 
 
 
