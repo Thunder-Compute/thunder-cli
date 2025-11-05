@@ -70,6 +70,17 @@ before_publish:
         --sign "{{ .Env.DEVELOPER_ID_INSTALLER }}" \
         "$PKG_UNSIGNED" "$PKG_SIGNED"
 
+      if [ ! -f "$PKG_SIGNED" ]; then
+        echo "❌ ERROR: missing $PKG_SIGNED after productsign"
+        echo "Contents of current dir:"
+        pwd && ls -al
+        exit 1
+      fi
+
+      echo "✅ Signed package exists: $PKG_SIGNED"
+      echo "Checking signature:"
+      pkgutil --check-signature "$PKG_SIGNED" || exit 1
+
       pkgutil --check-signature "$PKG_SIGNED" || exit 1
       rm -rf "$WORK" "$PKG_UNSIGNED"
 
