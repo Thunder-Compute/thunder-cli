@@ -155,18 +155,18 @@ jobs:
           security find-identity -p codesigning -v || true
           echo "MACOS_SIGN_P12_PATH=$CERT_PATH" >> "$GITHUB_ENV"
 
-      # - name: Prepare Notary API key
-      #   env:
-      #     MACOS_NOTARY_KEY: {{ secrets.MACOS_NOTARY_KEY }}
-      #   run: |
-      #     set -euo pipefail
-      #     RAW="$RUNNER_TEMP/notary-api-key.raw"
-      #     OUT="$RUNNER_TEMP/notary-api-key.p8"
-      #     printf "%s" "$MACOS_NOTARY_KEY" > "$RAW"
-      #     tr -d '\r' < "$RAW" > "$OUT"
-      #     chmod 600 "$OUT"
-      #     /usr/bin/openssl pkey -in "$OUT" -noout -text >/dev/null
-      #     echo "MACOS_NOTARY_KEY_PATH=$OUT" >> "$GITHUB_ENV"
+      - name: Prepare Notary API key
+        env:
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: |
+          set -euo pipefail
+          RAW="$RUNNER_TEMP/notary-api-key.raw"
+          OUT="$RUNNER_TEMP/notary-api-key.p8"
+          printf "%s" "$MACOS_NOTARY_KEY" > "$RAW"
+          tr -d '\r' < "$RAW" > "$OUT"
+          chmod 600 "$OUT"
+          /usr/bin/openssl pkey -in "$OUT" -noout -text >/dev/null
+          echo "MACOS_NOTARY_KEY_PATH=$OUT" >> "$GITHUB_ENV"
 
       - name: "GoReleaser (macOS: build + sign + publish)"
         uses: goreleaser/goreleaser-action@v6.4.0
@@ -187,10 +187,10 @@ jobs:
 
           DEVELOPER_ID_INSTALLER: ${{ secrets.DEVELOPER_ID_INSTALLER }}
 
-          # Optional notarization (uncomment if you enable in YAML)
-          # MACOS_NOTARY_KEY_PATH: {{ env.MACOS_NOTARY_KEY_PATH }}
-          # MACOS_NOTARY_KEY_ID: {{ secrets.MACOS_NOTARY_KEY_ID }}
-          # MACOS_NOTARY_ISSUER_ID: {{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          # Notarization credentials
+          MACOS_NOTARY_KEY_PATH: ${{ env.MACOS_NOTARY_KEY_PATH }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
 
       - name: Show built PKGs
         run: ls -al dist/*.pkg || true
