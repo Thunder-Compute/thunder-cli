@@ -121,7 +121,7 @@ blobs:
     directory: "tnr/releases/{{ .Version }}/macos"
     # ids: [archive, checksum, sbom]
     extra_files:
-      - glob: "dist/{{ .ProjectName }}_{{ .Version }}_darwin_*.pkg"
+      - glob: "dist/*_darwin_*.pkg"
 
 brews:
   - name: tnr

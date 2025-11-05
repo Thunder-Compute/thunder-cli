@@ -164,6 +164,9 @@ jobs:
           # MACOS_NOTARY_KEY_PATH: {{ env.MACOS_NOTARY_KEY_PATH }}
           # MACOS_NOTARY_KEY_ID: {{ secrets.MACOS_NOTARY_KEY_ID }}
           # MACOS_NOTARY_ISSUER_ID: {{ secrets.MACOS_NOTARY_ISSUER_ID }}
+
+      - name: Show built PKGs
+        run: ls -al dist/*.pkg || true
         
 
 
