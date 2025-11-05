@@ -84,33 +84,47 @@ jobs:
           CERT_PATH="$RUNNER_TEMP/apple-cert.p12"
           echo "$MACOS_CERT_P12" | base64 -D > "$CERT_PATH"
 
-          # Debug: show size (bytes) so we know it's not empty
-          echo "p12 byte size: $(/bin/ls -l \"$CERT_PATH\" | awk '{print $5}')"
+          # --- Sanity check: verify the file was actually written ---
+          if [ -f "$CERT_PATH" ]; then
+            echo "✅ p12 exists at: $CERT_PATH"
+            stat -f "📦 p12 size (bytes): %z" "$CERT_PATH"
+          else
+            echo "❌ ERROR: p12 file missing at $CERT_PATH"
+            exit 1
+          fi
 
-          # Sanity check the p12 + password (no output on success)
+          # Verify the p12 + password (no output means success)
+          echo "🔍 Verifying .p12 integrity..."
           /usr/bin/openssl pkcs12 -in "$CERT_PATH" -noout -passin pass:"$MACOS_CERT_PASSWORD"
+          echo "✅ .p12 password verified successfully"
 
           # Quick check the notary key looks like a PEM (headers only)
+          echo "🔑 Checking Notary API key format:"
           echo "$MACOS_NOTARY_KEY" | head -n 1
           echo "$MACOS_NOTARY_KEY" | tail -n 1
 
           # Create and configure a dedicated build keychain
+          echo "🔐 Creating and unlocking temporary build keychain..."
           security create-keychain -p "" build.keychain
           security set-keychain-settings -lut 21600 build.keychain
           security unlock-keychain -p "" build.keychain
 
           # Import p12 into the build keychain
-          security import "$CERT_PATH" -k ~/Library/Keychains/build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          echo "📥 Importing .p12 into keychain..."
+          security import "$CERT_PATH" -k ~/Library/Keychains/build.keychain \
+            -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
 
-          # Make the build keychain the default and in search list
+          # Make the build keychain default and verify it’s active
           security list-keychains -d user -s ~/Library/Keychains/build.keychain
           security default-keychain -s ~/Library/Keychains/build.keychain
 
-          # Show available signing identities for debugging
+          # Show available signing identities (for debugging)
+          echo "🔎 Listing available signing identities..."
           security find-identity -p codesigning -v || true
 
           # Export the cert path for GoReleaser (so we can reference a FILE, not base64)
           echo "MACOS_SIGN_P12_PATH=$CERT_PATH" >> "$GITHUB_ENV"
+          echo "✅ Exported MACOS_SIGN_P12_PATH for GoReleaser"
 
       # --- RUN GORELEASER WITH FULL ENV ---
       - name: Run GoReleaser (build + sign + notarize + upload)
