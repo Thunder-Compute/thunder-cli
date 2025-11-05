@@ -55,27 +55,27 @@ builds:
           fi
     
           # Notarize the .pkg file after signing
-          # if [ -n "${MACOS_NOTARY_KEY_PATH:-}" ] && [ -n "${MACOS_NOTARY_KEY_ID:-}" ] && [ -n "${MACOS_NOTARY_ISSUER_ID:-}" ]; then
-          #   echo "🔐 Notarizing package: $PKG_SIGNED"
+          if [ -n "${MACOS_NOTARY_KEY_PATH:-}" ] && [ -n "${MACOS_NOTARY_KEY_ID:-}" ] && [ -n "${MACOS_NOTARY_ISSUER_ID:-}" ]; then
+            echo "🔐 Notarizing package: $PKG_SIGNED"
             
-          #   # Submit for notarization (notarytool blocks until complete with --wait)
-          #   if xcrun notarytool submit "$PKG_SIGNED" \
-          #     --key "$MACOS_NOTARY_KEY_PATH" \
-          #     --key-id "$MACOS_NOTARY_KEY_ID" \
-          #     --issuer "$MACOS_NOTARY_ISSUER_ID" \
-          #     --wait \
-          #     --timeout 20m; then
+            # Submit for notarization (notarytool blocks until complete with --wait)
+            if xcrun notarytool submit "$PKG_SIGNED" \
+              --key "$MACOS_NOTARY_KEY_PATH" \
+              --key-id "$MACOS_NOTARY_KEY_ID" \
+              --issuer "$MACOS_NOTARY_ISSUER_ID" \
+              --wait \
+              --timeout 20m; then
               
-          #     echo "✅ Notarization successful!"
-          #     # Staple the notarization ticket to the package
-          #     xcrun stapler staple "$PKG_SIGNED" || echo "⚠️  Stapling failed (ticket may not be available yet)"
-          #   else
-          #     echo "❌ Notarization failed!"
-          #     exit 1
-          #   fi
-          # else
-          #   echo "⚠️  Skipping notarization (credentials not configured)"
-          # fi
+              echo "✅ Notarization successful!"
+              # Staple the notarization ticket to the package
+              xcrun stapler staple "$PKG_SIGNED" || echo "⚠️  Stapling failed (ticket may not be available yet)"
+            else
+              echo "❌ Notarization failed!"
+              exit 1
+            fi
+          else
+            echo "⚠️  Skipping notarization (credentials not configured)"
+          fi
     
           ls -lh dist/*.pkg;
           '
@@ -87,12 +87,12 @@ notarize:
       sign:
         certificate: "{{ .Env.MACOS_SIGN_P12 }}"
         password: "{{ .Env.MACOS_CERT_PASSWORD }}"
-      # notarize:
-      #   issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
-      #   key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
-      #   key: "{{ .Env.MACOS_NOTARY_KEY }}" # .p8 file needs --> base64 -w0 < ./ApiKey_AAABBBCCC.p8
-      #   wait: true
-      #   timeout: 20m
+      notarize:
+        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+        key: "{{ .Env.MACOS_NOTARY_KEY }}"
+        wait: true
+        timeout: 20m
 
 archives:
   - id: archive
@@ -111,13 +111,26 @@ sboms:
 
 blobs:
   - provider: s3
-    # if: '{{ eq .Os "darwin" }}'
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}/macos"
-    # ids: [archive, checksum, sbom]
     extra_files:
       - glob: "dist/*.pkg"
+
+release:
+  disable: false
+  draft: false
+  prerelease: auto
+  extra_files:
+    - glob: "dist/*.pkg"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
 
 # brews:
 #   - name: tnr
@@ -138,18 +151,3 @@ blobs:
 #       system "#{bin}/tnr", "--version"
 #     install: |
 #       bin.install "tnr"
-
-release:
-  disable: false
-  draft: false
-  prerelease: auto
-  extra_files:
-    - glob: "dist/*.pkg"
-
-changelog:
-  use: github
-  sort: asc
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'

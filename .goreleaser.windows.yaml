@@ -50,11 +50,15 @@ blobs:
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}/windows"
+    extra_files:
+      - glob: "dist/*.msi"
 
 release:
   disable: false
   draft: false
   prerelease: auto
+  extra_files:
+    - glob: "dist/*.msi"
 
 changelog:
   use: github
