@@ -57,6 +57,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+            fetch-depth: 0
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -74,11 +76,13 @@ jobs:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
         run: |
-          echo "$MACOS_CERT_P12" | base64 --decode > certificate.p12
+          CERT_PATH="$RUNNER_TEMP/apple-cert.p12"
+          echo "$MACOS_CERT_P12" | base64 -D > "$CERT_PATH"   # use -D on macOS
           security create-keychain -p "" build.keychain
-          security import certificate.p12 -k ~/Library/Keychains/build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security import "$CERT_PATH" -k ~/Library/Keychains/build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" ~/Library/Keychains/build.keychain
           security default-keychain -s ~/Library/Keychains/build.keychain
+          rm -f "$CERT_PATH"
 
       - name: Run GoReleaser (build + sign + notarize + upload)
         uses: goreleaser/goreleaser-action@v6.4.0
