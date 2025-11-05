@@ -34,18 +34,29 @@ jobs:
 
       - name: Prepare Apple certificate and keychain
         env:
-          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_P12_APP: ${{ secrets.MACOS_CERT_P12_APP }}
+          MACOS_CERT_P12_INSTALLER: ${{ secrets.MACOS_CERT_P12_INSTALLER }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
         run: |
           set -euo pipefail
           CERT_PATH="$RUNNER_TEMP/apple-cert.p12"
-          echo "$MACOS_CERT_P12" | base64 -D > "$CERT_PATH"
+          echo "$MACOS_CERT_P12_APP" | base64 -D > "$CERT_PATH"
           /usr/bin/openssl pkcs12 -in "$CERT_PATH" -noout -passin pass:"$MACOS_CERT_PASSWORD"
           security create-keychain -p "" build.keychain
           security set-keychain-settings -lut 21600 build.keychain
           security unlock-keychain -p "" build.keychain
           security import "$CERT_PATH" -k ~/Library/Keychains/build.keychain \
             -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productsign
+
+          # Import Developer ID Installer certificate (for productsign)
+          INSTALLER_CERT_PATH="$RUNNER_TEMP/installer-cert.p12"
+          echo "$MACOS_CERT_P12_INSTALLER" | base64 -D > "$INSTALLER_CERT_PATH"
+          /usr/bin/openssl pkcs12 -in "$INSTALLER_CERT_PATH" -noout -passin pass:"$MACOS_CERT_PASSWORD"
+          security import "$INSTALLER_CERT_PATH" -k ~/Library/Keychains/build.keychain \
+            -P "$MACOS_CERT_PASSWORD" -T /usr/bin/productsign -T /usr/bin/codesign
+
+          # Allow codesign/productsign to access keys without prompts
+          security set-key-partition-list -S apple-tool:,apple:,codesign:,productsign: -s -k "" ~/Library/Keychains/build.keychain
           security list-keychains -d user -s ~/Library/Keychains/build.keychain
           security default-keychain -s ~/Library/Keychains/build.keychain
           security find-identity -p codesigning -v || true
@@ -65,7 +76,7 @@ jobs:
         with:
           distribution: goreleaser-pro
           version: latest
-          args: release --clean --config .goreleaser.macos.yaml --skip=announce --skip=publish
+          args: release --clean --config .goreleaser.macos.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
@@ -84,122 +95,122 @@ jobs:
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
 
-  windows_release:
-    needs: macos_release
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+  # windows_release:
+  #   needs: macos_release
+  #   runs-on: windows-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with: { fetch-depth: 0 }
 
-      - uses: actions/setup-go@v5
-        with: { go-version: '1.25.x' }
+  #     - uses: actions/setup-go@v5
+  #       with: { go-version: '1.25.x' }
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ secrets.AWS_REGION }}
+  #     - name: Configure AWS credentials (OIDC)
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+  #         aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Install WiX v4
-        shell: pwsh
-        run: |
-          # Install WiX v4 as a .NET tool (the proper way for WiX v4)
-          dotnet tool install --global wix --version 4.*
+  #     - name: Install WiX v4
+  #       shell: pwsh
+  #       run: |
+  #         # Install WiX v4 as a .NET tool (the proper way for WiX v4)
+  #         dotnet tool install --global wix --version 4.*
           
-          # Add .NET tools to PATH
-          $dotnetToolsPath = "$env:USERPROFILE\.dotnet\tools"
-          $env:PATH = "$dotnetToolsPath;$env:PATH"
-          echo "$dotnetToolsPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+  #         # Add .NET tools to PATH
+  #         $dotnetToolsPath = "$env:USERPROFILE\.dotnet\tools"
+  #         $env:PATH = "$dotnetToolsPath;$env:PATH"
+  #         echo "$dotnetToolsPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           
-          # Verify installation
-          wix --version
+  #         # Verify installation
+  #         wix --version
 
-      - name: Install Syft (for SBOM)
-        shell: pwsh
-        run: |
-          # Download and install Syft for Windows
-          $syftVersion = "v1.18.0"
-          $syftUrl = "https://github.com/anchore/syft/releases/download/$syftVersion/syft_1.18.0_windows_amd64.zip"
-          $syftZip = "$env:TEMP\syft.zip"
-          $syftDir = "$env:TEMP\syft"
+  #     - name: Install Syft (for SBOM)
+  #       shell: pwsh
+  #       run: |
+  #         # Download and install Syft for Windows
+  #         $syftVersion = "v1.18.0"
+  #         $syftUrl = "https://github.com/anchore/syft/releases/download/$syftVersion/syft_1.18.0_windows_amd64.zip"
+  #         $syftZip = "$env:TEMP\syft.zip"
+  #         $syftDir = "$env:TEMP\syft"
           
-          Invoke-WebRequest -Uri $syftUrl -OutFile $syftZip
-          Expand-Archive -Path $syftZip -DestinationPath $syftDir -Force
+  #         Invoke-WebRequest -Uri $syftUrl -OutFile $syftZip
+  #         Expand-Archive -Path $syftZip -DestinationPath $syftDir -Force
           
-          # Add to PATH
-          $env:PATH = "$syftDir;$env:PATH"
-          echo "$syftDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+  #         # Add to PATH
+  #         $env:PATH = "$syftDir;$env:PATH"
+  #         echo "$syftDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           
-          # Verify installation
-          syft version
+  #         # Verify installation
+  #         syft version
 
-      - name: "GoReleaser (Windows: build MSI + publish)"
-        uses: goreleaser/goreleaser-action@v6.4.0
-        with:
-          distribution: goreleaser-pro
-          version: latest
-          args: release --clean --config .goreleaser.windows.yaml --skip=announce --skip=publish
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-          GH_PAT: ${{ secrets.GH_PAT }}
-          TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
+  #     - name: "GoReleaser (Windows: build MSI + publish)"
+  #       uses: goreleaser/goreleaser-action@v6.4.0
+  #       with:
+  #         distribution: goreleaser-pro
+  #         version: latest
+  #         args: release --clean --config .goreleaser.windows.yaml --skip=announce --skip=publish
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #         GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+  #         GH_PAT: ${{ secrets.GH_PAT }}
+  #         TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
+  #         AWS_REGION: ${{ secrets.AWS_REGION }}
 
-      - name: Show built MSI files
-        shell: pwsh
-        run: |
-          echo "=== Dist directory contents ==="
-          Get-ChildItem -Path dist -Recurse | Format-Table -Property Mode, LastWriteTime, Length, Name
-          echo ""
-          echo "=== Looking for MSI files ==="
-          Get-ChildItem -Path dist -Filter *.msi -Recurse | Format-List
+  #     - name: Show built MSI files
+  #       shell: pwsh
+  #       run: |
+  #         echo "=== Dist directory contents ==="
+  #         Get-ChildItem -Path dist -Recurse | Format-Table -Property Mode, LastWriteTime, Length, Name
+  #         echo ""
+  #         echo "=== Looking for MSI files ==="
+  #         Get-ChildItem -Path dist -Filter *.msi -Recurse | Format-List
 
-      - name: Verify WiX is available
-        shell: pwsh
-        run: |
-          echo "=== WiX Version ==="
-          wix --version
-          echo "=== WiX Path ==="
-          Get-Command wix | Format-List
+  #     - name: Verify WiX is available
+  #       shell: pwsh
+  #       run: |
+  #         echo "=== WiX Version ==="
+  #         wix --version
+  #         echo "=== WiX Path ==="
+  #         Get-Command wix | Format-List
 
-  ubuntu_release:
-    needs: windows_release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+  # ubuntu_release:
+  #   needs: windows_release
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.x'
+  #     - name: Setup Go
+  #       uses: actions/setup-go@v5
+  #       with:
+  #         go-version: '1.25.x'
 
-      - name: Run tests
-        run: go test ./... -v
+  #     - name: Run tests
+  #       run: go test ./... -v
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ secrets.AWS_REGION }}
+  #     - name: Configure AWS credentials (OIDC)
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+  #         aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Install Syft (for SBOM)
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-          syft version
+  #     - name: Install Syft (for SBOM)
+  #       run: |
+  #         curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+  #         syft version
 
-      - name: "GoReleaser (Ubuntu: linux publish)"
-        uses: goreleaser/goreleaser-action@v6.4.0
-        with:
-          distribution: goreleaser-pro
-          version: latest
-          args: release --clean --config .goreleaser.ubuntu.yaml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-          GH_PAT: ${{ secrets.GH_PAT }}
-          TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
+  #     - name: "GoReleaser (Ubuntu: linux publish)"
+  #       uses: goreleaser/goreleaser-action@v6.4.0
+  #       with:
+  #         distribution: goreleaser-pro
+  #         version: latest
+  #         args: release --clean --config .goreleaser.ubuntu.yaml
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #         GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+  #         GH_PAT: ${{ secrets.GH_PAT }}
+  #         TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
+  #         AWS_REGION: ${{ secrets.AWS_REGION }}
