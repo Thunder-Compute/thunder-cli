@@ -77,6 +77,13 @@ jobs:
             | sh -s -- -b /usr/local/bin
           syft version
 
+      - name: Debug check Notary key structure
+        run: |
+          echo "$MACOS_NOTARY_KEY" | head -n1
+          echo "$MACOS_NOTARY_KEY" | tail -n1
+        env:
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+
       # --- DEBUG + PREPARE CERTS/KEYCHAIN ---
       - name: Prepare Apple certificate and keychain (with debug)
         env:
