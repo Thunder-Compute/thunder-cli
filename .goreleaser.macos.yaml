@@ -116,7 +116,7 @@ archives:
       - README.md
 
 checksum:
-  name_template: "checksums.txt"
+  name_template: "checksums-macos.txt"
 
 sboms:
   - id: sbom

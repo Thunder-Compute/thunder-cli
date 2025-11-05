@@ -27,7 +27,7 @@ archives:
       - README.md
 
 checksum:
-  name_template: "checksums.txt"
+  name_template: "checksums-linux.txt"
 
 sboms:
   - id: sbom
