@@ -37,30 +37,36 @@ signs:
 before_publish:
   - ids: [tnr]
     artifacts: [binary]
+    # Force the hook to run from the repo root:
+    dir: "{{ .ProjectDir }}"
     output: true
     cmd: |
-      bash -euo pipefail << 'EOF'
-      # Only package on macOS artifacts
-      if [ "{{ .Os }}" != "darwin" ]; then exit 0; fi
+      bash -euxo pipefail << 'EOF'
+      echo "PWD=$(pwd)"
+      ROOT="{{ .ProjectDir }}"
+      OUTDIR="$ROOT/dist"              # absolute dist
+      mkdir -p "$OUTDIR"
 
+      # Per-artifact inputs from GoReleaser:
       BIN="{{ .ArtifactPath }}"
       ARCH="{{ .Arch }}"
       VERSION="{{ .Version }}"
       NAME="{{ .ProjectName }}"
 
-      OUTDIR="dist"
-      mkdir -p "$OUTDIR"
+      echo "BIN=$BIN"
+      echo "ARCH=$ARCH VERSION=$VERSION NAME=$NAME"
 
-      # Stage a simple payload that installs to /usr/local/bin
-      WORK="pkg-${ARCH}"
+      # Stage payload
+      WORK="$ROOT/pkg-${ARCH}"
       PKGROOT="$WORK/root"
+      rm -rf "$WORK"
       mkdir -p "$PKGROOT/usr/local/bin"
       install -m 0755 "$BIN" "$PKGROOT/usr/local/bin/tnr"
 
-      PKG_UNSIGNED="${OUTDIR}/${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg"
-      PKG_SIGNED="${OUTDIR}/${NAME}_${VERSION}_darwin_${ARCH}.pkg"
+      PKG_UNSIGNED="$OUTDIR/${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg"
+      PKG_SIGNED="$OUTDIR/${NAME}_${VERSION}_darwin_${ARCH}.pkg"
 
-      echo "🔧 Building unsigned package: $PKG_UNSIGNED"
+      echo "🔧 Building unsigned: $PKG_UNSIGNED"
       pkgbuild \
         --root "$PKGROOT" \
         --identifier "com.thundercompute.tnr" \
@@ -68,7 +74,7 @@ before_publish:
         --install-location "/" \
         "$PKG_UNSIGNED"
 
-      echo "🔏 Signing package to: $PKG_SIGNED"
+      echo "🔏 Signing -> $PKG_SIGNED"
       productsign \
         --sign "{{ .Env.DEVELOPER_ID_INSTALLER }}" \
         "$PKG_UNSIGNED" "$PKG_SIGNED"
@@ -79,23 +85,13 @@ before_publish:
       echo "✅ Signed package: $PKG_SIGNED"
       pkgutil --check-signature "$PKG_SIGNED" || exit 1
 
-      # Clean staging + unsigned
+      # Tidy staging
       rm -rf "$WORK" "$PKG_UNSIGNED"
 
-      # Optional: notarize + staple if envs are present
-      if [ -n "${MACOS_NOTARY_KEY_ID:-}" ] && [ -n "${MACOS_NOTARY_ISSUER_ID:-}" ] && [ -n "${MACOS_NOTARY_KEY_PATH:-}" ]; then
-        echo "🚀 Notarizing..."
-        xcrun notarytool submit "$PKG_SIGNED" \
-          --key "$MACOS_NOTARY_KEY_PATH" \
-          --key-id "$MACOS_NOTARY_KEY_ID" \
-          --issuer "$MACOS_NOTARY_ISSUER_ID" \
-          --wait
-        xcrun stapler staple "$PKG_SIGNED"
-      fi
-
-      echo "📦 dist contents:"
+      echo "📦 OUTDIR listing:"
       ls -al "$OUTDIR"
       EOF
+
 
 # notarize:
 #   macos:

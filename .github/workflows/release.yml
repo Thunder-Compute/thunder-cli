@@ -167,6 +167,11 @@ jobs:
 
       - name: Show built PKGs
         run: ls -al dist/*.pkg || true
+
+      - name: Show dist folder contents after GoReleaser
+        run: |
+          echo "After GoReleaser, dist contains:"
+          ls -al dist || true
         
 
 
