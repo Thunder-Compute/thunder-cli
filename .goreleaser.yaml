@@ -38,10 +38,10 @@ notarize:
   macos:
     # - enabled: '{{ isEnvSet "MACOS_SIGN_CERTIFICATE" }}'  # Ensures this is enabled only if cert is set
     - enabled: '{{ eq .Runtime.Goos "darwin" }}'
-      ids: [tnr]
+    ids: [archive]  # Change from [tnr] to [archive]
       sign:
-        certificate: "{{.Env.MACOS_SIGN_CERTIFICATE}}"    # The certificate base64 or file path
-        password: "{{.Env.MACOS_SIGN_PASSWORD}}"          # Password for the certificate
+        certificate: "{{ .Env.MACOS_SIGN_P12_PATH }}"  # Use the file path
+        password: "{{ .Env.MACOS_CERT_PASSWORD }}"     # Match workflow
       notarize:
         issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"      # Issuer ID from Apple Developer
         key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"            # Key ID from Apple Developer
