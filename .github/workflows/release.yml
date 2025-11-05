@@ -66,9 +66,35 @@ jobs:
         env:
           MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
         run: |
-          OUT="$RUNNER_TEMP/notary-api-key.p8"
-          printf "%s" "$MACOS_NOTARY_KEY" > "$OUT"
-          chmod 600 "$OUT"
+          set -euo pipefail
+        
+          RAW="$RUNNER_TEMP/notary-key.raw"
+          OUT="$RUNNER_TEMP/notary-key.p8"
+        
+          # Write secret as-is
+          printf "%s" "$MACOS_NOTARY_KEY" > "$RAW"
+        
+          # If first line doesn't look like PEM, assume it's base64 and decode
+          if ! head -n1 "$RAW" | grep -q "BEGIN "; then
+            base64 -D < "$RAW" > "$RAW.dec" || { echo "Base64 decode failed"; exit 1; }
+            mv "$RAW.dec" "$RAW"
+          fi
+        
+          # Normalize newlines (remove CR characters)
+          tr -d '\r' < "$RAW" > "$RAW.norm"
+          mv "$RAW.norm" "$RAW"
+          chmod 600 "$RAW"
+        
+          # Convert SEC1 EC → PKCS#8 if needed
+          if head -n1 "$RAW" | grep -q "BEGIN EC PRIVATE KEY"; then
+            /usr/bin/openssl pkcs8 -topk8 -nocrypt -inform PEM -outform PEM -in "$RAW" -out "$OUT"
+          else
+            cp "$RAW" "$OUT"
+          fi
+        
+          # Validate key parses
+          /usr/bin/openssl pkey -in "$OUT" -noout -text >/dev/null
+        
           echo "MACOS_NOTARY_KEY_PATH=$OUT" >> "$GITHUB_ENV"
 
       - name: "GoReleaser (macOS: build + sign + notarize + publish)"
