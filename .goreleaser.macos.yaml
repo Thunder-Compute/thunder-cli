@@ -29,6 +29,19 @@ builds:
           # Find the built binary for this arch (handles _v1 / _v8.0 suffixes)
           BIN="$(ls dist/${NAME}_darwin_${ARCH}_*/${NAME} 2>/dev/null | head -n1)";
           test -f "$BIN";
+
+          # Sign the binary before packaging to avoid ad-hoc signature inside PKG
+          if [ -n "${DEVELOPER_ID_APP:-}" ]; then
+            echo "🔏 Signing binary: $BIN"
+            /usr/bin/codesign --force --timestamp --options runtime \
+              --sign "$DEVELOPER_ID_APP" "$BIN"
+
+            # Verify signature
+            /usr/bin/codesign --verify --verbose "$BIN"
+            echo "✅ Binary signed successfully"
+          else
+            echo "⚠️  Skipping binary signing (DEVELOPER_ID_APP not set)"
+          fi
     
           WORK="$(/usr/bin/mktemp -d -t ${NAME}.pkg.${ARCH}.XXXXXX)";
           trap "rm -rf \"$WORK\"" EXIT;
