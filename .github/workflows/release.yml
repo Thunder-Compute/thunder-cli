@@ -214,8 +214,8 @@ jobs:
           MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12}}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
 
-          # PKG signing (disabled)
-          # DEVELOPER_ID_INSTALLER: {{ secrets.DEVELOPER_ID_INSTALLER }}
+          # PKG signing
+          DEVELOPER_ID_INSTALLER: ${{ secrets.DEVELOPER_ID_INSTALLER }}
 
       # PKG verification steps temporarily disabled
       # - name: Show built PKGs
