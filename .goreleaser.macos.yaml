@@ -116,9 +116,8 @@ blobs:
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}/macos"
     # ids: [archive, checksum, sbom]
-    # PKG upload temporarily disabled
-    # extra_files:
-    #   - glob: "dist/*.pkg"
+    extra_files:
+      - glob: "dist/*.pkg"
 
 # brews:
 #   - name: tnr
@@ -144,9 +143,8 @@ release:
   disable: false
   draft: false
   prerelease: auto
-  # PKG files temporarily disabled
-  # extra_files:
-  #   - glob: "dist/*.pkg"
+  extra_files:
+    - glob: "dist/*.pkg"
 
 changelog:
   use: github
