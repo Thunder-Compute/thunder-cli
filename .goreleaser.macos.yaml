@@ -48,16 +48,19 @@ before_publish:
       VERSION="{{ .Version }}"
       NAME="{{ .ProjectName }}"
 
+      OUTDIR="dist"
+      mkdir -p "$OUTDIR"
+
       # Stage a simple payload that installs to /usr/local/bin
       WORK="pkg-${ARCH}"
       PKGROOT="$WORK/root"
       mkdir -p "$PKGROOT/usr/local/bin"
       install -m 0755 "$BIN" "$PKGROOT/usr/local/bin/tnr"
 
-      PKG_UNSIGNED="${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg"
-      PKG_SIGNED="${NAME}_${VERSION}_darwin_${ARCH}.pkg"
+      PKG_UNSIGNED="${OUTDIR}/${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg"
+      PKG_SIGNED="${OUTDIR}/${NAME}_${VERSION}_darwin_${ARCH}.pkg"
 
-      # Build component package
+      echo "🔧 Building unsigned package: $PKG_UNSIGNED"
       pkgbuild \
         --root "$PKGROOT" \
         --identifier "com.thundercompute.tnr" \
@@ -65,27 +68,23 @@ before_publish:
         --install-location "/" \
         "$PKG_UNSIGNED"
 
-      # Sign the installer package with your Developer ID Installer cert
+      echo "🔏 Signing package to: $PKG_SIGNED"
       productsign \
         --sign "{{ .Env.DEVELOPER_ID_INSTALLER }}" \
         "$PKG_UNSIGNED" "$PKG_SIGNED"
 
-      if [ ! -f "$PKG_SIGNED" ]; then
-        echo "❌ ERROR: missing $PKG_SIGNED after productsign"
-        echo "Contents of current dir:"
-        pwd && ls -al
-        exit 1
-      fi
+      # Fail fast if signing didn’t actually produce the file
+      [ -f "$PKG_SIGNED" ] || { echo "❌ missing $PKG_SIGNED"; ls -al "$OUTDIR"; exit 1; }
 
-      echo "✅ Signed package exists: $PKG_SIGNED"
-      echo "Checking signature:"
+      echo "✅ Signed package: $PKG_SIGNED"
       pkgutil --check-signature "$PKG_SIGNED" || exit 1
 
-      pkgutil --check-signature "$PKG_SIGNED" || exit 1
+      # Clean staging + unsigned
       rm -rf "$WORK" "$PKG_UNSIGNED"
 
       # Optional: notarize + staple if envs are present
       if [ -n "${MACOS_NOTARY_KEY_ID:-}" ] && [ -n "${MACOS_NOTARY_ISSUER_ID:-}" ] && [ -n "${MACOS_NOTARY_KEY_PATH:-}" ]; then
+        echo "🚀 Notarizing..."
         xcrun notarytool submit "$PKG_SIGNED" \
           --key "$MACOS_NOTARY_KEY_PATH" \
           --key-id "$MACOS_NOTARY_KEY_ID" \
@@ -93,6 +92,9 @@ before_publish:
           --wait
         xcrun stapler staple "$PKG_SIGNED"
       fi
+
+      echo "📦 dist contents:"
+      ls -al "$OUTDIR"
       EOF
 
 # notarize:
