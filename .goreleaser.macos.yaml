@@ -111,7 +111,7 @@ checksum:
 
 sboms:
   - id: sbom
-    artifacts: [archive]
+    artifacts: archive
 
 blobs:
   - provider: s3
