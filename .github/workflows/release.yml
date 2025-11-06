@@ -1,3 +1,16 @@
+# GitHub Actions workflow for releasing Thunder CLI across all platforms
+# Triggered on version tags (e.g., v1.0.0)
+# 
+# This workflow consists of 3 separate release jobs:
+# 1. macos_release  - Builds, signs, notarizes, and publishes macOS packages (.pkg) and Homebrew formula
+# 2. windows_release - Builds and publishes Windows installers (.msi), Scoop, and Winget packages
+# 3. ubuntu_release - Builds and publishes Linux packages (.deb, .rpm, .apk)
+#
+# Each job uses a separate GoReleaser config file:
+# - .goreleaser.macos.yaml
+# - .goreleaser.windows.yaml
+# - .goreleaser.ubuntu.yaml
+
 name: release
 
 on:
@@ -6,203 +19,247 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
-  id-token: write
+  contents: write  # Required to create GitHub releases and upload assets
+  id-token: write  # Required for AWS OIDC authentication
 
 jobs:
-  # macos_release:
-  #   runs-on: macos-latest
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #       with: { fetch-depth: 0 }
+  # ============================================================================
+  # macOS Release Job
+  # ============================================================================
+  # Builds universal binaries for Intel (amd64) and Apple Silicon (arm64)
+  # Signs binaries and .pkg installers with Developer ID certificates
+  # Notarizes packages with Apple's notary service
+  # Publishes to GitHub releases, S3, and Homebrew tap
+  # ============================================================================
+  macos_release:
+    runs-on: macos-latest
+    steps:
+      # Check out the repository with full git history for changelog generation
+      - name: Checkout
+        uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
 
-  #     - name: Setup Go
-  #       uses: actions/setup-go@v5
-  #       with: { go-version: '1.25.x' }
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with: { go-version: '1.25.x' }
 
-  #     - name: Configure AWS credentials (OIDC)
-  #       uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-  #         aws-region: ${{ secrets.AWS_REGION }}
+      # Configure AWS credentials using OIDC (no long-lived secrets needed)
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-  #     - name: Install Syft (for SBOM)
-  #       run: |
-  #         curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-  #         syft version
+      # Install Syft for generating Software Bill of Materials
+      - name: Install Syft (for SBOM)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft version
 
-  #     - name: Prepare Apple certificate and keychain
-  #       env:
-  #         MACOS_CERT_P12_APP: ${{ secrets.MACOS_CERT_P12_APP }}
-  #         MACOS_CERT_P12_INSTALLER: ${{ secrets.MACOS_CERT_P12_INSTALLER }}
-  #         MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-  #       run: |
-  #         set -euo pipefail
-  #         CERT_PATH="$RUNNER_TEMP/apple-cert.p12"
-  #         echo "$MACOS_CERT_P12_APP" | base64 -D > "$CERT_PATH"
-  #         /usr/bin/openssl pkcs12 -in "$CERT_PATH" -noout -passin pass:"$MACOS_CERT_PASSWORD"
-  #         security create-keychain -p "" build.keychain
-  #         security set-keychain-settings -lut 21600 build.keychain
-  #         security unlock-keychain -p "" build.keychain
-  #         security import "$CERT_PATH" -k ~/Library/Keychains/build.keychain \
-  #           -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productsign
+      # Set up Apple Developer certificates for code signing
+      # Creates a temporary build keychain and imports both:
+      # - Developer ID Application (for signing binaries)
+      # - Developer ID Installer (for signing .pkg files)
+      - name: Prepare Apple certificate and keychain
+        env:
+          MACOS_CERT_P12_APP: ${{ secrets.MACOS_CERT_P12_APP }}
+          MACOS_CERT_P12_INSTALLER: ${{ secrets.MACOS_CERT_P12_INSTALLER }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          CERT_PATH="$RUNNER_TEMP/apple-cert.p12"
+          echo "$MACOS_CERT_P12_APP" | base64 -D > "$CERT_PATH"
+          /usr/bin/openssl pkcs12 -in "$CERT_PATH" -noout -passin pass:"$MACOS_CERT_PASSWORD"
+          security create-keychain -p "" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import "$CERT_PATH" -k ~/Library/Keychains/build.keychain \
+            -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productsign
 
-  #         # Import Developer ID Installer certificate (for productsign)
-  #         INSTALLER_CERT_PATH="$RUNNER_TEMP/installer-cert.p12"
-  #         echo "$MACOS_CERT_P12_INSTALLER" | base64 -D > "$INSTALLER_CERT_PATH"
-  #         /usr/bin/openssl pkcs12 -in "$INSTALLER_CERT_PATH" -noout -passin pass:"$MACOS_CERT_PASSWORD"
-  #         security import "$INSTALLER_CERT_PATH" -k ~/Library/Keychains/build.keychain \
-  #           -P "$MACOS_CERT_PASSWORD" -T /usr/bin/productsign -T /usr/bin/codesign
+          # Import Developer ID Installer certificate (for productsign)
+          INSTALLER_CERT_PATH="$RUNNER_TEMP/installer-cert.p12"
+          echo "$MACOS_CERT_P12_INSTALLER" | base64 -D > "$INSTALLER_CERT_PATH"
+          /usr/bin/openssl pkcs12 -in "$INSTALLER_CERT_PATH" -noout -passin pass:"$MACOS_CERT_PASSWORD"
+          security import "$INSTALLER_CERT_PATH" -k ~/Library/Keychains/build.keychain \
+            -P "$MACOS_CERT_PASSWORD" -T /usr/bin/productsign -T /usr/bin/codesign
 
-  #         # Allow codesign/productsign to access keys without prompts
-  #         security set-key-partition-list -S apple-tool:,apple:,codesign:,productsign: -s -k "" ~/Library/Keychains/build.keychain
-  #         security list-keychains -d user -s ~/Library/Keychains/build.keychain
-  #         security default-keychain -s ~/Library/Keychains/build.keychain
-  #         security find-identity -p codesigning -v || true
-  #         echo "MACOS_SIGN_P12_PATH=$CERT_PATH" >> "$GITHUB_ENV"
+          # Allow codesign/productsign to access keys without prompts
+          security set-key-partition-list -S apple-tool:,apple:,codesign:,productsign: -s -k "" ~/Library/Keychains/build.keychain
+          security list-keychains -d user -s ~/Library/Keychains/build.keychain
+          security default-keychain -s ~/Library/Keychains/build.keychain
+          security find-identity -p codesigning -v || true
+          echo "MACOS_SIGN_P12_PATH=$CERT_PATH" >> "$GITHUB_ENV"
 
-  #     - name: Prepare Notary API key
-  #       env:
-  #         MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-  #       run: |
-  #         set -euo pipefail
+      # Prepare the Apple Notary API key for notarization
+      # Converts the key to proper PKCS#8 format if needed
+      - name: Prepare Notary API key
+        env:
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: |
+          set -euo pipefail
         
-  #         RAW="$RUNNER_TEMP/notary-key.raw"
-  #         OUT="$RUNNER_TEMP/notary-key.p8"
+          RAW="$RUNNER_TEMP/notary-key.raw"
+          OUT="$RUNNER_TEMP/notary-key.p8"
         
-  #         # Write secret as-is
-  #         printf "%s" "$MACOS_NOTARY_KEY" > "$RAW"
+          # Write secret as-is
+          printf "%s" "$MACOS_NOTARY_KEY" > "$RAW"
         
-  #         # If first line doesn't look like PEM, assume it's base64 and decode
-  #         if ! head -n1 "$RAW" | grep -q "BEGIN "; then
-  #           base64 -D < "$RAW" > "$RAW.dec" || { echo "Base64 decode failed"; exit 1; }
-  #           mv "$RAW.dec" "$RAW"
-  #         fi
+          # If first line doesn't look like PEM, assume it's base64 and decode
+          if ! head -n1 "$RAW" | grep -q "BEGIN "; then
+            base64 -D < "$RAW" > "$RAW.dec" || { echo "Base64 decode failed"; exit 1; }
+            mv "$RAW.dec" "$RAW"
+          fi
         
-  #         # Normalize newlines (remove CR characters)
-  #         tr -d '\r' < "$RAW" > "$RAW.norm"
-  #         mv "$RAW.norm" "$RAW"
-  #         chmod 600 "$RAW"
+          # Normalize newlines (remove CR characters)
+          tr -d '\r' < "$RAW" > "$RAW.norm"
+          mv "$RAW.norm" "$RAW"
+          chmod 600 "$RAW"
         
-  #         # Convert SEC1 EC → PKCS#8 if needed
-  #         if head -n1 "$RAW" | grep -q "BEGIN EC PRIVATE KEY"; then
-  #           /usr/bin/openssl pkcs8 -topk8 -nocrypt -inform PEM -outform PEM -in "$RAW" -out "$OUT"
-  #         else
-  #           cp "$RAW" "$OUT"
-  #         fi
+          # Convert SEC1 EC → PKCS#8 if needed
+          if head -n1 "$RAW" | grep -q "BEGIN EC PRIVATE KEY"; then
+            /usr/bin/openssl pkcs8 -topk8 -nocrypt -inform PEM -outform PEM -in "$RAW" -out "$OUT"
+          else
+            cp "$RAW" "$OUT"
+          fi
         
-  #         # Validate key parses
-  #         /usr/bin/openssl pkey -in "$OUT" -noout -text >/dev/null
+          # Validate key parses
+          /usr/bin/openssl pkey -in "$OUT" -noout -text >/dev/null
         
-  #         echo "MACOS_NOTARY_KEY_PATH=$OUT" >> "$GITHUB_ENV"
+          echo "MACOS_NOTARY_KEY_PATH=$OUT" >> "$GITHUB_ENV"
 
-  #     - name: "GoReleaser (macOS: build + sign + notarize + publish)"
-  #       uses: goreleaser/goreleaser-action@v6.4.0
-  #       with:
-  #         distribution: goreleaser-pro
-  #         version: latest
-  #         args: release --clean --config .goreleaser.macos.yaml --skip=announce
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #         GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-  #         GH_PAT: ${{ secrets.GH_PAT }}
-  #         TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
-  #         AWS_REGION: ${{ secrets.AWS_REGION }}
+      # Run GoReleaser for macOS
+      # Uses goreleaser-pro for advanced features (signing, notarization)
+      # Config: .goreleaser.macos.yaml
+      - name: "GoReleaser (macOS: build + sign + notarize + publish)"
+        uses: goreleaser/goreleaser-action@v6.4.0
+        with:
+          distribution: goreleaser-pro
+          version: latest
+          args: release --clean --config .goreleaser.macos.yaml --skip=announce
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
 
-  #         # Binary signing
-  #         DEVELOPER_ID_APP: ${{ secrets.DEVELOPER_ID_APP }}
-  #         MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12}}
-  #         MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          # Binary signing
+          DEVELOPER_ID_APP: ${{ secrets.DEVELOPER_ID_APP }}
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12}}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
 
-  #         # PKG signing & notarization
-  #         DEVELOPER_ID_INSTALLER: ${{ secrets.DEVELOPER_ID_INSTALLER }}
-  #         MACOS_NOTARY_KEY_PATH: ${{ env.MACOS_NOTARY_KEY_PATH }}
-  #         MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-  #         MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
-  #         MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          # PKG signing & notarization
+          DEVELOPER_ID_INSTALLER: ${{ secrets.DEVELOPER_ID_INSTALLER }}
+          MACOS_NOTARY_KEY_PATH: ${{ env.MACOS_NOTARY_KEY_PATH }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
 
-  # windows_release:
-  #   runs-on: windows-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with: { fetch-depth: 0 }
+  # ============================================================================
+  # Windows Release Job
+  # ============================================================================
+  # Builds binaries for Windows amd64 and arm64
+  # Creates MSI installers using WiX v4
+  # Publishes to GitHub releases, S3, Scoop bucket, and creates Winget PR
+  # ============================================================================
+  windows_release:
+    runs-on: windows-latest
+    steps:
+      # Check out the repository with full git history for changelog generation
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
 
-  #     - uses: actions/setup-go@v5
-  #       with: { go-version: '1.25.x' }
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.25.x' }
 
-  #     - name: Configure AWS credentials (OIDC)
-  #       uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-  #         aws-region: ${{ secrets.AWS_REGION }}
+      # Configure AWS credentials using OIDC
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-  #     - name: Install WiX v4
-  #       shell: pwsh
-  #       run: |
-  #         # Install WiX v4 as a .NET tool (the proper way for WiX v4)
-  #         dotnet tool install --global wix --version 4.*
+      # Install WiX Toolset v4 for creating MSI installers
+      - name: Install WiX v4
+        shell: pwsh
+        run: |
+          # Install WiX v4 as a .NET tool (the proper way for WiX v4)
+          dotnet tool install --global wix --version 4.*
           
-  #         # Add .NET tools to PATH
-  #         $dotnetToolsPath = "$env:USERPROFILE\.dotnet\tools"
-  #         $env:PATH = "$dotnetToolsPath;$env:PATH"
-  #         echo "$dotnetToolsPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # Add .NET tools to PATH
+          $dotnetToolsPath = "$env:USERPROFILE\.dotnet\tools"
+          $env:PATH = "$dotnetToolsPath;$env:PATH"
+          echo "$dotnetToolsPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           
-  #         # Verify installation
-  #         wix --version
+          # Verify installation
+          wix --version
 
-  #     - name: Install Syft (for SBOM)
-  #       shell: pwsh
-  #       run: |
-  #         # Download and install Syft for Windows
-  #         $syftVersion = "v1.18.0"
-  #         $syftUrl = "https://github.com/anchore/syft/releases/download/$syftVersion/syft_1.18.0_windows_amd64.zip"
-  #         $syftZip = "$env:TEMP\syft.zip"
-  #         $syftDir = "$env:TEMP\syft"
+      # Install Syft for generating Software Bill of Materials
+      - name: Install Syft (for SBOM)
+        shell: pwsh
+        run: |
+          # Download and install Syft for Windows
+          $syftVersion = "v1.18.0"
+          $syftUrl = "https://github.com/anchore/syft/releases/download/$syftVersion/syft_1.18.0_windows_amd64.zip"
+          $syftZip = "$env:TEMP\syft.zip"
+          $syftDir = "$env:TEMP\syft"
           
-  #         Invoke-WebRequest -Uri $syftUrl -OutFile $syftZip
-  #         Expand-Archive -Path $syftZip -DestinationPath $syftDir -Force
+          Invoke-WebRequest -Uri $syftUrl -OutFile $syftZip
+          Expand-Archive -Path $syftZip -DestinationPath $syftDir -Force
           
-  #         # Add to PATH
-  #         $env:PATH = "$syftDir;$env:PATH"
-  #         echo "$syftDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # Add to PATH
+          $env:PATH = "$syftDir;$env:PATH"
+          echo "$syftDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           
-  #         # Verify installation
-  #         syft version
+          # Verify installation
+          syft version
 
-  #     - name: "GoReleaser (Windows: build MSI + publish)"
-  #       uses: goreleaser/goreleaser-action@v6.4.0
-  #       with:
-  #         distribution: goreleaser-pro
-  #         version: latest
-  #         args: release --clean --config .goreleaser.windows.yaml --skip=announce
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #         GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-  #         GH_PAT: ${{ secrets.GH_PAT }}
-  #         TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
-  #         AWS_REGION: ${{ secrets.AWS_REGION }}
+      # Run GoReleaser for Windows
+      # Creates MSI installers and updates Scoop/Winget package managers
+      # Config: .goreleaser.windows.yaml
+      - name: "GoReleaser (Windows: build MSI + publish)"
+        uses: goreleaser/goreleaser-action@v6.4.0
+        with:
+          distribution: goreleaser-pro
+          version: latest
+          args: release --clean --config .goreleaser.windows.yaml --skip=announce
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
 
-  #     - name: Show built MSI files
-  #       shell: pwsh
-  #       run: |
-  #         echo "=== Dist directory contents ==="
-  #         Get-ChildItem -Path dist -Recurse | Format-Table -Property Mode, LastWriteTime, Length, Name
-  #         echo ""
-  #         echo "=== Looking for MSI files ==="
-  #         Get-ChildItem -Path dist -Filter *.msi -Recurse | Format-List
+      # Debug step: Display MSI files created
+      - name: Show built MSI files
+        shell: pwsh
+        run: |
+          echo "=== Dist directory contents ==="
+          Get-ChildItem -Path dist -Recurse | Format-Table -Property Mode, LastWriteTime, Length, Name
+          echo ""
+          echo "=== Looking for MSI files ==="
+          Get-ChildItem -Path dist -Filter *.msi -Recurse | Format-List
 
-  #     - name: Verify WiX is available
-  #       shell: pwsh
-  #       run: |
-  #         echo "=== WiX Version ==="
-  #         wix --version
-  #         echo "=== WiX Path ==="
-  #         Get-Command wix | Format-List
+      # Debug step: Verify WiX installation
+      - name: Verify WiX is available
+        shell: pwsh
+        run: |
+          echo "=== WiX Version ==="
+          wix --version
+          echo "=== WiX Path ==="
+          Get-Command wix | Format-List
 
+  # ============================================================================
+  # Linux/Ubuntu Release Job
+  # ============================================================================
+  # Builds binaries for Linux amd64 and arm64
+  # Creates distribution packages (.deb, .rpm, .apk)
+  # Publishes to GitHub releases and S3
+  # ============================================================================
   ubuntu_release:
     runs-on: ubuntu-latest
     steps:
+      # Check out the repository with full git history for changelog generation
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -213,9 +270,11 @@ jobs:
         with:
           go-version: '1.25.x'
 
+      # Run tests before building to ensure quality
       - name: Run tests
         run: go test ./... -v
 
+      # Configure AWS credentials using OIDC (no long-lived secrets needed)
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -227,6 +286,10 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
           syft version
 
+      # Run GoReleaser for Linux
+      # Creates .deb, .rpm, and .apk packages
+      # IMPORTANT: NFPM packages are auto-included in releases - don't add to extra_files
+      # Config: .goreleaser.ubuntu.yaml
       - name: "GoReleaser (Ubuntu: linux publish)"
         uses: goreleaser/goreleaser-action@v6.4.0
         with:

@@ -1,9 +1,15 @@
+# GoReleaser configuration for macOS builds
+# This file handles building, code signing, notarizing, and publishing macOS packages (.pkg)
+# Run by GitHub Actions in the macos_release job
+# See: .github/workflows/release.yml
+
 version: 2
 project_name: tnr
 
 before:
   hooks: []
 
+# Build configuration for macOS binaries (Intel and Apple Silicon)
 builds:
   - id: tnr
     main: ./main.go
@@ -17,6 +23,7 @@ builds:
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildVersion={{ .Version }}
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildCommit={{ .Commit }}
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildDate={{ .Date }}
+    # Post-build hook: Signs binaries, creates .pkg installer, signs .pkg, and notarizes
     hooks:
       post:
         - |
@@ -93,6 +100,8 @@ builds:
           ls -lh dist/*.pkg;
           '
 
+# macOS notarization configuration (alternative method, not currently used)
+# The notarization happens in the post-build hook above instead
 notarize:
   macos:
     - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
@@ -107,6 +116,7 @@ notarize:
         wait: true
         timeout: 20m
 
+# Archive configuration (.tar.gz for macOS)
 archives:
   - id: archive
     ids: [tnr]
@@ -115,13 +125,18 @@ archives:
       - LICENSE
       - README.md
 
+# Checksum file for macOS artifacts
 checksum:
   name_template: "checksums-macos.txt"
 
+# Software Bill of Materials (SBOM) generation
 sboms:
   - id: sbom
     artifacts: archive
 
+# S3 upload configuration
+# Uploads archives and .pkg installers to S3 for distribution
+# extra_files needed here because .pkg files are created by custom hook
 blobs:
   - provider: s3
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
@@ -130,6 +145,8 @@ blobs:
     extra_files:
       - glob: "dist/*.pkg"
 
+# GitHub release configuration
+# extra_files needed here to include .pkg installers in GitHub releases
 release:
   disable: false
   draft: false
@@ -137,6 +154,7 @@ release:
   extra_files:
     - glob: "dist/*.pkg"
 
+# Changelog generation settings
 changelog:
   use: github
   sort: asc
@@ -145,6 +163,9 @@ changelog:
       - '^docs:'
       - '^test:'
 
+# Homebrew tap integration
+# Automatically updates the Homebrew tap with new releases
+# Users can install via: brew tap Thunder-Compute/tnr; brew install tnr
 brews:
   - name: tnr
     ids: [archive]

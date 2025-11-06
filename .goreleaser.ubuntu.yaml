@@ -1,9 +1,15 @@
+# GoReleaser configuration for Linux builds
+# This file handles building and publishing Linux packages (.deb, .rpm, .apk)
+# Run by GitHub Actions in the ubuntu_release job
+# See: .github/workflows/release.yml
+
 version: 2
 project_name: tnr
 
 before:
   hooks: []
 
+# Build configuration for Linux binaries
 builds:
   - id: tnr
     main: ./main.go
@@ -18,6 +24,8 @@ builds:
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildCommit={{ .Commit }}
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildDate={{ .Date }}
 
+# Linux package configuration (.deb, .rpm, .apk)
+# These packages are automatically included in GitHub releases - DO NOT add to release.extra_files
 nfpms:
   - id: tnr-packages
     package_name: tnr
@@ -40,6 +48,7 @@ nfpms:
         dst: /usr/share/doc/tnr/README.md
     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
+# Archive configuration (.tar.gz)
 archives:
   - id: archive
     ids: [tnr]
@@ -48,13 +57,18 @@ archives:
       - LICENSE
       - README.md
 
+# Checksum file for Linux artifacts
 checksum:
   name_template: "checksums-linux.txt"
 
+# Software Bill of Materials (SBOM) generation
 sboms:
   - id: sbom
     artifacts: archive
 
+# S3 upload configuration
+# Uploads archives and Linux packages to S3 for distribution
+# extra_files needed here because NFPM packages aren't automatically included in blobs
 blobs:
   - provider: s3
     if: '{{ eq .Os "linux" }}'
@@ -66,6 +80,8 @@ blobs:
       - glob: "dist/*.rpm"
       - glob: "dist/*.apk"
 
+# Hook that runs before publishing
+# Updates the latest.json file in S3 to point to this version
 before_publish:
   - cmd: |
       bash -lc '
@@ -75,11 +91,15 @@ before_publish:
           --content-type "application/json"
       '
 
+# GitHub release configuration
+# NOTE: Do NOT add extra_files here for .deb/.rpm/.apk - they're auto-included from nfpms
+# Adding them causes "422 already_exists" errors
 release:
   disable: false
   draft: false
   prerelease: auto
 
+# Changelog generation settings
 changelog:
   use: github
   sort: asc
