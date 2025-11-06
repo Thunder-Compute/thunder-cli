@@ -67,3 +67,29 @@ changelog:
     exclude:
       - '^docs:'
       - '^test:'
+
+scoops:
+  - name: tnr
+    ids: [archive]
+    url_template: "https://{{ .Env.TNR_S3_BUCKET }}.s3.{{ .Env.AWS_REGION }}.amazonaws.com/tnr/releases/{{ .Version }}/windows/{{ .ArtifactName }}"
+    homepage: "https://github.com/Thunder-Compute/thunder-cli"
+    description: "Thunder Compute CLI"
+    license: MIT
+    repository:
+      owner: Thunder-Compute
+      name: scoop-bucket
+      token: "{{ .Env.GH_PAT }}"
+
+winget:
+  - name: tnr
+    ids: [tnr-msi]
+    publisher: Thunder Compute
+    short_description: "Thunder Compute CLI"
+    license: MIT
+    publisher_url: "https://www.thundercompute.com"
+    package_identifier: Thunder.tnr
+    repository:
+      owner: Thunder-Compute
+      name: winget-pkgs
+      branch: "tnr-{{ .Version }}"
+      token: "{{ .Env.GH_PAT }}"
