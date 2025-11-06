@@ -135,7 +135,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v6.4.0
         with:
           distribution: goreleaser-pro
-          version: latest
+          version: "~> v2"
           args: release --clean --config .goreleaser.macos.yaml --skip=announce
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -242,7 +242,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v6.4.0
         with:
           distribution: goreleaser-pro
-          version: latest
+          version: "~> v2"
           args: release --clean --config .goreleaser.windows.yaml --skip=announce
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -371,7 +371,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v6.4.0
         with:
           distribution: goreleaser-pro
-          version: latest
+          version: "~> v2"
           args: release --clean --config .goreleaser.ubuntu.yaml --skip=announce
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
