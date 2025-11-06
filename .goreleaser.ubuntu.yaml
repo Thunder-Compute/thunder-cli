@@ -18,6 +18,28 @@ builds:
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildCommit={{ .Commit }}
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildDate={{ .Date }}
 
+nfpms:
+  - id: tnr-packages
+    package_name: tnr
+    builds: [tnr]
+    vendor: Thunder Compute
+    homepage: https://github.com/Thunder-Compute/thunder-cli
+    maintainer: Thunder Compute <support@thundercompute.com>
+    description: |
+      Thunder Compute CLI - Manage Thunder GPU compute instances
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/tnr/LICENSE
+      - src: README.md
+        dst: /usr/share/doc/tnr/README.md
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
 archives:
   - id: archive
     ids: [tnr]
@@ -39,6 +61,10 @@ blobs:
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}/linux"
+    extra_files:
+      - glob: "dist/*.deb"
+      - glob: "dist/*.rpm"
+      - glob: "dist/*.apk"
 
 before_publish:
   - cmd: |
@@ -53,6 +79,10 @@ release:
   disable: false
   draft: false
   prerelease: auto
+  extra_files:
+    - glob: "dist/*.deb"
+    - glob: "dist/*.rpm"
+    - glob: "dist/*.apk"
 
 changelog:
   use: github
