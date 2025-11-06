@@ -79,10 +79,6 @@ release:
   disable: false
   draft: false
   prerelease: auto
-  extra_files:
-    - glob: "dist/*.deb"
-    - glob: "dist/*.rpm"
-    - glob: "dist/*.apk"
 
 changelog:
   use: github
