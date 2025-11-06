@@ -163,6 +163,8 @@ jobs:
   # Publishes to GitHub releases, S3, Scoop bucket, and creates Winget PR
   # ============================================================================
   windows_release:
+    # Security: Only run on the main repository, never on forks
+    if: github.repository == 'Thunder-Compute/thunder-cli'
     runs-on:
       - self-hosted
       - Windows
