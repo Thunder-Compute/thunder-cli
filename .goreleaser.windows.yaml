@@ -82,7 +82,7 @@ scoops:
 
 winget:
   - name: tnr
-    ids: [tnr-msi]
+    ids: [archive]
     publisher: Thunder Compute
     short_description: "Thunder Compute CLI"
     license: MIT
