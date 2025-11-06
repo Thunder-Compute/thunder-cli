@@ -183,25 +183,36 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # Install .NET SDK (required for WiX v4)
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.x'
-
-      # Install WiX Toolset v4 for creating MSI installers
-      - name: Install WiX v4
+      # Install .NET SDK and WiX v4
+      # Using temp directory to avoid permission issues with self-hosted runners
+      - name: Install .NET SDK and WiX v4
         shell: pwsh
         run: |
-          # Install WiX v4 as a .NET tool (the proper way for WiX v4)
-          dotnet tool install --global wix --version 4.*
+          # Install .NET SDK to temp directory (avoids Program Files permission issues)
+          $dotnetInstallDir = Join-Path $env:RUNNER_TEMP "dotnet"
+          $env:DOTNET_INSTALL_DIR = $dotnetInstallDir
           
-          # Add .NET tools to PATH
-          $dotnetToolsPath = "$env:USERPROFILE\.dotnet\tools"
+          # Download and run .NET install script
+          $installScript = Join-Path $env:RUNNER_TEMP "dotnet-install.ps1"
+          Invoke-WebRequest -Uri "https://dot.net/v1/dotnet-install.ps1" -OutFile $installScript
+          & $installScript -Channel 8.0 -InstallDir $dotnetInstallDir
+          
+          # Add .NET to PATH for this session and future steps
+          $env:PATH = "$dotnetInstallDir;$env:PATH"
+          echo $dotnetInstallDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          
+          # Verify .NET installation
+          & "$dotnetInstallDir\dotnet.exe" --version
+          
+          # Install WiX v4 as a .NET tool
+          & "$dotnetInstallDir\dotnet.exe" tool install --global wix --version 4.*
+          
+          # Add .NET global tools to PATH
+          $dotnetToolsPath = Join-Path $env:USERPROFILE ".dotnet\tools"
           $env:PATH = "$dotnetToolsPath;$env:PATH"
-          echo "$dotnetToolsPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo $dotnetToolsPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           
-          # Verify installation
+          # Verify WiX installation
           wix --version
 
       # Install Syft for generating Software Bill of Materials
