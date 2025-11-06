@@ -145,22 +145,21 @@ changelog:
       - '^docs:'
       - '^test:'
 
-# brews:
-#   - name: tnr
-#     ids: [archive]
-#     repository:
-#       owner: Thunder-Compute
-#       name: homebrew-tnr
-#       token: "{{ .Env.GH_PAT }}"
-#     url_template: "https://{{ .Env.TNR_S3_BUCKET }}.s3.{{ .Env.AWS_REGION }}.amazonaws.com/tnr/releases/{{ .Version }}/{{ .ArtifactName }}"
-#     directory: Formula
-#     commit_author:
-#       name: goreleaser
-#       email: goreleaser@users.noreply.github.com
-#     description: "Thunder Compute CLI"
-#     homepage: "https://github.com/Thunder-Compute/thunder-cli"
-#     license: MIT
-#     test: |
-#       system "#{bin}/tnr", "--version"
-#     install: |
-#       bin.install "tnr"
+brews:
+  - name: tnr
+    ids: [archive]
+    repository:
+      owner: Thunder-Compute
+      name: homebrew-tnr
+      token: "{{ .Env.GH_PAT }}"
+    directory: Formula
+    commit_author:
+      name: goreleaser
+      email: goreleaser@users.noreply.github.com
+    description: "Thunder Compute CLI"
+    homepage: "https://github.com/Thunder-Compute/thunder-cli"
+    license: MIT
+    test: |
+      system "#{bin}/tnr", "--version"
+    install: |
+      bin.install "tnr"
