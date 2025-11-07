@@ -63,6 +63,8 @@ signs:
       - scripts/sign-windows-artifact.ps1
       - -ArtifactPath
       - ${artifact}
+      - -SignaturePath
+      - ${signature}
 
 # Software Bill of Materials (SBOM) generation
 sboms:
