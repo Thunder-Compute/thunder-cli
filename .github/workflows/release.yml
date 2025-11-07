@@ -269,57 +269,43 @@ jobs:
           syft version
 
       # Run GoReleaser for Windows
-      # Builds MSI installers but skips publishing (we'll publish after signing)
+      # Creates MSI installers and updates Scoop/Winget package managers
+      # MSI files are signed with YubiKey via before_publish hook
       # Config: .goreleaser.windows.yaml
-      - name: "GoReleaser (Windows: build MSI)"
+      - name: "GoReleaser (Windows: build + sign MSI + publish)"
         uses: goreleaser/goreleaser-action@v6.4.0
         with:
           distribution: goreleaser-pro
           version: "~> v2"
-          args: release --clean --config .goreleaser.windows.yaml --skip=announce,publish
+          args: release --clean --config .goreleaser.windows.yaml --skip=announce
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
           GH_PAT: ${{ secrets.GH_PAT }}
           TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
+          # YubiKey signing credentials (used by before_publish hook)
           CERT_THUMBPRINT: ${{ secrets.CERT_THUMBPRINT }}
           TIMESTAMP_SERVER: ${{ secrets.TIMESTAMP_SERVER }}
 
-      # Install GitHub CLI
-      - name: Install GitHub CLI
+      # Debug step: Display MSI files created
+      - name: Show built MSI files
         shell: pwsh
         run: |
-          if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-            Write-Host "Installing GitHub CLI..."
-            $ghVersion = "2.62.0"
-            $ghUrl = "https://github.com/cli/cli/releases/download/v$ghVersion/gh_${ghVersion}_windows_amd64.zip"
-            $ghZip = "$env:TEMP\gh.zip"
-            $ghDir = "$env:TEMP\gh"
-            
-            Invoke-WebRequest -Uri $ghUrl -OutFile $ghZip
-            Expand-Archive -Path $ghZip -DestinationPath $ghDir -Force
-            
-            $env:PATH = "$ghDir\bin;$env:PATH"
-            echo "$ghDir\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            
-            gh --version
-          } else {
-            Write-Host "GitHub CLI already installed"
-            gh --version
-          }
+          echo "=== Dist directory contents ==="
+          Get-ChildItem -Path dist -Recurse | Format-Table -Property Mode, LastWriteTime, Length, Name
+          echo ""
+          echo "=== Looking for MSI files ==="
+          Get-ChildItem -Path dist -Filter *.msi -Recurse | Format-List
 
-      # Upload signed MSI files to GitHub release
-      - name: Upload signed MSI files
+      # Debug step: Verify WiX installation
+      - name: Verify WiX is available
         shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag = if ("${{ inputs.version }}") { "v${{ inputs.version }}" } else { $env:GITHUB_REF -replace 'refs/tags/', '' }
-          Get-ChildItem -Path dist -Filter *.msi -Recurse | ForEach-Object {
-            Write-Host "Uploading: $($_.Name)"
-            gh release upload $tag $_.FullName --clobber
-          }
+          echo "=== WiX Version ==="
+          wix --version
+          echo "=== WiX Path ==="
+          Get-Command wix | Format-List
 
   # ============================================================================
   # Linux/Ubuntu Release Job
