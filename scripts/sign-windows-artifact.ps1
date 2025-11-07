@@ -1,10 +1,7 @@
-# Signs the provided artifact in-place using signtool and a YubiKey-backed certificate.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$ArtifactPath,
-
-    [Parameter(Mandatory = $false)]
     [string]$SignaturePath
 )
 
@@ -14,23 +11,28 @@ if (-not (Test-Path -LiteralPath $ArtifactPath)) {
     throw "Artifact not found: $ArtifactPath"
 }
 
-if (-not $env:CERT_THUMBPRINT) {
-    throw 'CERT_THUMBPRINT environment variable is required'
+foreach ($name in 'CERT_THUMBPRINT', 'TIMESTAMP_SERVER') {
+    if (-not $env:$name) {
+        throw "$name environment variable is required"
+    }
 }
 
-if (-not $env:TIMESTAMP_SERVER) {
-    throw 'TIMESTAMP_SERVER environment variable is required'
-}
-
-# Resolve signtool.exe from Windows SDK installations
 $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $signtool) {
     throw 'signtool.exe not found. Install the Windows 10 SDK on the runner.'
 }
 
+function Invoke-SignTool {
+    param([string[]]$Arguments, [string]$ErrorMessage)
+    & $signtool.FullName @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw $ErrorMessage
+    }
+}
+
 Write-Host "Signing artifact: $ArtifactPath" -ForegroundColor Cyan
 
-$signArgs = @(
+Invoke-SignTool -Arguments @(
     'sign',
     '/sha1', $env:CERT_THUMBPRINT,
     '/fd', 'sha256',
@@ -39,58 +41,38 @@ $signArgs = @(
     '/debug',
     '/v',
     $ArtifactPath
-)
+) -ErrorMessage "signtool sign failed for $ArtifactPath"
 
-& $signtool.FullName @signArgs
-
-if ($LASTEXITCODE -ne 0) {
-    throw "signtool sign failed for $ArtifactPath"
-}
-
-Write-Host 'Signature verification' -ForegroundColor Gray
-& $signtool.FullName verify /pa /v $ArtifactPath
-if ($LASTEXITCODE -ne 0) {
-    throw "signtool verify failed for $ArtifactPath"
-}
+Invoke-SignTool -Arguments @('verify', '/pa', '/v', $ArtifactPath) -ErrorMessage "signtool verify failed for $ArtifactPath"
 
 if ($SignaturePath) {
-    $signatureDir = Split-Path -Parent $SignaturePath
-    if ($signatureDir -and -not (Test-Path -LiteralPath $signatureDir)) {
-        New-Item -ItemType Directory -Path $signatureDir -Force | Out-Null
+    $sigDir = Split-Path -Parent $SignaturePath
+    if ($sigDir -and -not (Test-Path -LiteralPath $sigDir)) {
+        New-Item -ItemType Directory -Path $sigDir -Force | Out-Null
     }
 
-    # Use signtool to emit a detached PKCS#7 signature so GoReleaser has a file to upload.
-    $tempDir = Join-Path -Path $env:TEMP -ChildPath ("msi-signature-" + [guid]::NewGuid())
-    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+    $p7Dir = if ($sigDir) { $sigDir } else { '.' }
+    $p7Name = (Split-Path -Leaf $ArtifactPath) + '.p7'
+    $p7Path = Join-Path -Path $p7Dir -ChildPath $p7Name
 
-    try {
-        $p7Args = @(
-            'sign',
-            '/sha1', $env:CERT_THUMBPRINT,
-            '/fd', 'sha256',
-            '/debug',
-            '/v',
-            '/p7', $tempDir,
-            '/p7ce', 'DetachedSignedData',
-            $ArtifactPath
-        )
+    Invoke-SignTool -Arguments @(
+        'sign',
+        '/sha1', $env:CERT_THUMBPRINT,
+        '/fd', 'sha256',
+        '/debug',
+        '/v',
+        '/p7', $p7Dir,
+        '/p7ce', 'DetachedSignedData',
+        '/p7co', '1.3.6.1.4.1.311.2.1.4',
+        $ArtifactPath
+    ) -ErrorMessage "signtool failed to emit PKCS#7 signature for $ArtifactPath"
 
-        & $signtool.FullName @p7Args
-        if ($LASTEXITCODE -ne 0) {
-            throw "signtool failed to emit PKCS#7 signature for $ArtifactPath"
-        }
-
-        $generated = Join-Path -Path $tempDir -ChildPath ((Split-Path -Leaf $ArtifactPath) + '.p7')
-        if (-not (Test-Path -LiteralPath $generated)) {
-            throw "Expected PKCS#7 file was not generated at $generated"
-        }
-
-        Move-Item -LiteralPath $generated -Destination $SignaturePath -Force
-        Write-Host "Detached signature written to $SignaturePath" -ForegroundColor Gray
+    if (-not (Test-Path -LiteralPath $p7Path)) {
+        throw "Expected PKCS#7 file was not generated at $p7Path"
     }
-    finally {
-        Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-    }
+
+    Move-Item -LiteralPath $p7Path -Destination $SignaturePath -Force
+    Write-Host "Detached signature written to $SignaturePath" -ForegroundColor Gray
 }
 
 Write-Host "Successfully signed: $ArtifactPath" -ForegroundColor Green
