@@ -51,6 +51,19 @@ msi:
     replace: false
     mod_timestamp: "{{ .CommitTimestamp }}"
 
+# Sign MSI installers inline so uploaded artifacts are already trusted
+signs:
+  - id: windows-msi
+    artifacts: installer
+    cmd: pwsh
+    args:
+      - -NoLogo
+      - -NoProfile
+      - -File
+      - scripts/sign-windows-artifact.ps1
+      - -ArtifactPath
+      - ${artifact}
+
 # Software Bill of Materials (SBOM) generation
 sboms:
   - id: sbom
