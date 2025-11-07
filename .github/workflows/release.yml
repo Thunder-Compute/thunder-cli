@@ -292,7 +292,6 @@ jobs:
               /fd sha256 `
               /tr $env:TIMESTAMP_SERVER `
               /td sha256 `
-              /csp "Microsoft Base Smart Card Crypto Provider" `
               /debug `
               /v `
               $msi.FullName
