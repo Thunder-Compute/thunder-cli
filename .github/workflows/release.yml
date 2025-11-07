@@ -256,7 +256,7 @@ jobs:
         shell: pwsh
         env:
           YUBIKEY_PIN: ${{ secrets.YUBIKEY_PIN }}
-          CERT_THUMBPRINT: ${{ secrets.WINDOWS_CERT_THUMBPRINT }}
+          CERT_THUMBPRINT: ${{ secrets.CERT_THUMBPRINT }}
           TIMESTAMP_SERVER: ${{ secrets.TIMESTAMP_SERVER }}
         run: |
           # Find all MSI files in dist directory
