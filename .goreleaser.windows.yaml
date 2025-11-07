@@ -9,14 +9,6 @@ project_name: tnr
 before:
   hooks: []
 
-# Sign MSI files before publishing
-before_publish:
-  hooks:
-    - cmd: powershell -ExecutionPolicy Bypass -Command "$msiFiles = Get-ChildItem -Path dist -Filter *.msi -Recurse; if ($msiFiles.Count -eq 0) { Write-Error 'No MSI files found to sign'; exit 1 }; $signtool = Get-ChildItem -Path 'C:\\Program Files (x86)\\Windows Kits\\10\\bin\\*\\x64\\signtool.exe' -ErrorAction SilentlyContinue | Select-Object -First 1; if (-not $signtool) { Write-Error 'signtool.exe not found. Please install Windows SDK.'; exit 1 }; Write-Host \"Using signtool: $($signtool.FullName)\"; foreach ($msi in $msiFiles) { Write-Host \"Signing: $($msi.FullName)\"; & $signtool.FullName sign /sha1 $env:CERT_THUMBPRINT /fd sha256 /tr $env:TIMESTAMP_SERVER /td sha256 /debug /v $msi.FullName; if ($LASTEXITCODE -ne 0) { Write-Error \"Failed to sign $($msi.Name)\"; exit 1 }; Write-Host \"Successfully signed: $($msi.Name)\"; & $signtool.FullName verify /pa /v $msi.FullName; if ($LASTEXITCODE -ne 0) { Write-Warning \"Signature verification failed for $($msi.Name)\" } }"
-      env:
-        - CERT_THUMBPRINT={{ .Env.CERT_THUMBPRINT }}
-        - TIMESTAMP_SERVER={{ .Env.TIMESTAMP_SERVER }}
-
 # Build configuration for Windows binaries
 builds:
   - id: tnr
@@ -31,6 +23,14 @@ builds:
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildVersion={{ .Version }}
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildCommit={{ .Commit }}
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildDate={{ .Date }}
+    hooks:
+      post:
+        - >-
+          pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/sign-windows-artifact.ps1
+          -ArtifactPath "{{ .Path }}"
+        - >-
+          pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-msi.ps1
+          -BinaryPath "{{ .Path }}" -Arch "{{ .Arch }}" -Version "{{ .Version }}" -ProjectName "{{ .ProjectName }}"
 
 # Archive configuration (.zip for Windows)
 archives:
@@ -49,15 +49,15 @@ checksum:
 # Windows MSI installer configuration
 # Uses WiX v4 to create professional Windows installers
 # See: packaging/windows/app.wxs for installer definition
-msi:
-  - id: tnr-msi
-    name: "tnr-{{ .Version }}-{{ .Arch }}"
-    wxs: ./packaging/windows/app.wxs
-    ids: [tnr]
-    goamd64: v1
-    version: v4
-    replace: false
-    mod_timestamp: "{{ .CommitTimestamp }}"
+# msi:
+#   - id: tnr-msi
+#     name: "tnr-{{ .Version }}-{{ .Arch }}"
+#     wxs: ./packaging/windows/app.wxs
+#     ids: [tnr]
+#     goamd64: v1
+#     version: v4
+#     replace: false
+#     mod_timestamp: "{{ .CommitTimestamp }}"
 
 # Software Bill of Materials (SBOM) generation
 sboms:
