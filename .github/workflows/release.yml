@@ -285,11 +285,15 @@ jobs:
             # The /fd sha256 specifies the digest algorithm
             # The /tr parameter specifies the RFC 3161 timestamp server
             # The /td sha256 specifies the timestamp digest algorithm
+            # The /sm flag enables smart card signing mode (required for YubiKey)
+            # The /debug flag provides detailed diagnostic information
             & $signtool.FullName sign `
               /sha1 $env:CERT_THUMBPRINT `
               /fd sha256 `
               /tr $env:TIMESTAMP_SERVER `
               /td sha256 `
+              /sm `
+              /debug `
               /v `
               $msi.FullName
             
