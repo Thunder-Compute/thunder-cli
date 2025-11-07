@@ -12,7 +12,7 @@ if (-not (Test-Path -LiteralPath $ArtifactPath)) {
 }
 
 foreach ($name in 'CERT_THUMBPRINT', 'TIMESTAMP_SERVER') {
-    if (-not $env:$name) {
+    if (-not [Environment]::GetEnvironmentVariable($name)) {
         throw "$name environment variable is required"
     }
 }
