@@ -269,14 +269,14 @@ jobs:
           syft version
 
       # Run GoReleaser for Windows
-      # Creates MSI installers and updates Scoop/Winget package managers
+      # Builds MSI installers but skips publishing (we'll publish after signing)
       # Config: .goreleaser.windows.yaml
-      - name: "GoReleaser (Windows: build MSI + publish)"
+      - name: "GoReleaser (Windows: build MSI)"
         uses: goreleaser/goreleaser-action@v6.4.0
         with:
           distribution: goreleaser-pro
           version: "~> v2"
-          args: release --clean --config .goreleaser.windows.yaml --skip=announce
+          args: release --clean --config .goreleaser.windows.yaml --skip=announce,publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
@@ -343,24 +343,17 @@ jobs:
             }
           }
 
-      # Debug step: Display MSI files created
-      - name: Show built MSI files
+      # Upload signed MSI files to GitHub release
+      - name: Upload signed MSI files
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "=== Dist directory contents ==="
-          Get-ChildItem -Path dist -Recurse | Format-Table -Property Mode, LastWriteTime, Length, Name
-          echo ""
-          echo "=== Looking for MSI files ==="
-          Get-ChildItem -Path dist -Filter *.msi -Recurse | Format-List
-
-      # Debug step: Verify WiX installation
-      - name: Verify WiX is available
-        shell: pwsh
-        run: |
-          echo "=== WiX Version ==="
-          wix --version
-          echo "=== WiX Path ==="
-          Get-Command wix | Format-List
+          $tag = if ("${{ inputs.version }}") { "v${{ inputs.version }}" } else { $env:GITHUB_REF -replace 'refs/tags/', '' }
+          Get-ChildItem -Path dist -Filter *.msi -Recurse | ForEach-Object {
+            Write-Host "Uploading: $($_.Name)"
+            gh release upload $tag $_.FullName --clobber
+          }
 
   # ============================================================================
   # Linux/Ubuntu Release Job
