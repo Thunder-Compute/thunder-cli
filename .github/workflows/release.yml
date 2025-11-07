@@ -343,6 +343,29 @@ jobs:
             }
           }
 
+      # Install GitHub CLI
+      - name: Install GitHub CLI
+        shell: pwsh
+        run: |
+          if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+            Write-Host "Installing GitHub CLI..."
+            $ghVersion = "2.62.0"
+            $ghUrl = "https://github.com/cli/cli/releases/download/v$ghVersion/gh_${ghVersion}_windows_amd64.zip"
+            $ghZip = "$env:TEMP\gh.zip"
+            $ghDir = "$env:TEMP\gh"
+            
+            Invoke-WebRequest -Uri $ghUrl -OutFile $ghZip
+            Expand-Archive -Path $ghZip -DestinationPath $ghDir -Force
+            
+            $env:PATH = "$ghDir\bin;$env:PATH"
+            echo "$ghDir\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            
+            gh --version
+          } else {
+            Write-Host "GitHub CLI already installed"
+            gh --version
+          }
+
       # Upload signed MSI files to GitHub release
       - name: Upload signed MSI files
         shell: pwsh
