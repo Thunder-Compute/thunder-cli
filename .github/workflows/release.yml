@@ -184,189 +184,189 @@ jobs:
   # Creates MSI installers using WiX v4
   # Publishes to GitHub releases, S3, Scoop bucket, and creates Winget PR
   # ============================================================================
-  # windows_release:
-  #   runs-on:
-  #     - self-hosted
-  #     - Windows
-  #     - thunder-yubikey
-  #   steps:
-  #     # Check out the repository with full git history for changelog generation
-  #     - uses: actions/checkout@v4
-  #       with: { fetch-depth: 0 }
+  windows_release:
+    runs-on:
+      - self-hosted
+      - Windows
+      - thunder-yubikey
+    steps:
+      # Check out the repository with full git history for changelog generation
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
 
-  #     # Set version for GoReleaser (from manual input or git tag)
-  #     - name: Set version
-  #       shell: pwsh
-  #       run: |
-  #         if ("${{ inputs.version }}" -ne "") {
-  #           echo "GORELEASER_CURRENT_TAG=v${{ inputs.version }}" >> $env:GITHUB_ENV
-  #           Write-Host "Using manual version: v${{ inputs.version }}"
-  #         } else {
-  #           $tag = $env:GITHUB_REF -replace 'refs/tags/', ''
-  #           Write-Host "Using git tag: $tag"
-  #         }
+      # Set version for GoReleaser (from manual input or git tag)
+      - name: Set version
+        shell: pwsh
+        run: |
+          if ("${{ inputs.version }}" -ne "") {
+            echo "GORELEASER_CURRENT_TAG=v${{ inputs.version }}" >> $env:GITHUB_ENV
+            Write-Host "Using manual version: v${{ inputs.version }}"
+          } else {
+            $tag = $env:GITHUB_REF -replace 'refs/tags/', ''
+            Write-Host "Using git tag: $tag"
+          }
 
-  #     - uses: actions/setup-go@v5
-  #       with: { go-version: '1.25.x' }
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.25.x' }
 
-  #     # Configure AWS credentials using OIDC
-  #     - name: Configure AWS credentials (OIDC)
-  #       uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-  #         aws-region: ${{ secrets.AWS_REGION }}
+      # Configure AWS credentials using OIDC
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-  #     # Install .NET SDK and WiX v4
-  #     # Using temp directory to avoid permission issues with self-hosted runners
-  #     - name: Install .NET SDK and WiX v4
-  #       shell: pwsh
-  #       run: |
-  #         # Install .NET SDK to temp directory (avoids Program Files permission issues)
-  #         $dotnetInstallDir = Join-Path $env:RUNNER_TEMP "dotnet"
-  #         $env:DOTNET_INSTALL_DIR = $dotnetInstallDir
+      # Install .NET SDK and WiX v4
+      # Using temp directory to avoid permission issues with self-hosted runners
+      - name: Install .NET SDK and WiX v4
+        shell: pwsh
+        run: |
+          # Install .NET SDK to temp directory (avoids Program Files permission issues)
+          $dotnetInstallDir = Join-Path $env:RUNNER_TEMP "dotnet"
+          $env:DOTNET_INSTALL_DIR = $dotnetInstallDir
 
-  #         # Download and run .NET install script
-  #         $installScript = Join-Path $env:RUNNER_TEMP "dotnet-install.ps1"
-  #         Invoke-WebRequest -Uri "https://dot.net/v1/dotnet-install.ps1" -OutFile $installScript
-  #         & $installScript -Channel 8.0 -InstallDir $dotnetInstallDir
+          # Download and run .NET install script
+          $installScript = Join-Path $env:RUNNER_TEMP "dotnet-install.ps1"
+          Invoke-WebRequest -Uri "https://dot.net/v1/dotnet-install.ps1" -OutFile $installScript
+          & $installScript -Channel 8.0 -InstallDir $dotnetInstallDir
 
-  #         # Add .NET to PATH for this session and future steps
-  #         $env:PATH = "$dotnetInstallDir;$env:PATH"
-  #         echo $dotnetInstallDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # Add .NET to PATH for this session and future steps
+          $env:PATH = "$dotnetInstallDir;$env:PATH"
+          echo $dotnetInstallDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-  #         # Verify .NET installation
-  #         & "$dotnetInstallDir\dotnet.exe" --version
+          # Verify .NET installation
+          & "$dotnetInstallDir\dotnet.exe" --version
 
-  #         # Install WiX v4 as a .NET tool
-  #         & "$dotnetInstallDir\dotnet.exe" tool install --global wix --version 4.*
+          # Install WiX v4 as a .NET tool
+          & "$dotnetInstallDir\dotnet.exe" tool install --global wix --version 4.*
 
-  #         # Add .NET global tools to PATH
-  #         $dotnetToolsPath = Join-Path $env:USERPROFILE ".dotnet\tools"
-  #         $env:PATH = "$dotnetToolsPath;$env:PATH"
-  #         echo $dotnetToolsPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # Add .NET global tools to PATH
+          $dotnetToolsPath = Join-Path $env:USERPROFILE ".dotnet\tools"
+          $env:PATH = "$dotnetToolsPath;$env:PATH"
+          echo $dotnetToolsPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-  #         # Verify WiX installation
-  #         wix --version
+          # Verify WiX installation
+          wix --version
 
-  #     # Install Syft for generating Software Bill of Materials
-  #     - name: Install Syft (for SBOM)
-  #       shell: pwsh
-  #       run: |
-  #         # Download and install Syft for Windows
-  #         $syftVersion = "v1.18.0"
-  #         $syftUrl = "https://github.com/anchore/syft/releases/download/$syftVersion/syft_1.18.0_windows_amd64.zip"
-  #         $syftZip = "$env:TEMP\syft.zip"
-  #         $syftDir = "$env:TEMP\syft"
+      # Install Syft for generating Software Bill of Materials
+      - name: Install Syft (for SBOM)
+        shell: pwsh
+        run: |
+          # Download and install Syft for Windows
+          $syftVersion = "v1.18.0"
+          $syftUrl = "https://github.com/anchore/syft/releases/download/$syftVersion/syft_1.18.0_windows_amd64.zip"
+          $syftZip = "$env:TEMP\syft.zip"
+          $syftDir = "$env:TEMP\syft"
 
-  #         Invoke-WebRequest -Uri $syftUrl -OutFile $syftZip
-  #         Expand-Archive -Path $syftZip -DestinationPath $syftDir -Force
+          Invoke-WebRequest -Uri $syftUrl -OutFile $syftZip
+          Expand-Archive -Path $syftZip -DestinationPath $syftDir -Force
 
-  #         # Add to PATH
-  #         $env:PATH = "$syftDir;$env:PATH"
-  #         echo "$syftDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # Add to PATH
+          $env:PATH = "$syftDir;$env:PATH"
+          echo "$syftDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-  #         # Verify installation
-  #         syft version
+          # Verify installation
+          syft version
 
-  #     # Run GoReleaser for Windows
-  #     # Creates MSI installers and updates Scoop/Winget package managers
-  #     # MSI files are signed with YubiKey via before_publish hook
-  #     # Config: .goreleaser.windows.yaml
-  #     - name: "GoReleaser (Windows: build + sign MSI + publish)"
-  #       uses: goreleaser/goreleaser-action@v6.4.0
-  #       with:
-  #         distribution: goreleaser-pro
-  #         version: "~> v2"
-  #         args: release --clean --config .goreleaser.windows.yaml --skip=announce
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #         GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-  #         GH_PAT: ${{ secrets.GH_PAT }}
-  #         TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
-  #         AWS_REGION: ${{ secrets.AWS_REGION }}
-  #         # YubiKey signing credentials (used by before_publish hook)
-  #         CERT_THUMBPRINT: ${{ secrets.CERT_THUMBPRINT }}
-  #         TIMESTAMP_SERVER: ${{ secrets.TIMESTAMP_SERVER }}
+      # Run GoReleaser for Windows
+      # Creates MSI installers and updates Scoop/Winget package managers
+      # MSI files are signed with YubiKey via before_publish hook
+      # Config: .goreleaser.windows.yaml
+      - name: "GoReleaser (Windows: build + sign MSI + publish)"
+        uses: goreleaser/goreleaser-action@v6.4.0
+        with:
+          distribution: goreleaser-pro
+          version: "~> v2"
+          args: release --clean --config .goreleaser.windows.yaml --skip=announce
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          # YubiKey signing credentials (used by before_publish hook)
+          CERT_THUMBPRINT: ${{ secrets.CERT_THUMBPRINT }}
+          TIMESTAMP_SERVER: ${{ secrets.TIMESTAMP_SERVER }}
 
-  #     # Debug step: Display MSI files created
-  #     - name: Show built MSI files
-  #       shell: pwsh
-  #       run: |
-  #         echo "=== Dist directory contents ==="
-  #         Get-ChildItem -Path dist -Recurse | Format-Table -Property Mode, LastWriteTime, Length, Name
-  #         echo ""
-  #         echo "=== Looking for MSI files ==="
-  #         Get-ChildItem -Path dist -Filter *.msi -Recurse | Format-List
+      # Debug step: Display MSI files created
+      - name: Show built MSI files
+        shell: pwsh
+        run: |
+          echo "=== Dist directory contents ==="
+          Get-ChildItem -Path dist -Recurse | Format-Table -Property Mode, LastWriteTime, Length, Name
+          echo ""
+          echo "=== Looking for MSI files ==="
+          Get-ChildItem -Path dist -Filter *.msi -Recurse | Format-List
 
-  #     # Debug step: Verify WiX installation
-  #     - name: Verify WiX is available
-  #       shell: pwsh
-  #       run: |
-  #         echo "=== WiX Version ==="
-  #         wix --version
-  #         echo "=== WiX Path ==="
-  #         Get-Command wix | Format-List
+      # Debug step: Verify WiX installation
+      - name: Verify WiX is available
+        shell: pwsh
+        run: |
+          echo "=== WiX Version ==="
+          wix --version
+          echo "=== WiX Path ==="
+          Get-Command wix | Format-List
 
-  # # ============================================================================
-  # # Linux/Ubuntu Release Job
-  # # ============================================================================
-  # # Builds binaries for Linux amd64 and arm64
-  # # Creates distribution packages (.deb, .rpm, .apk)
-  # # Publishes to GitHub releases and S3
-  # # ============================================================================
-  # ubuntu_release:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     # Check out the repository with full git history for changelog generation
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
+  # ============================================================================
+  # Linux/Ubuntu Release Job
+  # ============================================================================
+  # Builds binaries for Linux amd64 and arm64
+  # Creates distribution packages (.deb, .rpm, .apk)
+  # Publishes to GitHub releases and S3
+  # ============================================================================
+  ubuntu_release:
+    runs-on: ubuntu-latest
+    steps:
+      # Check out the repository with full git history for changelog generation
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-  #     # Set version for GoReleaser (from manual input or git tag)
-  #     - name: Set version
-  #       run: |
-  #         if [ -n "${{ inputs.version }}" ]; then
-  #           echo "GORELEASER_CURRENT_TAG=v${{ inputs.version }}" >> $GITHUB_ENV
-  #           echo "Using manual version: v${{ inputs.version }}"
-  #         else
-  #           echo "Using git tag: ${GITHUB_REF#refs/tags/}"
-  #         fi
+      # Set version for GoReleaser (from manual input or git tag)
+      - name: Set version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "GORELEASER_CURRENT_TAG=v${{ inputs.version }}" >> $GITHUB_ENV
+            echo "Using manual version: v${{ inputs.version }}"
+          else
+            echo "Using git tag: ${GITHUB_REF#refs/tags/}"
+          fi
 
-  #     - name: Setup Go
-  #       uses: actions/setup-go@v5
-  #       with:
-  #         go-version: '1.25.x'
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
 
-  #     # Run tests before building to ensure quality
-  #     - name: Run tests
-  #       run: go test ./... -v
+      # Run tests before building to ensure quality
+      - name: Run tests
+        run: go test ./... -v
 
-  #     # Configure AWS credentials using OIDC (no long-lived secrets needed)
-  #     - name: Configure AWS credentials (OIDC)
-  #       uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-  #         aws-region: ${{ secrets.AWS_REGION }}
+      # Configure AWS credentials using OIDC (no long-lived secrets needed)
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-  #     - name: Install Syft (for SBOM)
-  #       run: |
-  #         curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-  #         syft version
+      - name: Install Syft (for SBOM)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft version
 
-  #     # Run GoReleaser for Linux
-  #     # Creates .deb, .rpm, and .apk packages
-  #     # IMPORTANT: NFPM packages are auto-included in releases - don't add to extra_files
-  #     # Config: .goreleaser.ubuntu.yaml
-  #     - name: "GoReleaser (Ubuntu: linux publish)"
-  #       uses: goreleaser/goreleaser-action@v6.4.0
-  #       with:
-  #         distribution: goreleaser-pro
-  #         version: "~> v2"
-  #         args: release --clean --config .goreleaser.ubuntu.yaml --skip=announce
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #         GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-  #         GH_PAT: ${{ secrets.GH_PAT }}
-  #         TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
-  #         AWS_REGION: ${{ secrets.AWS_REGION }}
+      # Run GoReleaser for Linux
+      # Creates .deb, .rpm, and .apk packages
+      # IMPORTANT: NFPM packages are auto-included in releases - don't add to extra_files
+      # Config: .goreleaser.ubuntu.yaml
+      - name: "GoReleaser (Ubuntu: linux publish)"
+        uses: goreleaser/goreleaser-action@v6.4.0
+        with:
+          distribution: goreleaser-pro
+          version: "~> v2"
+          args: release --clean --config .goreleaser.ubuntu.yaml --skip=announce
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
