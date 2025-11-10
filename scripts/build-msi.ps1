@@ -29,7 +29,7 @@ if (-not (Test-Path $BinaryPath)) {
 
 # Get absolute paths
 $BinaryPath = Resolve-Path $BinaryPath
-$RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$RepoRoot = Split-Path -Parent $PSScriptRoot
 $WxsTemplate = Join-Path $RepoRoot "packaging/windows/app.wxs"
 
 if (-not (Test-Path $WxsTemplate)) {
