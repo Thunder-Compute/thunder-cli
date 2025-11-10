@@ -51,6 +51,15 @@ try {
 
     # Read and process WiX template (replace GoReleaser template variables)
     $WxsContent = Get-Content $WxsTemplate -Raw
+    
+    # Handle conditional logic for ProgramFiles directory (amd64 uses ProgramFiles64Folder)
+    if ($Arch -eq "amd64") {
+        $WxsContent = $WxsContent -replace 'ProgramFiles\{\{\s*if eq \.Arch "amd64"\s*\}\}64\{\{\s*end\s*\}\}Folder', 'ProgramFiles64Folder'
+    } else {
+        $WxsContent = $WxsContent -replace 'ProgramFiles\{\{\s*if eq \.Arch "amd64"\s*\}\}64\{\{\s*end\s*\}\}Folder', 'ProgramFilesFolder'
+    }
+    
+    # Replace template variables
     $WxsContent = $WxsContent -replace '\{\{\s*\.ProjectName\s*\}\}', $ProjectName
     $WxsContent = $WxsContent -replace '\{\{\s*\.Version\s*\}\}', $Version
     $WxsContent = $WxsContent -replace '\{\{\s*\.Binary\s*\}\}', $ProjectName
