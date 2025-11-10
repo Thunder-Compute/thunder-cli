@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"runtime"
@@ -57,8 +58,22 @@ var selfUpdateCmd = &cobra.Command{
 			return nil
 		}
 
-		if !userWritable(binPath) {
-			return errors.New("install path is not writable by current user; re-install to ~/.tnr/bin or use your package manager")
+		useSudo, _ := cmd.Flags().GetBool("use-sudo")
+		
+		if !userWritable(binPath) && !useSudo {
+			fmt.Printf("⚠️  Installation path requires elevated permissions: %s\n\n", binPath)
+			fmt.Println("Choose one of the following options:")
+			fmt.Println()
+			fmt.Println("1. Update with sudo (requires password):")
+			fmt.Println("   tnr self-update --use-sudo")
+			fmt.Println()
+			fmt.Println("2. Reinstall to user-writable location:")
+			fmt.Println("   curl -fsSL https://raw.githubusercontent.com/Thunder-Compute/thunder-cli/main/scripts/install.sh | bash")
+			fmt.Println()
+			fmt.Println("3. Install via Homebrew (recommended for macOS):")
+			fmt.Println("   brew tap Thunder-Compute/tap && brew install tnr")
+			fmt.Println()
+			return errors.New("update requires elevated permissions or reinstallation")
 		}
 
 		currentVersion := version.BuildVersion
@@ -106,7 +121,40 @@ var selfUpdateCmd = &cobra.Command{
 			return fmt.Errorf("could not locate executable path: %w", err)
 		}
 
-		// Download and apply update
+		// If using sudo, download to temp location then move with sudo
+		if useSudo {
+			// Create temp file for download
+			tmpDir := os.TempDir()
+			tmpBinary := filepath.Join(tmpDir, "tnr.new")
+			
+			// Download to temp location
+			if err := selfupdate.UpdateTo(ctx, latest.AssetURL, latest.AssetName, tmpBinary); err != nil {
+				return fmt.Errorf("error occurred while downloading update: %w", err)
+			}
+
+			// Make it executable
+			if err := os.Chmod(tmpBinary, 0755); err != nil {
+				return fmt.Errorf("failed to set executable permissions: %w", err)
+			}
+
+			fmt.Println("Downloaded successfully. Installing with sudo (you may be prompted for your password)...")
+
+			// Use sudo to move the file
+			sudoCmd := exec.Command("sudo", "mv", tmpBinary, exe)
+			sudoCmd.Stdout = os.Stdout
+			sudoCmd.Stderr = os.Stderr
+			sudoCmd.Stdin = os.Stdin
+
+			if err := sudoCmd.Run(); err != nil {
+				return fmt.Errorf("failed to install with sudo: %w", err)
+			}
+
+			fmt.Printf("Successfully updated to version %s\n", latest.Version())
+			fmt.Println("Restart the CLI to use the new version")
+			return nil
+		}
+
+		// Normal update (user-writable location)
 		if err := selfupdate.UpdateTo(ctx, latest.AssetURL, latest.AssetName, exe); err != nil {
 			return fmt.Errorf("error occurred while updating binary: %w", err)
 		}
@@ -119,5 +167,6 @@ var selfUpdateCmd = &cobra.Command{
 
 func init() {
 	selfUpdateCmd.Flags().String("channel", "stable", "update channel (stable or beta)")
+	selfUpdateCmd.Flags().Bool("use-sudo", false, "use sudo for updating binaries in system directories")
 	rootCmd.AddCommand(selfUpdateCmd)
 }
