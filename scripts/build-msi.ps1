@@ -77,7 +77,7 @@ try {
     
     Push-Location $TempDir
     try {
-        wix build -ext WixToolset.UI.wixext -dWixUILicenseRtf="license.rtf" -out $OutputMsi app.wxs
+        wix build -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -dWixUILicenseRtf="license.rtf" -out $OutputMsi app.wxs
         if ($LASTEXITCODE -ne 0) {
             Write-Error "WiX build failed with exit code $LASTEXITCODE"
             exit 1
