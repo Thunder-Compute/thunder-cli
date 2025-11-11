@@ -221,7 +221,6 @@ jobs:
       - name: Install .NET SDK and WiX v4
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
           # Install .NET SDK to temp directory (avoids Program Files permission issues)
           $dotnetInstallDir = Join-Path $env:RUNNER_TEMP "dotnet"
           $env:DOTNET_INSTALL_DIR = $dotnetInstallDir
@@ -245,14 +244,29 @@ jobs:
           echo $wixDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           echo "WIX_EXE_PATH=$wixDir\wix.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-          # Install matching WiX extensions (v4.0.6)
+          # Install matching WiX extensions (v4.0.6) from a safe location
           Push-Location $env:RUNNER_TEMP
-          & "$wixDir\wix.exe" extension add WixToolset.UI.wixext/4.0.6
-          & "$wixDir\wix.exe" extension add WixToolset.Util.wixext/4.0.6
+          $extList = & "$wixDir\wix.exe" extension list
+          $uiInstalled = ($extList -match '^WixToolset\.UI\.wixext\s+4\.0\.6')
+          $utilInstalled = ($extList -match '^WixToolset\.Util\.wixext\s+4\.0\.6')
+          if (-not $uiInstalled) {
+            & "$wixDir\wix.exe" extension add WixToolset.UI.wixext/4.0.6
+            if ($LASTEXITCODE -ne 0) { Write-Warning "UI extension add returned $LASTEXITCODE; continuing" }
+          } else {
+            Write-Host "UI extension 4.0.6 already installed"
+          }
+          if (-not $utilInstalled) {
+            & "$wixDir\wix.exe" extension add WixToolset.Util.wixext/4.0.6
+            if ($LASTEXITCODE -ne 0) { Write-Warning "Util extension add returned $LASTEXITCODE; continuing" }
+          } else {
+            Write-Host "Util extension 4.0.6 already installed"
+          }
           Pop-Location
+          # Remove any accidental repo-local cache (belt-and-suspenders)
           if (Test-Path ".wix") { Remove-Item -Recurse -Force ".wix" }
-          & "$wixDir\wix.exe" --version
-          & "$wixDir\wix.exe" extension list
+          # Inspect resulting state (non-fatal)
+          & "$wixDir\wix.exe" --version | Write-Host
+          & "$wixDir\wix.exe" extension list | Write-Host
 
       # Install Syft for generating Software Bill of Materials
       - name: Install Syft (for SBOM)
