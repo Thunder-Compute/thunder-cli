@@ -221,6 +221,7 @@ jobs:
       - name: Install .NET SDK and WiX v4
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           # Install .NET SDK to temp directory (avoids Program Files permission issues)
           $dotnetInstallDir = Join-Path $env:RUNNER_TEMP "dotnet"
           $env:DOTNET_INSTALL_DIR = $dotnetInstallDir
@@ -237,22 +238,18 @@ jobs:
           # Verify .NET installation
           & "$dotnetInstallDir\dotnet.exe" --version
 
-          # Install WiX v4 as a .NET tool
-          & "$dotnetInstallDir\dotnet.exe" tool install --global wix --version 4.*
+          # Install WiX v4.0.6 into a known tool path and add to PATH
+          $wixDir = Join-Path $env:RUNNER_TEMP "wix"
+          & "$dotnetInstallDir\dotnet.exe" tool install wix --version 4.0.6 --tool-path $wixDir
+          $env:PATH = "$wixDir;$env:PATH"
+          echo $wixDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "WIX_EXE_PATH=$wixDir\wix.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-          # Add .NET global tools to PATH
-          $dotnetToolsPath = Join-Path $env:USERPROFILE ".dotnet\tools"
-          $env:PATH = "$dotnetToolsPath;$env:PATH"
-          echo $dotnetToolsPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-          # Verify WiX installation
-          wix --version
-
-          # Preload required WiX v4 extensions from NuGet so wix build can resolve them
-          # UI for WixUI_InstallDir and Util for Environment/Registry authoring
-          wix extension add WixToolset.UI.wixext
-          wix extension add WixToolset.Util.wixext
-          wix extension list
+          # Install matching WiX extensions (v4.0.6)
+          & "$wixDir\wix.exe" extension add WixToolset.UI.wixext/4.0.6
+          & "$wixDir\wix.exe" extension add WixToolset.Util.wixext/4.0.6
+          & "$wixDir\wix.exe" --version
+          & "$wixDir\wix.exe" extension list
 
       # Install Syft for generating Software Bill of Materials
       - name: Install Syft (for SBOM)

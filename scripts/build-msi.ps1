@@ -75,9 +75,15 @@ try {
     $OutputMsi = Join-Path $TempDir "$ProjectName-$Version-$Arch.msi"
     Write-Host "🔧 Building MSI with WiX..."
     
+    # Resolve WiX executable (allow override via WIX_EXE_PATH)
+    $WixExe = $env:WIX_EXE_PATH
+    if (-not $WixExe -or -not (Test-Path $WixExe)) {
+        $WixExe = "wix.exe"
+    }
+
     Push-Location $TempDir
     try {
-        wix build -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -dWixUILicenseRtf="license.rtf" -out $OutputMsi app.wxs
+        & $WixExe build -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -dWixUILicenseRtf="license.rtf" -out $OutputMsi app.wxs
         if ($LASTEXITCODE -ne 0) {
             Write-Error "WiX build failed with exit code $LASTEXITCODE"
             exit 1
