@@ -257,36 +257,28 @@ jobs:
           $extList = & "$wixDir\wix.exe" extension list
           Write-Host "WiX extensions available:"
           Write-Host ($extList | Out-String)
-          # Discover extension DLLs dynamically (WiX cache or NuGet cache) and export WIX_EXTENSIONS_PATH
-          $wixExtRoot = Join-Path $env:USERPROFILE ".wix\extensions"
-          $nugetRoot  = Join-Path $env:USERPROFILE ".nuget\packages"
-          $uiDll = Get-ChildItem -Path (Join-Path $wixExtRoot "WixToolset.UI.wixext\4.0.6") -Recurse -Filter "WixToolset.UI.wixext.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $uiDll) {
-            $uiDll = Get-ChildItem -Path (Join-Path $nugetRoot "wixtoolset.ui.wixext\4.0.6") -Recurse -Filter "WixToolset.UI.wixext.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
-          }
-          $utilDll = Get-ChildItem -Path (Join-Path $wixExtRoot "WixToolset.Util.wixext\4.0.6") -Recurse -Filter "WixToolset.Util.wixext.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $utilDll) {
-            $utilDll = Get-ChildItem -Path (Join-Path $nugetRoot "wixtoolset.util.wixext\4.0.6") -Recurse -Filter "WixToolset.Util.wixext.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
-          }
-          if (-not $uiDll -or -not $utilDll) {
-            Write-Host "Debug: searched WiX cache: $wixExtRoot and NuGet cache: $nugetRoot"
-            if (Test-Path (Join-Path $wixExtRoot "WixToolset.UI.wixext\4.0.6")) {
-              Get-ChildItem -Recurse (Join-Path $wixExtRoot "WixToolset.UI.wixext\4.0.6") | Select-Object FullName
+          # Download extension packages via NuGet and export WIX_EXTENSIONS_PATH from actual tools directories
+          $nuget = Join-Path $env:RUNNER_TEMP "nuget.exe"
+          Invoke-WebRequest "https://dist.nuget.org/win-x86-commandline/v6.9.1/nuget.exe" -OutFile $nuget
+          $pkgsRoot = Join-Path $env:RUNNER_TEMP "nugetpkgs"
+          & $nuget install WixToolset.UI.wixext -Version 4.0.6 -ExcludeVersion -OutputDirectory $pkgsRoot
+          & $nuget install WixToolset.Util.wixext -Version 4.0.6 -ExcludeVersion -OutputDirectory $pkgsRoot
+          $uiTools = Get-ChildItem -Path (Join-Path $pkgsRoot "WixToolset.UI.wixext\tools") -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+          $utilTools = Get-ChildItem -Path (Join-Path $pkgsRoot "WixToolset.Util.wixext\tools") -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $uiTools -or -not $utilTools) {
+            Write-Host "Debug: UI tools directories under $pkgsRoot:"
+            if (Test-Path (Join-Path $pkgsRoot "WixToolset.UI.wixext\tools")) {
+              Get-ChildItem -Recurse (Join-Path $pkgsRoot "WixToolset.UI.wixext\tools") | Select-Object FullName
             }
-            if (Test-Path (Join-Path $nugetRoot "wixtoolset.ui.wixext\4.0.6")) {
-              Get-ChildItem -Recurse (Join-Path $nugetRoot "wixtoolset.ui.wixext\4.0.6") | Select-Object FullName
+            Write-Host "Debug: Util tools directories under $pkgsRoot:"
+            if (Test-Path (Join-Path $pkgsRoot "WixToolset.Util.wixext\tools")) {
+              Get-ChildItem -Recurse (Join-Path $pkgsRoot "WixToolset.Util.wixext\tools") | Select-Object FullName
             }
-            if (Test-Path (Join-Path $wixExtRoot "WixToolset.Util.wixext\4.0.6")) {
-              Get-ChildItem -Recurse (Join-Path $wixExtRoot "WixToolset.Util.wixext\4.0.6") | Select-Object FullName
-            }
-            if (Test-Path (Join-Path $nugetRoot "wixtoolset.util.wixext\4.0.6")) {
-              Get-ChildItem -Recurse (Join-Path $nugetRoot "wixtoolset.util.wixext\4.0.6") | Select-Object FullName
-            }
-            Write-Error "Failed to locate WiX extension DLLs after install. UI add exit=$uiAddExit, Util add exit=$utilAddExit"
+            Write-Error "Failed to locate tools folders in NuGet packages after install."
             exit 1
           }
-          $uiDir   = $uiDll.DirectoryName
-          $utilDir = $utilDll.DirectoryName
+          $uiDir   = $uiTools.FullName
+          $utilDir = $utilTools.FullName
           Write-Host "Using UI extension from: $uiDir"
           Write-Host "Using Util extension from: $utilDir"
           $extPaths = "$uiDir;$utilDir"
