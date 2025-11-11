@@ -257,27 +257,39 @@ jobs:
           $extList = & "$wixDir\wix.exe" extension list
           Write-Host "WiX extensions available:"
           Write-Host ($extList | Out-String)
-          if ($extList -notmatch 'WixToolset\.UI\.wixext\s+4\.0\.6') {
-            Write-Error "WiX UI extension not found after install (exit=$uiAddExit)"
-            exit 1
-          }
-          if ($extList -notmatch 'WixToolset\.Util\.wixext\s+4\.0\.6') {
-            Write-Error "WiX Util extension not found after install (exit=$utilAddExit)"
-            exit 1
-          }
-          # Compute extension DLL directories and expose to downstream steps
+          # Discover extension DLLs dynamically (WiX cache or NuGet cache) and export WIX_EXTENSIONS_PATH
           $wixExtRoot = Join-Path $env:USERPROFILE ".wix\extensions"
-          $uiToolsDir = Join-Path $wixExtRoot "WixToolset.UI.wixext\4.0.6\tools\net8.0"
-          $utilToolsDir = Join-Path $wixExtRoot "WixToolset.Util.wixext\4.0.6\tools\net8.0"
-          if (-not (Test-Path $uiToolsDir)) {
-            Write-Error "Expected WiX UI extension tools directory not found: $uiToolsDir (UI add exit=$uiAddExit)"
+          $nugetRoot  = Join-Path $env:USERPROFILE ".nuget\packages"
+          $uiDll = Get-ChildItem -Path (Join-Path $wixExtRoot "WixToolset.UI.wixext\4.0.6") -Recurse -Filter "WixToolset.UI.wixext.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $uiDll) {
+            $uiDll = Get-ChildItem -Path (Join-Path $nugetRoot "wixtoolset.ui.wixext\4.0.6") -Recurse -Filter "WixToolset.UI.wixext.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          $utilDll = Get-ChildItem -Path (Join-Path $wixExtRoot "WixToolset.Util.wixext\4.0.6") -Recurse -Filter "WixToolset.Util.wixext.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $utilDll) {
+            $utilDll = Get-ChildItem -Path (Join-Path $nugetRoot "wixtoolset.util.wixext\4.0.6") -Recurse -Filter "WixToolset.Util.wixext.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $uiDll -or -not $utilDll) {
+            Write-Host "Debug: searched WiX cache: $wixExtRoot and NuGet cache: $nugetRoot"
+            if (Test-Path (Join-Path $wixExtRoot "WixToolset.UI.wixext\4.0.6")) {
+              Get-ChildItem -Recurse (Join-Path $wixExtRoot "WixToolset.UI.wixext\4.0.6") | Select-Object FullName
+            }
+            if (Test-Path (Join-Path $nugetRoot "wixtoolset.ui.wixext\4.0.6")) {
+              Get-ChildItem -Recurse (Join-Path $nugetRoot "wixtoolset.ui.wixext\4.0.6") | Select-Object FullName
+            }
+            if (Test-Path (Join-Path $wixExtRoot "WixToolset.Util.wixext\4.0.6")) {
+              Get-ChildItem -Recurse (Join-Path $wixExtRoot "WixToolset.Util.wixext\4.0.6") | Select-Object FullName
+            }
+            if (Test-Path (Join-Path $nugetRoot "wixtoolset.util.wixext\4.0.6")) {
+              Get-ChildItem -Recurse (Join-Path $nugetRoot "wixtoolset.util.wixext\4.0.6") | Select-Object FullName
+            }
+            Write-Error "Failed to locate WiX extension DLLs after install. UI add exit=$uiAddExit, Util add exit=$utilAddExit"
             exit 1
           }
-          if (-not (Test-Path $utilToolsDir)) {
-            Write-Error "Expected WiX Util extension tools directory not found: $utilToolsDir (Util add exit=$utilAddExit)"
-            exit 1
-          }
-          $extPaths = "$uiToolsDir;$utilToolsDir"
+          $uiDir   = $uiDll.DirectoryName
+          $utilDir = $utilDll.DirectoryName
+          Write-Host "Using UI extension from: $uiDir"
+          Write-Host "Using Util extension from: $utilDir"
+          $extPaths = "$uiDir;$utilDir"
           echo "WIX_EXTENSIONS_PATH=$extPaths" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           # Show final state
           & "$wixDir\wix.exe" --version
