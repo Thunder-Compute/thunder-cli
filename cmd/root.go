@@ -4,8 +4,13 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"context"
+	"fmt"
 	"os"
+	"sync"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
+	"github.com/Thunder-Compute/thunder-cli/internal/updatecheck"
 	"github.com/Thunder-Compute/thunder-cli/internal/version"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
@@ -24,6 +29,8 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+var updatePromptOnce sync.Once
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
@@ -35,6 +42,11 @@ func Execute() {
 }
 
 func init() {
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		maybePromptForUpdate(cmd)
+		return nil
+	}
+
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		helpmenus.RenderRootHelp(cmd)
 	})
@@ -96,4 +108,61 @@ See each sub-command's help for details on how to use the generated script.`,
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+func maybePromptForUpdate(cmd *cobra.Command) {
+	updatePromptOnce.Do(func() {
+		if shouldSkipUpdateCheck(cmd) {
+			return
+		}
+
+		if os.Getenv("TNR_NO_SELFUPDATE") == "1" {
+			return
+		}
+
+		ctx := context.Background()
+
+		// Start background autoupdate if needed (non-blocking).
+		autoupdate.MaybeStartBackgroundUpdate(ctx, version.BuildVersion)
+
+		result, err := updatecheck.Check(ctx, version.BuildVersion)
+		if err != nil || result.Skipped || !result.Outdated {
+			return
+		}
+
+		var binPath string
+		if path, err := getCurrentBinaryPath(); err == nil {
+			binPath = path
+		}
+
+		if binPath != "" && isPMManaged(binPath) {
+			fmt.Printf("⚠️  Update available: %s → %s. Update via your package manager (e.g. brew upgrade tnr).\n", result.CurrentVersion, result.LatestVersion)
+			return
+		}
+
+		fmt.Printf("⚠️  Update available: %s → %s. Run `tnr self-update` to upgrade.\n", result.CurrentVersion, result.LatestVersion)
+	})
+}
+
+func shouldSkipUpdateCheck(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+
+	for current := cmd; current != nil; current = current.Parent() {
+		switch current.Name() {
+		case "self-update", "help", "completion", "version":
+			return true
+		}
+
+		if current.Annotations != nil && current.Annotations["skipUpdateCheck"] == "true" {
+			return true
+		}
+	}
+
+	if helpFlag := cmd.Flags().Lookup("help"); helpFlag != nil && helpFlag.Changed {
+		return true
+	}
+
+	return false
 }

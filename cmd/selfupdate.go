@@ -4,15 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
-	"runtime"
 	"strings"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
+	"github.com/Thunder-Compute/thunder-cli/internal/updatecheck"
 	"github.com/Thunder-Compute/thunder-cli/internal/version"
-	"github.com/creativeprojects/go-selfupdate"
 	"github.com/spf13/cobra"
 )
 
@@ -59,7 +59,7 @@ var selfUpdateCmd = &cobra.Command{
 		}
 
 		useSudo, _ := cmd.Flags().GetBool("use-sudo")
-		
+
 		if !userWritable(binPath) && !useSudo {
 			fmt.Printf("⚠️  Installation path requires elevated permissions: %s\n\n", binPath)
 			fmt.Println("Choose one of the following options:")
@@ -84,82 +84,21 @@ var selfUpdateCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Current version: %s\n", currentVersion)
-		fmt.Println("Checking for updates...")
-
-		// Detect the latest version from GitHub releases
 		ctx := context.Background()
-		slug := selfupdate.ParseSlug("Thunder-Compute/thunder-cli")
-		
-		// Note: We use the simple DetectLatest approach for now.
-		// To add checksum validation in the future, use:
-		//   updater, _ := selfupdate.NewUpdater(selfupdate.Config{
-		//       Validator: &selfupdate.ChecksumValidator{UniqueFilename: "checksums.txt"},
-		//   })
-		//   latest, found, err := updater.DetectLatest(ctx, slug)
-		
-		latest, found, err := selfupdate.DetectLatest(ctx, slug)
+		fmt.Println("Checking for updates...")
+		res, err := updatecheck.Check(ctx, currentVersion)
 		if err != nil {
 			return fmt.Errorf("error occurred while detecting version: %w", err)
 		}
-
-		if !found {
-			return fmt.Errorf("no release found for %s/%s", runtime.GOOS, runtime.GOARCH)
-		}
-
-		// Compare versions
-		if latest.LessOrEqual(currentVersion) {
+		if !res.Outdated {
 			fmt.Printf("Already up to date (version %s)\n", currentVersion)
 			return nil
 		}
-
-		fmt.Printf("New version available: %s\n", latest.Version())
+		fmt.Printf("New version available: %s\n", res.LatestVersion)
 		fmt.Println("Downloading update...")
-
-		// Get current executable path
-		exe, err := selfupdate.ExecutablePath()
-		if err != nil {
-			return fmt.Errorf("could not locate executable path: %w", err)
+		if err := autoupdate.PerformUpdate(ctx, res.LatestVersion, useSudo); err != nil {
+			return err
 		}
-
-		// If using sudo, download to temp location then move with sudo
-		if useSudo {
-			// Create temp file for download
-			tmpDir := os.TempDir()
-			tmpBinary := filepath.Join(tmpDir, "tnr.new")
-			
-			// Download to temp location
-			if err := selfupdate.UpdateTo(ctx, latest.AssetURL, latest.AssetName, tmpBinary); err != nil {
-				return fmt.Errorf("error occurred while downloading update: %w", err)
-			}
-
-			// Make it executable
-			if err := os.Chmod(tmpBinary, 0755); err != nil {
-				return fmt.Errorf("failed to set executable permissions: %w", err)
-			}
-
-			fmt.Println("Downloaded successfully. Installing with sudo (you may be prompted for your password)...")
-
-			// Use sudo to move the file
-			sudoCmd := exec.Command("sudo", "mv", tmpBinary, exe)
-			sudoCmd.Stdout = os.Stdout
-			sudoCmd.Stderr = os.Stderr
-			sudoCmd.Stdin = os.Stdin
-
-			if err := sudoCmd.Run(); err != nil {
-				return fmt.Errorf("failed to install with sudo: %w", err)
-			}
-
-			fmt.Printf("Successfully updated to version %s\n", latest.Version())
-			fmt.Println("Restart the CLI to use the new version")
-			return nil
-		}
-
-		// Normal update (user-writable location)
-		if err := selfupdate.UpdateTo(ctx, latest.AssetURL, latest.AssetName, exe); err != nil {
-			return fmt.Errorf("error occurred while updating binary: %w", err)
-		}
-
-		fmt.Printf("Successfully updated to version %s\n", latest.Version())
 		fmt.Println("Restart the CLI to use the new version")
 		return nil
 	},
@@ -169,4 +108,26 @@ func init() {
 	selfUpdateCmd.Flags().String("channel", "stable", "update channel (stable or beta)")
 	selfUpdateCmd.Flags().Bool("use-sudo", false, "use sudo for updating binaries in system directories")
 	rootCmd.AddCommand(selfUpdateCmd)
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = out.Close()
+	}()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+
+	return out.Sync()
 }

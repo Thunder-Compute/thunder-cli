@@ -246,16 +246,67 @@ tnr scp -r 0:/remote/directory/ ./local-path/
 ```
 
 **Path formats:**
+
 - Remote: `<instance_id>:/path` (e.g., `0:/home/user/data`)
 - Local: Standard absolute or relative paths
 
 ### Self-Update
 
-Update the CLI to the latest version:
+Keep your CLI up-to-date with the latest features and bug fixes.
+
+#### Check Current Version
+
+```bash
+tnr --version
+```
+
+#### Update to Latest Version
+
+**For manual installations (install script or direct download):**
 
 ```bash
 tnr self-update
 ```
+
+This command will:
+
+- Check for the latest release on GitHub
+- Download the appropriate binary for your OS/architecture
+- Replace the current binary automatically
+- Preserve all your settings and configuration
+
+**For package manager installations:**
+
+If you installed via Homebrew, Scoop, or Winget, use your package manager's update command instead:
+
+```bash
+# Homebrew
+brew upgrade tnr
+
+# Scoop
+scoop update tnr
+
+# Winget
+winget upgrade Thunder.tnr
+```
+
+The `tnr self-update` command will automatically detect package manager installations and direct you to use the appropriate command.
+
+#### Disable Auto-Update
+
+If you need to prevent self-updates (e.g., in CI/CD environments or for testing), set the `TNR_NO_SELFUPDATE` environment variable:
+
+```bash
+export TNR_NO_SELFUPDATE=1
+tnr self-update  # Will skip update and show a message
+```
+
+#### Notes
+
+- Self-update requires write access to the binary location
+- Development builds (`dev` version) cannot use self-update
+- The CLI will automatically verify the integrity of downloaded updates
+- After updating, you may need to restart any active sessions to use the new version
 
 ### Shell Completion
 
@@ -360,36 +411,24 @@ Contributions are welcome! Please:
 
 ## Platform Compatibility
 
-| Platform | Architecture | Status |
-|----------|-------------|--------|
-| macOS | ARM64 (Apple Silicon) | ✅ Supported |
-| macOS | AMD64 (Intel) | ✅ Supported |
-| Linux | AMD64 | ✅ Supported |
-| Linux | ARM64 | ✅ Supported |
-| Windows | AMD64 | ✅ Supported |
+| Platform | Architecture          | Status       |
+| -------- | --------------------- | ------------ |
+| macOS    | ARM64 (Apple Silicon) | ✅ Supported |
+| macOS    | AMD64 (Intel)         | ✅ Supported |
+| Linux    | AMD64                 | ✅ Supported |
+| Linux    | ARM64                 | ✅ Supported |
+| Windows  | AMD64                 | ✅ Supported |
 
 ---
 
-## Updates
+## Updating
 
-### Package Manager Installs
+For detailed update instructions, including how to check your current version and disable auto-updates, see the [Self-Update](#self-update) section above.
 
-```bash
-# Homebrew
-brew upgrade tnr
+**Quick reference:**
 
-# Scoop
-scoop update tnr
-
-# Winget
-winget upgrade Thunder.tnr
-```
-
-### Standalone Installs
-
-```bash
-tnr self-update
-```
+- **Package managers:** Use `brew upgrade tnr`, `scoop update tnr`, or `winget upgrade Thunder.tnr`
+- **Manual installations:** Use `tnr self-update`
 
 ---
 
@@ -404,10 +443,12 @@ Copyright © 2025 Thunder Compute
 ## Acknowledgments
 
 Built with:
+
 - [Cobra](https://github.com/spf13/cobra) – CLI framework
 - [Bubble Tea](https://github.com/charmbracelet/bubbletea) – Terminal UI
 - [Lipgloss](https://github.com/charmbracelet/lipgloss) – Terminal styling
 - [Go SCP](https://github.com/bramvdbogaerde/go-scp) – File transfer
+- [go-selfupdate](https://github.com/creativeprojects/go-selfupdate) – Self-update functionality
 
 ---
 
