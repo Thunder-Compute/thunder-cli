@@ -84,21 +84,6 @@ try {
     # Construct wix build args
     $wixArgs = @()
 
-    # Add extension search paths (if provided)
-    if ($env:WIX_EXTENSIONS_PATH) {
-        $extDirs = $env:WIX_EXTENSIONS_PATH -split ';' | Where-Object { $_ -and (Test-Path $_) }
-        if ($extDirs.Count -gt 0) {
-            Write-Host "📁 Using WiX extension search paths:"
-            foreach ($d in $extDirs) {
-                Write-Host "   $d"
-                $wixArgs += "-extpath"
-                $wixArgs += $d
-            }
-        } else {
-            Write-Warning "WIX_EXTENSIONS_PATH is set ('$env:WIX_EXTENSIONS_PATH') but no directories exist."
-        }
-    }
-
     # Prefer explicit DLLs if available; fallback to logical IDs
     if ($env:WIX_EXT_UI_DLL -and (Test-Path $env:WIX_EXT_UI_DLL)) {
         Write-Host "🔌 Loading UI extension from $env:WIX_EXT_UI_DLL"
