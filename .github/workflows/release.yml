@@ -300,6 +300,8 @@ jobs:
           Write-Host "Using Util extension from: $utilDir"
           $extPaths = "$uiDir;$utilDir"
           echo "WIX_EXTENSIONS_PATH=$extPaths" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "WIX_EXT_UI_DLL=$($uiDll.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "WIX_EXT_UTIL_DLL=$($utilDll.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           # Show final state
           & "$wixDir\wix.exe" --version
 

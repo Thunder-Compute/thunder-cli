@@ -74,12 +74,6 @@ try {
     # Build MSI with WiX v4
     $OutputMsi = Join-Path $TempDir "$ProjectName-$Version-$Arch.msi"
     Write-Host "🔧 Building MSI with WiX..."
-    
-    # If provided, surface WiX extensions path for this process (WiX v4 reads this env var)
-    if ($env:WIX_EXTENSIONS_PATH -and (Test-Path $env:WIX_EXTENSIONS_PATH)) {
-        Write-Host "📁 Adding WiX extensions path: $env:WIX_EXTENSIONS_PATH"
-        $env:WIX_EXTENSIONS_PATH | Out-Null
-    }
 
     # Resolve WiX executable (allow override via WIX_EXE_PATH)
     $WixExe = $env:WIX_EXE_PATH
@@ -87,15 +81,55 @@ try {
         $WixExe = "wix.exe"
     }
 
+    # Construct wix build args
+    $wixArgs = @()
+
+    # Add extension search paths (if provided)
+    if ($env:WIX_EXTENSIONS_PATH) {
+        $extDirs = $env:WIX_EXTENSIONS_PATH -split ';' | Where-Object { $_ -and (Test-Path $_) }
+        if ($extDirs.Count -gt 0) {
+            Write-Host "📁 Using WiX extension search paths:"
+            foreach ($d in $extDirs) {
+                Write-Host "   $d"
+                $wixArgs += "-extpath"
+                $wixArgs += $d
+            }
+        } else {
+            Write-Warning "WIX_EXTENSIONS_PATH is set ('$env:WIX_EXTENSIONS_PATH') but no directories exist."
+        }
+    }
+
+    # Prefer explicit DLLs if available; fallback to logical IDs
+    if ($env:WIX_EXT_UI_DLL -and (Test-Path $env:WIX_EXT_UI_DLL)) {
+        Write-Host "🔌 Loading UI extension from $env:WIX_EXT_UI_DLL"
+        $wixArgs += "-ext"
+        $wixArgs += $env:WIX_EXT_UI_DLL
+    } else {
+        Write-Host "🔌 Loading UI extension by id WixToolset.UI.wixext"
+        $wixArgs += "-ext"
+        $wixArgs += "WixToolset.UI.wixext"
+    }
+
+    if ($env:WIX_EXT_UTIL_DLL -and (Test-Path $env:WIX_EXT_UTIL_DLL)) {
+        Write-Host "🔌 Loading Util extension from $env:WIX_EXT_UTIL_DLL"
+        $wixArgs += "-ext"
+        $wixArgs += $env:WIX_EXT_UTIL_DLL
+    } else {
+        Write-Host "🔌 Loading Util extension by id WixToolset.Util.wixext"
+        $wixArgs += "-ext"
+        $wixArgs += "WixToolset.Util.wixext"
+    }
+
+    $wixArgs += "-dWixUILicenseRtf=license.rtf"
+    $wixArgs += "-out"
+    $wixArgs += $OutputMsi
+    $wixArgs += "app.wxs"
+
     Push-Location $TempDir
     try {
-        & $WixExe build `
-            -extpath $env:WIX_EXTENSIONS_PATH `
-            -ext WixToolset.UI.wixext `
-            -ext WixToolset.Util.wixext `
-            -dWixUILicenseRtf="license.rtf" `
-            -out $OutputMsi `
-            app.wxs
+        Write-Host "wix build args:"
+        Write-Host ($wixArgs -join " ")
+        & $WixExe build @wixArgs
         if ($LASTEXITCODE -ne 0) {
             Write-Error "WiX build failed with exit code $LASTEXITCODE"
             exit 1
