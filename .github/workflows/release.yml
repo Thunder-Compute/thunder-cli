@@ -244,18 +244,32 @@ jobs:
           echo $wixDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           echo "WIX_EXE_PATH=$wixDir\wix.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-          # Install matching WiX extensions (v4.0.6)
+          # Install matching WiX extensions (v4.0.6) and verify
           Push-Location $env:RUNNER_TEMP
           & "$wixDir\wix.exe" extension add WixToolset.UI.wixext/4.0.6
+          $uiAddExit = $LASTEXITCODE
           & "$wixDir\wix.exe" extension add WixToolset.Util.wixext/4.0.6
+          $utilAddExit = $LASTEXITCODE
           Pop-Location
+          # Clean any accidental repo-local cache
           if (Test-Path ".wix") { Remove-Item -Recurse -Force ".wix" }
-          & "$wixDir\wix.exe" --version
-          & "$wixDir\wix.exe" extension list
-          if ($LASTEXITCODE -ne 0) { Write-Host "Forcing clean exit"; exit 0 }
           # Explicitly provide WiX extensions path for downstream steps (GoReleaser hooks)
           $wixExtPath = Join-Path $env:USERPROFILE ".wix\extensions"
           echo "WIX_EXTENSIONS_PATH=$wixExtPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          # Verify extension DLLs exist at expected locations
+          $uiDll   = Join-Path $wixExtPath "WixToolset.UI.wixext\4.0.6\WixToolset.UI.wixext.dll"
+          $utilDll = Join-Path $wixExtPath "WixToolset.Util.wixext\4.0.6\WixToolset.Util.wixext.dll"
+          if (-not (Test-Path $uiDll)) {
+            Write-Error "WiX UI extension not installed at expected path: $uiDll (UI add exit=$uiAddExit)"
+            exit 1
+          }
+          if (-not (Test-Path $utilDll)) {
+            Write-Error "WiX Util extension not installed at expected path: $utilDll (Util add exit=$utilAddExit)"
+            exit 1
+          }
+          # Show final state
+          & "$wixDir\wix.exe" --version
+          & "$wixDir\wix.exe" extension list
 
       # Install Syft for generating Software Bill of Materials
       - name: Install Syft (for SBOM)
