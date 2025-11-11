@@ -246,8 +246,11 @@ jobs:
           echo "WIX_EXE_PATH=$wixDir\wix.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
           # Install matching WiX extensions (v4.0.6)
+          Push-Location $env:RUNNER_TEMP
           & "$wixDir\wix.exe" extension add WixToolset.UI.wixext/4.0.6
           & "$wixDir\wix.exe" extension add WixToolset.Util.wixext/4.0.6
+          Pop-Location
+          if (Test-Path ".wix") { Remove-Item -Recurse -Force ".wix" }
           & "$wixDir\wix.exe" --version
           & "$wixDir\wix.exe" extension list
 
