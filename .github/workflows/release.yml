@@ -253,12 +253,10 @@ jobs:
           Pop-Location
           # Clean any accidental repo-local cache
           if (Test-Path ".wix") { Remove-Item -Recurse -Force ".wix" }
-          # Explicitly provide WiX extensions path for downstream steps (GoReleaser hooks)
-          $wixExtPath = Join-Path $env:USERPROFILE ".wix\extensions"
-          echo "WIX_EXTENSIONS_PATH=$wixExtPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           # Verify extensions via wix extension list (handles varying install paths)
           $extList = & "$wixDir\wix.exe" extension list
-          Write-Host "WiX extensions available:`n$extList"
+          Write-Host "WiX extensions available:"
+          Write-Host ($extList | Out-String)
           if ($extList -notmatch 'WixToolset\.UI\.wixext\s+4\.0\.6') {
             Write-Error "WiX UI extension not found after install (exit=$uiAddExit)"
             exit 1
@@ -267,6 +265,20 @@ jobs:
             Write-Error "WiX Util extension not found after install (exit=$utilAddExit)"
             exit 1
           }
+          # Compute extension DLL directories and expose to downstream steps
+          $wixExtRoot = Join-Path $env:USERPROFILE ".wix\extensions"
+          $uiToolsDir = Join-Path $wixExtRoot "WixToolset.UI.wixext\4.0.6\tools\net8.0"
+          $utilToolsDir = Join-Path $wixExtRoot "WixToolset.Util.wixext\4.0.6\tools\net8.0"
+          if (-not (Test-Path $uiToolsDir)) {
+            Write-Error "Expected WiX UI extension tools directory not found: $uiToolsDir (UI add exit=$uiAddExit)"
+            exit 1
+          }
+          if (-not (Test-Path $utilToolsDir)) {
+            Write-Error "Expected WiX Util extension tools directory not found: $utilToolsDir (Util add exit=$utilAddExit)"
+            exit 1
+          }
+          $extPaths = "$uiToolsDir;$utilToolsDir"
+          echo "WIX_EXTENSIONS_PATH=$extPaths" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           # Show final state
           & "$wixDir\wix.exe" --version
 
