@@ -221,88 +221,33 @@ jobs:
       - name: Install .NET SDK and WiX v4
         shell: pwsh
         run: |
-          # Install .NET SDK to temp directory (avoids Program Files permission issues)
+          # Install .NET SDK 8.x (to temp directory)
           $dotnetInstallDir = Join-Path $env:RUNNER_TEMP "dotnet"
-          $env:DOTNET_INSTALL_DIR = $dotnetInstallDir
-
-          # Download and run .NET install script
-          $installScript = Join-Path $env:RUNNER_TEMP "dotnet-install.ps1"
-          Invoke-WebRequest -Uri "https://dot.net/v1/dotnet-install.ps1" -OutFile $installScript
-          & $installScript -Channel 8.0 -InstallDir $dotnetInstallDir
-
-          # Add .NET to PATH for this session and future steps
+          Invoke-WebRequest "https://dot.net/v1/dotnet-install.ps1" -OutFile "$env:RUNNER_TEMP\dotnet-install.ps1"
+          & "$env:RUNNER_TEMP\dotnet-install.ps1" -Channel 8.0 -InstallDir $dotnetInstallDir
           $env:PATH = "$dotnetInstallDir;$env:PATH"
           echo $dotnetInstallDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-          # Verify .NET installation
           & "$dotnetInstallDir\dotnet.exe" --version
-          & "$dotnetInstallDir\dotnet.exe" --list-sdks
 
-          # Install WiX v4.0.6 into a known tool path and add to PATH
+          # Install WiX v4
           $wixDir = Join-Path $env:RUNNER_TEMP "wix"
           & "$dotnetInstallDir\dotnet.exe" tool install wix --version 4.0.6 --tool-path $wixDir
-          $env:PATH = "$wixDir;$env:PATH"
           echo $wixDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           echo "WIX_EXE_PATH=$wixDir\wix.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-          # Install matching WiX extensions (v4.0.6) and verify
-          Push-Location $env:RUNNER_TEMP
-          & "$wixDir\wix.exe" extension add WixToolset.UI.wixext/4.0.6
-          $uiAddExit = $LASTEXITCODE
-          & "$wixDir\wix.exe" extension add WixToolset.Util.wixext/4.0.6
-          $utilAddExit = $LASTEXITCODE
-          Pop-Location
-          # Clean any accidental repo-local cache
-          if (Test-Path ".wix") { Remove-Item -Recurse -Force ".wix" }
-          # Verify extensions via wix extension list (handles varying install paths)
-          $extList = & "$wixDir\wix.exe" extension list
-          if ($LASTEXITCODE -ne 0) {
-            Write-Warning "wix extension list failed, continuing because extensions are restored manually"
-          }
-          Write-Host "WiX extensions available:"
-          Write-Host ($extList | Out-String)
-          # Download extension packages via NuGet and export WIX_EXTENSIONS_PATH from actual tools directories
-          $env:NUGET_PACKAGES = Join-Path $env:RUNNER_TEMP "nugetcache"
+          # Fetch WiX extension DLLs via NuGet
           $nuget = Join-Path $env:RUNNER_TEMP "nuget.exe"
           Invoke-WebRequest "https://dist.nuget.org/win-x86-commandline/v6.9.1/nuget.exe" -OutFile $nuget
-          $pkgsRoot = Join-Path $env:RUNNER_TEMP "nugetpkgs"
-          & $nuget install WixToolset.UI.wixext -Version 4.0.6 -ExcludeVersion -OutputDirectory $pkgsRoot
-          & $nuget install WixToolset.Util.wixext -Version 4.0.6 -ExcludeVersion -OutputDirectory $pkgsRoot
-          # Locate extension DLLs anywhere within the restored packages (lib/netX or tools/netX)
-          $uiDll = Get-ChildItem -Path (Join-Path $pkgsRoot "WixToolset.UI.wixext") -Recurse -Filter "WixToolset.UI.wixext.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $uiDll -and $env:NUGET_PACKAGES) {
-            $uiDll = Get-ChildItem -Path (Join-Path $env:NUGET_PACKAGES "wixtoolset.ui.wixext\4.0.6") -Recurse -Filter "WixToolset.UI.wixext.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
-          }
-          $utilDll = Get-ChildItem -Path (Join-Path $pkgsRoot "WixToolset.Util.wixext") -Recurse -Filter "WixToolset.Util.wixext.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $utilDll -and $env:NUGET_PACKAGES) {
-            $utilDll = Get-ChildItem -Path (Join-Path $env:NUGET_PACKAGES "wixtoolset.util.wixext\4.0.6") -Recurse -Filter "WixToolset.Util.wixext.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
-          }
-          if (-not $uiDll -or -not $utilDll) {
-            Write-Host "Debug: Could not find DLLs in $($pkgsRoot) or $($env:NUGET_PACKAGES). Package trees:"
-            if (Test-Path (Join-Path $pkgsRoot "WixToolset.UI.wixext")) {
-              Get-ChildItem -Recurse (Join-Path $pkgsRoot "WixToolset.UI.wixext") | Select-Object FullName
-            }
-            if ($env:NUGET_PACKAGES -and (Test-Path (Join-Path $env:NUGET_PACKAGES "wixtoolset.ui.wixext\4.0.6"))) {
-              Get-ChildItem -Recurse (Join-Path $env:NUGET_PACKAGES "wixtoolset.ui.wixext\4.0.6") | Select-Object FullName
-            }
-            if (Test-Path (Join-Path $pkgsRoot "WixToolset.Util.wixext")) {
-              Get-ChildItem -Recurse (Join-Path $pkgsRoot "WixToolset.Util.wixext") | Select-Object FullName
-            }
-            if ($env:NUGET_PACKAGES -and (Test-Path (Join-Path $env:NUGET_PACKAGES "wixtoolset.util.wixext\4.0.6"))) {
-              Get-ChildItem -Recurse (Join-Path $env:NUGET_PACKAGES "wixtoolset.util.wixext\4.0.6") | Select-Object FullName
-            }
-            Write-Error "Failed to locate WiX extension DLLs after NuGet install."
-            exit 1
-          }
-          $uiDir   = $uiDll.DirectoryName
-          $utilDir = $utilDll.DirectoryName
-          Write-Host "Using UI extension from: $uiDir"
-          Write-Host "Using Util extension from: $utilDir"
-          $extPaths = "$uiDir;$utilDir"
-          echo "WIX_EXTENSIONS_PATH=$extPaths" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "WIX_EXT_UI_DLL=$($uiDll.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $pkgsRoot = Join-Path $env:RUNNER_TEMP "wixexts"
+          & $nuget install WixToolset.UI.wixext -Version 4.0.6 -OutputDirectory $pkgsRoot -ExcludeVersion
+          & $nuget install WixToolset.Util.wixext -Version 4.0.6 -OutputDirectory $pkgsRoot -ExcludeVersion
+
+          # Locate extension DLLs and export them
+          $uiDll   = Get-ChildItem "$pkgsRoot\WixToolset.UI.wixext"   -Recurse -Filter WixToolset.UI.wixext.dll   | Select-Object -First 1
+          $utilDll = Get-ChildItem "$pkgsRoot\WixToolset.Util.wixext" -Recurse -Filter WixToolset.Util.wixext.dll | Select-Object -First 1
+          echo "WIX_EXT_UI_DLL=$($uiDll.FullName)"   | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "WIX_EXT_UTIL_DLL=$($utilDll.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          # Show final state
+          Write-Host "✅ WiX ready:"
           & "$wixDir\wix.exe" --version
 
       # Install Syft for generating Software Bill of Materials

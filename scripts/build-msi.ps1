@@ -109,49 +109,49 @@ try {
 
     Write-Host "✅ MSI built successfully: $OutputMsi"
 
-    # # Sign the MSI with YubiKey (if credentials are available)
-    # if ($env:CERT_THUMBPRINT -and $env:TIMESTAMP_SERVER) {
-    #     Write-Host "🔏 Signing MSI with YubiKey..."
-    #     
-    #     # Find signtool.exe
-    #     $SignTool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue | 
-    #                 Select-Object -First 1
-    #     
-    #     if (-not $SignTool) {
-    #         Write-Error "signtool.exe not found. Please install Windows SDK."
-    #         exit 1
-    #     }
-    #
-    #     Write-Host "Using signtool: $($SignTool.FullName)"
-    #
-    #     # Sign with YubiKey certificate
-    #     & $SignTool.FullName sign `
-    #         /sha1 $env:CERT_THUMBPRINT `
-    #         /fd sha256 `
-    #         /tr $env:TIMESTAMP_SERVER `
-    #         /td sha256 `
-    #         /v `
-    #         $OutputMsi
-    #
-    #     if ($LASTEXITCODE -ne 0) {
-    #         Write-Error "Failed to sign MSI (exit code: $LASTEXITCODE)"
-    #         exit 1
-    #     }
-    #
-    #     Write-Host "✅ MSI signed successfully"
-    #
-    #     # Verify the signature
-    #     Write-Host "🔍 Verifying signature..."
-    #     & $SignTool.FullName verify /pa /v $OutputMsi
-    #     
-    #     if ($LASTEXITCODE -ne 0) {
-    #         Write-Warning "Signature verification failed (exit code: $LASTEXITCODE)"
-    #     } else {
-    #         Write-Host "✅ Signature verified"
-    #     }
-    # } else {
-    #     Write-Warning "⚠️  Skipping MSI signing (CERT_THUMBPRINT or TIMESTAMP_SERVER not set)"
-    # }
+    # Sign the MSI with YubiKey (if credentials are available)
+    if ($env:CERT_THUMBPRINT -and $env:TIMESTAMP_SERVER) {
+        Write-Host "🔏 Signing MSI with YubiKey..."
+        
+        # Find signtool.exe
+        $SignTool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue | 
+                    Select-Object -First 1
+        
+        if (-not $SignTool) {
+            Write-Error "signtool.exe not found. Please install Windows 10 SDK on the runner."
+            exit 1
+        }
+
+        Write-Host "Using signtool: $($SignTool.FullName)"
+
+        # Sign with YubiKey certificate
+        & $SignTool.FullName sign `
+            /sha1 $env:CERT_THUMBPRINT `
+            /fd sha256 `
+            /tr $env:TIMESTAMP_SERVER `
+            /td sha256 `
+            /v `
+            $OutputMsi
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to sign MSI (exit code: $LASTEXITCODE)"
+            exit 1
+        }
+
+        Write-Host "✅ MSI signed successfully"
+
+        # Verify the signature
+        Write-Host "🔍 Verifying signature..."
+        & $SignTool.FullName verify /pa /v $OutputMsi
+        
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Signature verification failed (exit code: $LASTEXITCODE)"
+        } else {
+            Write-Host "✅ Signature verified"
+        }
+    } else {
+        Write-Warning "⚠️  Skipping MSI signing (CERT_THUMBPRINT or TIMESTAMP_SERVER not set)"
+    }
 
     # Copy signed MSI to dist directory
     $DistDir = Join-Path $RepoRoot "dist"

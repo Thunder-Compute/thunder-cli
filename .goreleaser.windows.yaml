@@ -25,9 +25,9 @@ builds:
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildDate={{ .Date }}
     hooks:
       post:
-        # - >-
-        #   pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/sign-windows-artifact.ps1
-        #   -ArtifactPath "{{ .Path }}"
+        - >-
+          pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/sign-windows-artifact.ps1
+          -ArtifactPath "{{ .Path }}"
         - >-
           pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-msi.ps1
           -BinaryPath "{{ .Path }}" -Arch "{{ .Arch }}" -Version "{{ .Version }}" -ProjectName "{{ .ProjectName }}"
