@@ -61,13 +61,23 @@ try {
     $WxsContent | Set-Content -Path $WorkingWxs -Encoding UTF8
     Write-Host "✅ Prepared WiX source: $WorkingWxs"
 
+    # Copy license file for WiX UI
+    $LicenseSource = Join-Path $RepoRoot "packaging/windows/license.rtf"
+    $LicenseDest = Join-Path $TempDir "license.rtf"
+    if (Test-Path $LicenseSource) {
+        Copy-Item $LicenseSource -Destination $LicenseDest -Force
+        Write-Host "✅ Copied license: $LicenseDest"
+    } else {
+        Write-Warning "License file not found at $LicenseSource. The installer will not show a license dialog."
+    }
+
     # Build MSI with WiX v4
     $OutputMsi = Join-Path $TempDir "$ProjectName-$Version-$Arch.msi"
     Write-Host "🔧 Building MSI with WiX..."
     
     Push-Location $TempDir
     try {
-        wix build -out $OutputMsi app.wxs
+        wix build -ext WixToolset.UI.wixext -dWixUILicenseRtf="license.rtf" -out $OutputMsi app.wxs
         if ($LASTEXITCODE -ne 0) {
             Write-Error "WiX build failed with exit code $LASTEXITCODE"
             exit 1
