@@ -82,33 +82,12 @@ try {
     }
 
     # Construct wix build args
-    $wixArgs = @()
-
-    # Prefer explicit DLLs if available; fallback to logical IDs
-    if ($env:WIX_EXT_UI_DLL -and (Test-Path $env:WIX_EXT_UI_DLL)) {
-        Write-Host "🔌 Loading UI extension from $env:WIX_EXT_UI_DLL"
-        $wixArgs += "-ext"
-        $wixArgs += $env:WIX_EXT_UI_DLL
-    } else {
-        Write-Host "🔌 Loading UI extension by id WixToolset.UI.wixext"
-        $wixArgs += "-ext"
-        $wixArgs += "WixToolset.UI.wixext"
-    }
-
-    if ($env:WIX_EXT_UTIL_DLL -and (Test-Path $env:WIX_EXT_UTIL_DLL)) {
-        Write-Host "🔌 Loading Util extension from $env:WIX_EXT_UTIL_DLL"
-        $wixArgs += "-ext"
-        $wixArgs += $env:WIX_EXT_UTIL_DLL
-    } else {
-        Write-Host "🔌 Loading Util extension by id WixToolset.Util.wixext"
-        $wixArgs += "-ext"
-        $wixArgs += "WixToolset.Util.wixext"
-    }
-
-    $wixArgs += "-dWixUILicenseRtf=license.rtf"
-    $wixArgs += "-out"
-    $wixArgs += $OutputMsi
-    $wixArgs += "app.wxs"
+    $wixArgs = @(
+        "-ext", $env:WIX_EXT_UI_DLL,
+        "-ext", $env:WIX_EXT_UTIL_DLL,
+        "-out", $OutputMsi,
+        "app.wxs"
+    )
 
     Push-Location $TempDir
     try {
