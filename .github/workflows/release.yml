@@ -253,6 +253,9 @@ jobs:
           & "$wixDir\wix.exe" --version
           & "$wixDir\wix.exe" extension list
           if ($LASTEXITCODE -ne 0) { Write-Host "Forcing clean exit"; exit 0 }
+          # Explicitly provide WiX extensions path for downstream steps (GoReleaser hooks)
+          $wixExtPath = Join-Path $env:USERPROFILE ".wix\extensions"
+          echo "WIX_EXTENSIONS_PATH=$wixExtPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       # Install Syft for generating Software Bill of Materials
       - name: Install Syft (for SBOM)
