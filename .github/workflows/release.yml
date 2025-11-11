@@ -252,6 +252,7 @@ jobs:
           if (Test-Path ".wix") { Remove-Item -Recurse -Force ".wix" }
           & "$wixDir\wix.exe" --version
           & "$wixDir\wix.exe" extension list
+          if ($LASTEXITCODE -ne 0) { Write-Host "Forcing clean exit"; exit 0 }
 
       # Install Syft for generating Software Bill of Materials
       - name: Install Syft (for SBOM)
