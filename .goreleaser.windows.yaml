@@ -72,6 +72,7 @@ blobs:
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}/windows"
+    acl: public-read
     ids:
       - archive
       - checksum
