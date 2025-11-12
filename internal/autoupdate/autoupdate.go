@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -67,7 +68,7 @@ func MaybeStartBackgroundUpdate(ctx context.Context, currentVersion string) {
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		if err := PerformUpdate(bgCtx, source, false /*useSudo*/); err != nil {
+		if err := PerformUpdate(bgCtx, source); err != nil {
 			// Quietly ignore errors in background; user can run manual self-update.
 		}
 	}()
@@ -75,7 +76,7 @@ func MaybeStartBackgroundUpdate(ctx context.Context, currentVersion string) {
 
 // PerformUpdate downloads, verifies and installs the target version.
 // When src.AssetURL is empty, the updater falls back to GitHub releases using src.ReleaseTag.
-func PerformUpdate(ctx context.Context, src Source, useSudo bool) error {
+func PerformUpdate(ctx context.Context, src Source) error {
 	exe, err := currentExecutable()
 	if err != nil {
 		return err
@@ -158,23 +159,10 @@ func PerformUpdate(ctx context.Context, src Source, useSudo bool) error {
 
 	// Unix: replace atomically
 	dir := filepath.Dir(exe)
-	if !dirWritable(dir) && !useSudo {
-		return fmt.Errorf("installation path requires elevated permissions: %s", dir)
-	}
-
-	if useSudo {
-		tmpTarget := filepath.Join(filepath.Dir(newBinary), filepath.Base(exe))
-		if err := copyFile(newBinary, tmpTarget); err != nil {
+	if runtime.GOOS != "windows" && !dirWritable(dir) {
+		if err := installWithSudo(newBinary, exe, version); err != nil {
 			return err
 		}
-		cmd := exec.Command("sudo", "mv", tmpTarget, exe)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Stdin = os.Stdin
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("sudo install failed: %w", err)
-		}
-		fmt.Printf("Successfully updated to version %s\n", version)
 		return nil
 	}
 
@@ -186,10 +174,45 @@ func PerformUpdate(ctx context.Context, src Source, useSudo bool) error {
 		return err
 	}
 	if err := os.Rename(tmpTarget, exe); err != nil {
+		if runtime.GOOS != "windows" && isPermissionError(err) {
+			if err := installWithSudo(newBinary, exe, version); err != nil {
+				return err
+			}
+			return nil
+		}
 		return fmt.Errorf("install failed: %w", err)
 	}
 	fmt.Printf("Successfully updated to version %s\n", version)
 	return nil
+}
+
+func installWithSudo(newBinary, exe, version string) error {
+	tmpTarget := filepath.Join(filepath.Dir(newBinary), filepath.Base(exe))
+	if err := copyFile(newBinary, tmpTarget); err != nil {
+		return err
+	}
+	cmd := exec.Command("sudo", "mv", tmpTarget, exe)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("sudo install failed: %w", err)
+	}
+	fmt.Printf("Successfully updated to version %s\n", version)
+	return nil
+}
+
+func isPermissionError(err error) bool {
+	if errors.Is(err, os.ErrPermission) {
+		return true
+	}
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		if errno, ok := pathErr.Err.(syscall.Errno); ok {
+			return errno == syscall.EACCES || errno == syscall.EPERM
+		}
+	}
+	return false
 }
 
 func resolveSource(ctx context.Context, src Source) (downloadURL, assetName, checksumsURL, version, expectedChecksum string, err error) {

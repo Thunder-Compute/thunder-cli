@@ -158,9 +158,9 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result) {
 	updateCtx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
 	defer cancel()
 
-	if err := runSelfUpdate(updateCtx, res, false); err != nil {
+	if err := runSelfUpdate(updateCtx, res); err != nil {
 		fmt.Fprintf(os.Stderr, "Automatic update failed: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Download the latest version from GitHub: https://github.com/Thunder-Compute/thunder-cli/releases/tag/%s or run `tnr self-update --use-sudo`.\n", releaseTag(res))
+		fmt.Fprintf(os.Stderr, "Download the latest version from GitHub: https://github.com/Thunder-Compute/thunder-cli/releases/tag/%s or run `tnr self-update`.\n", releaseTag(res))
 		os.Exit(1)
 	}
 
@@ -192,7 +192,7 @@ func handleOptionalUpdate(parentCtx context.Context, res updatepolicy.Result) {
 	updateCtx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
 	defer cancel()
 
-	updateErr := runSelfUpdate(updateCtx, res, false)
+	updateErr := runSelfUpdate(updateCtx, res)
 	if writeErr := updatepolicy.WriteOptionalUpdateAttempt(attemptTime); writeErr != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to record optional update attempt: %v\n", writeErr)
 	}
@@ -206,7 +206,7 @@ func handleOptionalUpdate(parentCtx context.Context, res updatepolicy.Result) {
 	os.Exit(0)
 }
 
-func runSelfUpdate(ctx context.Context, res updatepolicy.Result, useSudo bool) error {
+func runSelfUpdate(ctx context.Context, res updatepolicy.Result) error {
 	source := autoupdate.Source{
 		Version:     res.LatestVersion,
 		ReleaseTag:  releaseTag(res),
@@ -214,7 +214,7 @@ func runSelfUpdate(ctx context.Context, res updatepolicy.Result, useSudo bool) e
 		Checksum:    res.ExpectedSHA256,
 		ChecksumURL: res.ChecksumURL,
 	}
-	return autoupdate.PerformUpdate(ctx, source, useSudo)
+	return autoupdate.PerformUpdate(ctx, source)
 }
 
 func releaseTag(res updatepolicy.Result) string {

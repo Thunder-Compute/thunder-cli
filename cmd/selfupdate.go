@@ -2,12 +2,12 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -58,22 +58,11 @@ var selfUpdateCmd = &cobra.Command{
 			return nil
 		}
 
-		useSudo, _ := cmd.Flags().GetBool("use-sudo")
-
-		if !userWritable(binPath) && !useSudo {
-			fmt.Printf("⚠️  Installation path requires elevated permissions: %s\n\n", binPath)
-			fmt.Println("Choose one of the following options:")
+		if runtime.GOOS != "windows" && !userWritable(binPath) {
+			fmt.Printf("⚠ Installation path requires elevated permissions: %s\n", binPath)
+			fmt.Println("You may be prompted for your password to continue.")
+			fmt.Println("Alternatively, reinstall to a user-writable location or manage updates via your package manager.")
 			fmt.Println()
-			fmt.Println("1. Update with sudo (requires password):")
-			fmt.Println("   tnr self-update --use-sudo")
-			fmt.Println()
-			fmt.Println("2. Reinstall to user-writable location:")
-			fmt.Println("   curl -fsSL https://raw.githubusercontent.com/Thunder-Compute/thunder-cli/main/scripts/install.sh | bash")
-			fmt.Println()
-			fmt.Println("3. Install via Homebrew (recommended for macOS):")
-			fmt.Println("   brew tap Thunder-Compute/tap && brew install tnr")
-			fmt.Println()
-			return errors.New("update requires elevated permissions or reinstallation")
 		}
 
 		currentVersion := version.BuildVersion
@@ -102,7 +91,7 @@ var selfUpdateCmd = &cobra.Command{
 		}
 
 		fmt.Println("Downloading update...")
-		if err := runSelfUpdate(ctx, res, useSudo); err != nil {
+		if err := runSelfUpdate(ctx, res); err != nil {
 			// Point users to GitHub releases for manual download
 			tag := res.LatestTag
 			if tag == "" {
@@ -130,7 +119,6 @@ var selfUpdateCmd = &cobra.Command{
 
 func init() {
 	selfUpdateCmd.Flags().String("channel", "stable", "update channel (stable or beta)")
-	selfUpdateCmd.Flags().Bool("use-sudo", false, "use sudo for updating binaries in system directories")
 	rootCmd.AddCommand(selfUpdateCmd)
 }
 
