@@ -12,13 +12,29 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 )
+
+// Source describes where an update should be downloaded from.
+// When AssetURL is provided, the updater downloads directly from that URL.
+// Otherwise, ReleaseTag (or Version) is used to locate the asset on GitHub.
+type Source struct {
+	Version      string
+	ReleaseTag   string
+	AssetURL     string
+	AssetName    string
+	Checksum     string
+	ChecksumURL  string
+	Channel      string
+	ExpectedSize int64
+}
 
 func MaybeStartBackgroundUpdate(ctx context.Context, currentVersion string) {
 	if os.Getenv("TNR_NO_SELFUPDATE") == "1" {
@@ -44,18 +60,22 @@ func MaybeStartBackgroundUpdate(ctx context.Context, currentVersion string) {
 	}
 
 	fmt.Printf("Updating tnr in background to %s…\n", latest)
+	source := Source{
+		ReleaseTag: latest,
+		Version:    strings.TrimPrefix(strings.TrimPrefix(latest, "v"), "V"),
+	}
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		if err := PerformUpdate(bgCtx, latest, false /*useSudo*/); err != nil {
+		if err := PerformUpdate(bgCtx, source, false /*useSudo*/); err != nil {
 			// Quietly ignore errors in background; user can run manual self-update.
 		}
 	}()
 }
 
 // PerformUpdate downloads, verifies and installs the target version.
-// If latestTag is empty, the latest release will be used.
-func PerformUpdate(ctx context.Context, latestTag string, useSudo bool) error {
+// When src.AssetURL is empty, the updater falls back to GitHub releases using src.ReleaseTag.
+func PerformUpdate(ctx context.Context, src Source, useSudo bool) error {
 	exe, err := currentExecutable()
 	if err != nil {
 		return err
@@ -65,9 +85,12 @@ func PerformUpdate(ctx context.Context, latestTag string, useSudo bool) error {
 		return errors.New("managed by package manager")
 	}
 
-	asset, checksumsURL, version, err := resolveAssetForCurrentPlatform(ctx, latestTag)
+	downloadURL, assetName, checksumsURL, version, expectedChecksum, err := resolveSource(ctx, src)
 	if err != nil {
 		return err
+	}
+	if assetName == "" {
+		return errors.New("unable to determine asset name for update")
 	}
 
 	tmpDir, err := os.MkdirTemp("", "tnr-update-*")
@@ -76,9 +99,15 @@ func PerformUpdate(ctx context.Context, latestTag string, useSudo bool) error {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	archivePath := filepath.Join(tmpDir, asset.Name)
-	if err := downloadFile(ctx, asset.BrowserDownloadURL, archivePath); err != nil {
+	archivePath := filepath.Join(tmpDir, assetName)
+	if err := downloadFile(ctx, downloadURL, archivePath); err != nil {
 		return fmt.Errorf("download asset: %w", err)
+	}
+
+	if expectedChecksum != "" {
+		if err := verifyChecksumValue(archivePath, expectedChecksum); err != nil {
+			return err
+		}
 	}
 
 	if checksumsURL != "" {
@@ -161,6 +190,80 @@ func PerformUpdate(ctx context.Context, latestTag string, useSudo bool) error {
 	}
 	fmt.Printf("Successfully updated to version %s\n", version)
 	return nil
+}
+
+func resolveSource(ctx context.Context, src Source) (downloadURL, assetName, checksumsURL, version, expectedChecksum string, err error) {
+	expectedChecksum = strings.ToLower(strings.TrimSpace(src.Checksum))
+	checksumsURL = strings.TrimSpace(src.ChecksumURL)
+	version = strings.TrimSpace(src.Version)
+
+	if src.AssetURL != "" {
+		downloadURL = strings.TrimSpace(src.AssetURL)
+		assetName = strings.TrimSpace(src.AssetName)
+		if assetName == "" {
+			assetName = fileNameFromURL(downloadURL)
+		}
+		if version == "" {
+			version = deriveVersionFromName(assetName)
+		}
+		return
+	}
+
+	asset, ghChecksumsURL, ghVersion, err := resolveAssetForCurrentPlatform(ctx, src.ReleaseTag)
+	if err != nil {
+		return "", "", "", "", "", err
+	}
+
+	downloadURL = asset.BrowserDownloadURL
+	assetName = asset.Name
+	if checksumsURL == "" {
+		checksumsURL = ghChecksumsURL
+	}
+	if version == "" {
+		version = ghVersion
+	}
+	return
+}
+
+func verifyChecksumValue(filePath, expected string) error {
+	expected = strings.ToLower(strings.TrimSpace(expected))
+	if expected == "" {
+		return nil
+	}
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+	actual := hex.EncodeToString(h.Sum(nil))
+	if !strings.EqualFold(actual, expected) {
+		return fmt.Errorf("checksum mismatch: expected %s, got %s", expected, actual)
+	}
+	return nil
+}
+
+func fileNameFromURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return path.Base(u.Path)
+}
+
+func deriveVersionFromName(name string) string {
+	sanitised := strings.TrimSpace(name)
+	if sanitised == "" {
+		return ""
+	}
+	parts := strings.Split(sanitised, "_")
+	if len(parts) >= 2 {
+		return strings.TrimPrefix(parts[1], "v")
+	}
+	return ""
 }
 
 // --- helpers ---
@@ -473,6 +576,13 @@ func finalizeWindowsSwap() error {
 	return nil
 }
 
+// FinalizeStagedWindowsUpdate attempts to apply a previously staged Windows update.
+// It is safe to call on non-Windows platforms (no-op) and errors are returned for callers
+// who wish to handle them. Most callers can ignore the error.
+func FinalizeStagedWindowsUpdate() error {
+	return finalizeWindowsSwap()
+}
+
 // checkLatestVersion calls into the updatecheck.Check without importing it directly to avoid cycles.
 // Implemented here minimally by duplicating the HTTP call used by updatecheck.
 func checkLatestVersion(ctx context.Context, current string) (latest string, outdated bool, err error) {
@@ -523,6 +633,12 @@ func versionLess(a, b string) bool {
 
 func parseParts(v string) [3]int {
 	var out [3]int
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return out
+	}
+	v = strings.TrimPrefix(v, "v")
+	v = strings.TrimPrefix(v, "V")
 	parts := strings.SplitN(v, "-", 2)[0]
 	segs := strings.Split(parts, ".")
 	for i := 0; i < len(segs) && i < 3; i++ {

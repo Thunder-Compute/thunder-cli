@@ -7,10 +7,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sync"
+	"strings"
+	"time"
 
 	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
-	"github.com/Thunder-Compute/thunder-cli/internal/updatecheck"
+	"github.com/Thunder-Compute/thunder-cli/internal/updatepolicy"
 	"github.com/Thunder-Compute/thunder-cli/internal/version"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
@@ -29,8 +30,6 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-var updatePromptOnce sync.Once
-
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
@@ -43,7 +42,7 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		maybePromptForUpdate(cmd)
+		checkIfUpdateNeeded(cmd)
 		return nil
 	}
 
@@ -110,38 +109,138 @@ See each sub-command's help for details on how to use the generated script.`,
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
-func maybePromptForUpdate(cmd *cobra.Command) {
-	updatePromptOnce.Do(func() {
-		if shouldSkipUpdateCheck(cmd) {
-			return
-		}
+func checkIfUpdateNeeded(cmd *cobra.Command) {
+	if shouldSkipUpdateCheck(cmd) {
+		return
+	}
 
-		if os.Getenv("TNR_NO_SELFUPDATE") == "1" {
-			return
-		}
+	if os.Getenv("TNR_NO_SELFUPDATE") == "1" {
+		return
+	}
 
-		ctx := context.Background()
+	ctx := context.Background()
 
-		// Start background autoupdate if needed (non-blocking).
-		autoupdate.MaybeStartBackgroundUpdate(ctx, version.BuildVersion)
+	// Apply any previously staged Windows update before checking again.
+	if err := autoupdate.FinalizeStagedWindowsUpdate(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to finalize staged Windows update: %v\n", err)
+	}
 
-		result, err := updatecheck.Check(ctx, version.BuildVersion)
-		if err != nil || result.Skipped || !result.Outdated {
-			return
-		}
+	policyResult, err := updatepolicy.Check(ctx, version.BuildVersion, false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: update check failed: %v\n", err)
+		return
+	}
 
-		var binPath string
-		if path, err := getCurrentBinaryPath(); err == nil {
-			binPath = path
-		}
+	if !policyResult.Mandatory && !policyResult.Optional {
+		return
+	}
 
-		if binPath != "" && isPMManaged(binPath) {
-			fmt.Printf("⚠️  Update available: %s → %s. Update via your package manager (e.g. brew upgrade tnr).\n", result.CurrentVersion, result.LatestVersion)
-			return
-		}
+	if policyResult.Mandatory {
+		handleMandatoryUpdate(ctx, policyResult)
+		return
+	}
 
-		fmt.Printf("⚠️  Update available: %s → %s. Run `tnr self-update` to upgrade.\n", result.CurrentVersion, result.LatestVersion)
-	})
+	handleOptionalUpdate(ctx, policyResult)
+}
+
+func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result) {
+	displayCurrent := displayVersion(res.CurrentVersion)
+	displayMin := displayVersion(res.MinVersion)
+	fmt.Fprintf(os.Stderr, "⚠️  Mandatory update required: current %s, minimum %s.\n", displayCurrent, displayMin)
+
+	binPath, _ := getCurrentBinaryPath()
+	if binPath != "" && isPMManaged(binPath) {
+		fmt.Fprintln(os.Stderr, "This installation is managed by a package manager. Please upgrade using brew/winget/scoop or reinstall the latest release.")
+		os.Exit(1)
+	}
+
+	fmt.Fprintln(os.Stderr, "Attempting automatic update...")
+	updateCtx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
+	defer cancel()
+
+	if err := runSelfUpdate(updateCtx, res, false); err != nil {
+		fmt.Fprintf(os.Stderr, "Automatic update failed: %v\n", err)
+		fmt.Fprintln(os.Stderr, "Download the latest version from https://console.thundercompute.com/?download or run `tnr self-update --use-sudo`.")
+		os.Exit(1)
+	}
+
+	fmt.Fprintln(os.Stderr, "Update completed successfully. Please re-run your command.")
+	os.Exit(0)
+}
+
+func handleOptionalUpdate(parentCtx context.Context, res updatepolicy.Result) {
+	binPath, _ := getCurrentBinaryPath()
+	if binPath != "" && isPMManaged(binPath) {
+		fmt.Printf("⚠️  Update available: %s → %s. Update via your package manager (e.g. brew upgrade tnr).\n",
+			displayVersion(res.CurrentVersion), displayVersion(res.LatestVersion))
+		return
+	}
+
+	lastAttempt, err := updatepolicy.ReadOptionalUpdateAttempt()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: unable to read optional update cache: %v\n", err)
+	}
+	if !lastAttempt.IsZero() && time.Since(lastAttempt) < updatepolicy.OptionalUpdateTTL {
+		fmt.Printf("ℹ️  Update available: %s → %s. Automatic update skipped (last attempt %s). Run `tnr self-update` to update now.\n",
+			displayVersion(res.CurrentVersion), displayVersion(res.LatestVersion), lastAttempt.Format(time.RFC1123))
+		return
+	}
+
+	fmt.Printf("Automatically updating to %s. Please wait...\n", displayVersion(res.LatestVersion))
+
+	attemptTime := time.Now()
+	updateCtx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
+	defer cancel()
+
+	updateErr := runSelfUpdate(updateCtx, res, false)
+	if writeErr := updatepolicy.WriteOptionalUpdateAttempt(attemptTime); writeErr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to record optional update attempt: %v\n", writeErr)
+	}
+
+	if updateErr == nil {
+		fmt.Println("Update finished! You can now re-run your command.")
+	} else {
+		fmt.Fprintf(os.Stderr, "Warning: optional update failed: %v\n", updateErr)
+		fmt.Println("You can download the latest version from https://console.thundercompute.com/?download or run `tnr self-update`.")
+	}
+	os.Exit(0)
+}
+
+func runSelfUpdate(ctx context.Context, res updatepolicy.Result, useSudo bool) error {
+	source := autoupdate.Source{
+		Version:     res.LatestVersion,
+		ReleaseTag:  releaseTag(res),
+		AssetURL:    res.AssetURL,
+		Checksum:    res.ExpectedSHA256,
+		ChecksumURL: res.ChecksumURL,
+	}
+	return autoupdate.PerformUpdate(ctx, source, useSudo)
+}
+
+func releaseTag(res updatepolicy.Result) string {
+	tag := res.LatestTag
+	if tag == "" {
+		tag = res.LatestVersion
+	}
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return ""
+	}
+	if !strings.HasPrefix(tag, "v") && !strings.HasPrefix(tag, "V") {
+		tag = "v" + tag
+	}
+	return tag
+}
+
+func displayVersion(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "unknown"
+	}
+	if strings.HasPrefix(v, "v") || strings.HasPrefix(v, "V") {
+		return v
+	}
+	return "v" + v
 }
 
 func shouldSkipUpdateCheck(cmd *cobra.Command) bool {

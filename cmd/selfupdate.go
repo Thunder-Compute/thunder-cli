@@ -9,9 +9,9 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"time"
 
-	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
-	"github.com/Thunder-Compute/thunder-cli/internal/updatecheck"
+	"github.com/Thunder-Compute/thunder-cli/internal/updatepolicy"
 	"github.com/Thunder-Compute/thunder-cli/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -83,21 +83,31 @@ var selfUpdateCmd = &cobra.Command{
 			return nil
 		}
 
-		fmt.Printf("Current version: %s\n", currentVersion)
+		fmt.Printf("Current version: %s\n", displayVersion(currentVersion))
 		ctx := context.Background()
 		fmt.Println("Checking for updates...")
-		res, err := updatecheck.Check(ctx, currentVersion)
+		res, err := updatepolicy.Check(ctx, currentVersion, true /*force*/)
 		if err != nil {
-			return fmt.Errorf("error occurred while detecting version: %w", err)
+			return fmt.Errorf("update policy check failed: %w", err)
 		}
-		if !res.Outdated {
-			fmt.Printf("Already up to date (version %s)\n", currentVersion)
+		if !res.Mandatory && !res.Optional {
+			fmt.Printf("Already up to date (version %s)\n", displayVersion(currentVersion))
 			return nil
 		}
-		fmt.Printf("New version available: %s\n", res.LatestVersion)
+
+		if res.Mandatory {
+			fmt.Printf("Mandatory update required: %s → %s\n", displayVersion(currentVersion), displayVersion(res.MinVersion))
+		} else {
+			fmt.Printf("Update available: %s → %s\n", displayVersion(currentVersion), displayVersion(res.LatestVersion))
+		}
+
 		fmt.Println("Downloading update...")
-		if err := autoupdate.PerformUpdate(ctx, res.LatestVersion, useSudo); err != nil {
-			return err
+		if err := runSelfUpdate(ctx, res, useSudo); err != nil {
+			return fmt.Errorf("self-update failed: %w", err)
+		}
+
+		if err := updatepolicy.WriteOptionalUpdateAttempt(time.Now()); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to record update timestamp: %v\n", err)
 		}
 		fmt.Println("Restart the CLI to use the new version")
 		return nil

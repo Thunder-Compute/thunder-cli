@@ -75,6 +75,9 @@ blobs:
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}/linux"
+    artifacts:
+      - checksum
+      - archive
     extra_files:
       - glob: "dist/*.deb"
       - glob: "dist/*.rpm"
@@ -105,5 +108,5 @@ changelog:
   sort: asc
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
+      - "^docs:"
+      - "^test:"
