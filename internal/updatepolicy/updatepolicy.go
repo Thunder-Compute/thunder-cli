@@ -396,7 +396,11 @@ func normalizeVersion(v string) string {
 
 func targetArchiveName(version, osName string) string {
 	version = normalizeVersion(version)
-	return fmt.Sprintf("tnr_%s_%s_%s%s", version, osName, detectPlatform().Arch, detectPlatform().Ext)
+	fileOS := osName
+	if osName == "macos" {
+		fileOS = "darwin"
+	}
+	return fmt.Sprintf("tnr_%s_%s_%s%s", version, fileOS, detectPlatform().Arch, detectPlatform().Ext)
 }
 
 func checksumCandidates(explicitURL, assetURL, version string, osName string) []string {
@@ -438,7 +442,11 @@ func defaultAssetURL(man manifest, p platform) string {
 		return ""
 	}
 	version := normalizeVersion(man.Version)
-	return fmt.Sprintf("%s/tnr/releases/%s/%s/tnr_%s_%s_%s%s", base, version, p.OS, version, p.OS, p.Arch, p.Ext)
+	fileOS := p.OS
+	if p.OS == "macos" {
+		fileOS = "darwin"
+	}
+	return fmt.Sprintf("%s/tnr/releases/%s/%s/tnr_%s_%s_%s%s", base, version, p.OS, version, fileOS, p.Arch, p.Ext)
 }
 
 func defaultChecksumURL(man manifest, p platform, assetURL string) string {
@@ -460,13 +468,17 @@ func githubAssetAndChecksum(version string, p platform) (assetURL, checksumURL s
 	if !strings.HasPrefix(tag, "v") && !strings.HasPrefix(tag, "V") {
 		tag = "v" + tag
 	}
+	fileOS := p.OS
+	if p.OS == "macos" {
+		fileOS = "darwin"
+	}
 	assetURL = fmt.Sprintf(
 		"https://github.com/Thunder-Compute/thunder-cli/releases/download/%s/tnr_%s_%s_%s%s",
-		tag, fileVersion, p.OS, p.Arch, p.Ext,
+		tag, fileVersion, fileOS, p.Arch, p.Ext,
 	)
 	checkName := "checksums.txt"
 	switch p.OS {
-	case "darwin":
+	case "macos":
 		checkName = "checksums-macos.txt"
 	case "linux":
 		checkName = "checksums-linux.txt"

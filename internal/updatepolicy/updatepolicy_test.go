@@ -23,7 +23,7 @@ func TestCheckOptionalUpdateUsesCache(t *testing.T) {
 	current := "1.2.0"
 	minVersion := "1.1.0"
 	expectedHash := strings.Repeat("a", 64)
-	assetName := fmt.Sprintf("tnr_%s_%s_%s%s", version, plat.OS, plat.Arch, plat.Ext)
+	assetName := targetArchiveName(version, plat.OS)
 
 	var manifestHits int32
 	var checksumHits int32
