@@ -74,7 +74,10 @@ blobs:
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}/linux"
-    acl: public-read
+    cache_control:
+      - public
+      - max-age=31536000
+      - immutable
     ids:
       - archive
       - checksum
