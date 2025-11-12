@@ -160,7 +160,7 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result) {
 
 	if err := runSelfUpdate(updateCtx, res, false); err != nil {
 		fmt.Fprintf(os.Stderr, "Automatic update failed: %v\n", err)
-		fmt.Fprintln(os.Stderr, "Download the latest version from https://console.thundercompute.com/?download or run `tnr self-update --use-sudo`.")
+		fmt.Fprintf(os.Stderr, "Download the latest version from GitHub: https://github.com/Thunder-Compute/thunder-cli/releases/tag/%s or run `tnr self-update --use-sudo`.\n", releaseTag(res))
 		os.Exit(1)
 	}
 
@@ -201,7 +201,7 @@ func handleOptionalUpdate(parentCtx context.Context, res updatepolicy.Result) {
 		fmt.Println("Update finished! You can now re-run your command.")
 	} else {
 		fmt.Fprintf(os.Stderr, "Warning: optional update failed: %v\n", updateErr)
-		fmt.Println("You can download the latest version from https://console.thundercompute.com/?download or run `tnr self-update`.")
+		fmt.Printf("You can download the latest version from GitHub: https://github.com/Thunder-Compute/thunder-cli/releases/tag/%s or run `tnr self-update`.\n", releaseTag(res))
 	}
 	os.Exit(0)
 }

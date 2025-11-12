@@ -19,6 +19,13 @@ import (
 	"github.com/Masterminds/semver/v3"
 )
 
+// debugf prints diagnostics when TNR_UPDATE_DEBUG=1
+func debugf(format string, args ...any) {
+	if os.Getenv("TNR_UPDATE_DEBUG") == "1" {
+		fmt.Fprintf(os.Stderr, "[tnr-update] "+format+"\n", args...)
+	}
+}
+
 const (
 	cacheDirName           = "tnr"
 	minVersionCacheName    = "min_version.json"
@@ -35,7 +42,6 @@ const (
 )
 
 var defaultBases = []string{
-	"https://downloads.thundercompute.com",
 	fmt.Sprintf("https://%s.s3.%s.amazonaws.com", defaultBucket, defaultS3Region),
 }
 
@@ -71,13 +77,6 @@ func Check(ctx context.Context, currentVersion string, force bool) (Result, erro
 		return res, nil
 	}
 
-	minVersion, err := fetchMinVersion(ctx, force)
-	if err == nil {
-		res.MinVersion = normalizeVersion(minVersion)
-	} else if force {
-		return res, fmt.Errorf("fetch min version: %w", err)
-	}
-
 	manifest, err := fetchLatestManifest(ctx, force)
 	if err != nil {
 		return res, fmt.Errorf("fetch latest manifest: %w", err)
@@ -95,13 +94,45 @@ func Check(ctx context.Context, currentVersion string, force bool) (Result, erro
 		checksumURL = defaultChecksumURL(manifest, platform, assetURL)
 	}
 
+	// GitHub fallback for asset/checksum when manifest did not include them
+	if assetURL == "" || checksumURL == "" {
+		ghAsset, ghChecksum := githubAssetAndChecksum(manifest.Version, platform)
+		if assetURL == "" {
+			assetURL = ghAsset
+		}
+		if checksumURL == "" {
+			checksumURL = ghChecksum
+		}
+	}
+
 	res.AssetURL = assetURL
 	candidates := checksumCandidates(checksumURL, assetURL, manifest.Version, platform.OS)
+	// Always include the GitHub OS-specific checksum as an additional candidate
+	if _, ghChecksum := githubAssetAndChecksum(manifest.Version, platform); ghChecksum != "" {
+		candidates = append(candidates, ghChecksum)
+	}
 
 	expectedChecksum, usedURL, err := fetchChecksum(ctx, manifest.Version, platform.OS, candidates, force)
 	if err == nil {
 		res.ExpectedSHA256 = expectedChecksum
 		res.ChecksumURL = usedURL
+	}
+	debugf("asset: %s", res.AssetURL)
+	if res.ChecksumURL != "" && res.ExpectedSHA256 != "" {
+		debugf("checksums: %s (sha256=%s)", res.ChecksumURL, res.ExpectedSHA256)
+	}
+
+	// Decide minimum CLI version
+	if url := resolveMinVersionURL(); url != "" {
+		if minVersion, err := fetchMinVersion(ctx, force); err == nil {
+			res.MinVersion = normalizeVersion(minVersion)
+			debugf("min-version: using %s from %s", res.MinVersion, url)
+		} else if force {
+			return res, fmt.Errorf("fetch min version: %w", err)
+		}
+	} else {
+		res.MinVersion = res.LatestVersion
+		debugf("min-version: defaulting to latest %s", res.MinVersion)
 	}
 
 	currentSemver, errCur := semver.NewVersion(res.CurrentVersion)
@@ -154,6 +185,7 @@ func (m manifest) AssetFor(p platform) (assetURL, checksumURL string) {
 func fetchLatestManifest(ctx context.Context, force bool) (manifest, error) {
 	if !force {
 		if cached, ok := readManifestCache(); ok {
+			debugf("manifest: using cached latest manifest version=%s", cached.Version)
 			return cached, nil
 		}
 	}
@@ -164,9 +196,11 @@ func fetchLatestManifest(ctx context.Context, force bool) (manifest, error) {
 		if u == "" {
 			continue
 		}
+		debugf("manifest: trying %s", u)
 		man, err := fetchManifestFromURL(ctx, u)
 		if err == nil {
 			_ = writeManifestCache(man)
+			debugf("manifest: using %s (version=%s)", u, man.Version)
 			return man, nil
 		}
 		lastErr = err
@@ -206,13 +240,16 @@ type minVersionPayload struct {
 func fetchMinVersion(ctx context.Context, force bool) (string, error) {
 	if !force {
 		if v, ok := readMinVersionCache(); ok {
+			debugf("min-version: using cached %s", v)
 			return v, nil
 		}
 	}
 
 	minURL := resolveMinVersionURL()
 	if minURL == "" {
-		return "", errors.New("min version URL not configured")
+		// Opt-in behavior: if no min-version URL is configured, skip mandatory checks.
+		debugf("min-version: disabled (no %s)", minVersionEnvKey)
+		return "", nil
 	}
 
 	body, err := httpGet(ctx, minURL)
@@ -233,6 +270,7 @@ func fetchMinVersion(ctx context.Context, force bool) (string, error) {
 		return "", errors.New("min version payload missing version")
 	}
 	_ = writeMinVersionCache(payload.Version)
+	debugf("min-version: fetched %s from %s", payload.Version, minURL)
 	return payload.Version, nil
 }
 
@@ -414,6 +452,34 @@ func defaultChecksumURL(man manifest, p platform, assetURL string) string {
 	return fmt.Sprintf("%s/checksums-%s.txt", releaseRoot, p.OS)
 }
 
+// githubAssetAndChecksum builds GitHub release URLs for the asset and OS-specific checksum file.
+// Tag is v{version}, filenames use plain {version}.
+func githubAssetAndChecksum(version string, p platform) (assetURL, checksumURL string) {
+	fileVersion := normalizeVersion(version)
+	tag := fileVersion
+	if !strings.HasPrefix(tag, "v") && !strings.HasPrefix(tag, "V") {
+		tag = "v" + tag
+	}
+	assetURL = fmt.Sprintf(
+		"https://github.com/Thunder-Compute/thunder-cli/releases/download/%s/tnr_%s_%s_%s%s",
+		tag, fileVersion, p.OS, p.Arch, p.Ext,
+	)
+	checkName := "checksums.txt"
+	switch p.OS {
+	case "darwin":
+		checkName = "checksums-macos.txt"
+	case "linux":
+		checkName = "checksums-linux.txt"
+	case "windows":
+		checkName = "checksums-windows.txt"
+	}
+	checksumURL = fmt.Sprintf(
+		"https://github.com/Thunder-Compute/thunder-cli/releases/download/%s/%s",
+		tag, checkName,
+	)
+	return
+}
+
 func resolveLatestURLs() []string {
 	var urls []string
 	if v := os.Getenv("TNR_LATEST_URL"); v != "" {
@@ -444,7 +510,7 @@ func resolveMinVersionURL() string {
 	if v := strings.TrimSpace(os.Getenv(minVersionEnvKey)); v != "" {
 		return v
 	}
-	return "https://api.thundercompute.com:8443/min_version"
+	return ""
 }
 
 func defaultManifestBase() string {

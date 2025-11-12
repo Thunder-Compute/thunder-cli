@@ -103,6 +103,20 @@ var selfUpdateCmd = &cobra.Command{
 
 		fmt.Println("Downloading update...")
 		if err := runSelfUpdate(ctx, res, useSudo); err != nil {
+			// Point users to GitHub releases for manual download
+			tag := res.LatestTag
+			if tag == "" {
+				tag = res.LatestVersion
+			}
+			tag = strings.TrimSpace(tag)
+			if tag != "" && !strings.HasPrefix(tag, "v") && !strings.HasPrefix(tag, "V") {
+				tag = "v" + tag
+			}
+			if tag != "" {
+				fmt.Printf("You can download the latest version from GitHub: https://github.com/Thunder-Compute/thunder-cli/releases/tag/%s\n", tag)
+			} else {
+				fmt.Println("You can download the latest version from GitHub: https://github.com/Thunder-Compute/thunder-cli/releases")
+			}
 			return fmt.Errorf("self-update failed: %w", err)
 		}
 
