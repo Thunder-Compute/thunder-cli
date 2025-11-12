@@ -363,7 +363,7 @@ func detectPlatform() platform {
 	var p platform
 	switch runtime.GOOS {
 	case "darwin":
-		p.OS = "darwin"
+		p.OS = "macos"
 		p.Ext = ".tar.gz"
 	case "linux":
 		p.OS = "linux"
