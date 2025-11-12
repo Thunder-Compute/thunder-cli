@@ -69,7 +69,6 @@ sboms:
 # extra_files needed here because MSI files aren't automatically included in blobs
 blobs:
   - provider: s3
-    if: '{{ eq .Os "windows" }}'
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}/windows"

@@ -71,7 +71,6 @@ sboms:
 # extra_files needed here because NFPM packages aren't automatically included in blobs
 blobs:
   - provider: s3
-    if: '{{ eq .Os "linux" }}'
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}/linux"
