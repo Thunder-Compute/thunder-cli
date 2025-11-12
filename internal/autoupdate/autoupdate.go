@@ -187,10 +187,25 @@ func PerformUpdate(ctx context.Context, src Source) error {
 }
 
 func installWithSudo(newBinary, exe, version string) error {
-	tmpTarget := filepath.Join(filepath.Dir(newBinary), filepath.Base(exe))
+	tempDir := filepath.Dir(newBinary)
+	tmpFile, err := os.CreateTemp(tempDir, "tnr-sudo-*")
+	if err != nil {
+		return err
+	}
+	tmpTarget := tmpFile.Name()
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpTarget)
+		return err
+	}
+	defer os.Remove(tmpTarget)
+
 	if err := copyFile(newBinary, tmpTarget); err != nil {
 		return err
 	}
+	if err := os.Chmod(tmpTarget, 0o755); err != nil {
+		return err
+	}
+
 	cmd := exec.Command("sudo", "mv", tmpTarget, exe)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
