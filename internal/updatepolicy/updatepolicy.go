@@ -28,7 +28,7 @@ const (
 	cacheTTL = time.Hour
 
 	defaultLatestPath = "/tnr/releases/latest.json"
-	defaultS3Region   = "us-west-2"
+	defaultS3Region   = "ap-southeast-2"
 	defaultBucket     = "thunder-cli-releases"
 
 	minVersionEnvKey = "TNR_MIN_VERSION_URL"
