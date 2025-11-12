@@ -73,9 +73,9 @@ blobs:
     bucket: "{{ .Env.TNR_S3_BUCKET }}"
     region: "{{ .Env.AWS_REGION }}"
     directory: "tnr/releases/{{ .Version }}/windows"
-    artifacts:
-      - checksum
+    ids:
       - archive
+      - checksum
     extra_files:
       - glob: "dist/*.msi"
 
