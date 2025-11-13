@@ -12,6 +12,8 @@ import (
 )
 
 func RenderLoginHelp(cmd *cobra.Command) {
+	InitHelpStyles(os.Stdout)
+
 	var output strings.Builder
 
 	header := `
@@ -52,14 +54,14 @@ func RenderLoginHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("# Interactive browser authentication"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr login")
+	output.WriteString(CommandTextStyle.Render("tnr login"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Direct token authentication"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr login --token abc123xyz789")
+	output.WriteString(CommandTextStyle.Render("tnr login --token abc123xyz789"))
 	output.WriteString("\n\n")
 
 	// Flags Section

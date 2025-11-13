@@ -47,9 +47,7 @@ type instancesMsg struct {
 type quitNow struct{}
 
 func NewStatusModel(client *api.Client, monitoring bool, instances []api.Instance) StatusModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
+	s := NewPrimarySpinner()
 
 	return StatusModel{
 		client:     client,
@@ -186,7 +184,7 @@ func (m StatusModel) View() string {
 
 func (m StatusModel) renderTable() string {
 	if len(m.instances) == 0 {
-		return warningStyleTUI.Render("⚠ No instances found. Use 'tnr create' to create a Thunder Compute instance.")
+		return warningStyleTUI.Render("⚠  No instances found. Use 'tnr create' to create a Thunder Compute instance.")
 	}
 
 	colWidths := map[string]int{
@@ -289,44 +287,20 @@ func RunStatus(client *api.Client, monitoring bool, instances []api.Instance) er
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	r := lipgloss.NewRenderer(os.Stdout)
+	InitCommonStyles(os.Stdout)
 
-	headerStyle = r.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#0391ff")).
+	headerStyle = PrimaryTitleStyle().Padding(0, 1)
+
+	runningStyle = SuccessStyle()
+
+	startingStyle = WarningStyle()
+
+	deletingStyle = ErrorStyle()
+
+	cellStyle = lipgloss.NewStyle().
 		Padding(0, 1)
 
-	runningStyle = r.NewStyle().
-		Foreground(lipgloss.Color("10")) // Green
-
-	startingStyle = r.NewStyle().
-		Foreground(lipgloss.Color("11")) // Yellow
-
-	deletingStyle = r.NewStyle().
-		Foreground(lipgloss.Color("9")) // Red
-
-	cellStyle = r.NewStyle().
-		Padding(0, 1)
-
-	timestampStyle = r.NewStyle().
-		Foreground(lipgloss.Color("8")).
-		Italic(true)
-
-	successStyle = r.NewStyle().
-		Foreground(lipgloss.Color("#00D787")).
-		Bold(true)
-
-	errorStyleTUI = r.NewStyle().
-		Foreground(lipgloss.Color("#FF5555")).
-		Bold(true)
-
-	warningStyleTUI = r.NewStyle().
-		Foreground(lipgloss.Color("#FFB86C")).
-		Bold(true)
-
-	helpStyleTUI = r.NewStyle().
-		Foreground(lipgloss.Color("8")).
-		Italic(true)
+	timestampStyle = HelpStyle()
 
 	m := NewStatusModel(client, monitoring, instances)
 	p := tea.NewProgram(

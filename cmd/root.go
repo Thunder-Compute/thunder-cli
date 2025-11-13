@@ -41,6 +41,8 @@ func Execute() {
 }
 
 func init() {
+	tui.InitCommonStyles(os.Stdout)
+
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		checkIfUpdateNeeded(cmd)
 		return nil

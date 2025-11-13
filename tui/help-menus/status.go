@@ -12,6 +12,8 @@ import (
 )
 
 func RenderStatusHelp(cmd *cobra.Command) {
+	InitHelpStyles(os.Stdout)
+
 	var output strings.Builder
 
 	header := `
@@ -52,14 +54,14 @@ func RenderStatusHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("# Continuous monitoring (default)"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr status")
+	output.WriteString(CommandTextStyle.Render("tnr status"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Display status once and exit"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr status --no-wait")
+	output.WriteString(CommandTextStyle.Render("tnr status --no-wait"))
 	output.WriteString("\n\n")
 
 	// Flags Section

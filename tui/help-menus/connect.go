@@ -13,6 +13,8 @@ import (
 
 // RenderConnectHelp renders the custom help for the connect command
 func RenderConnectHelp(cmd *cobra.Command) {
+	InitHelpStyles(os.Stdout)
+
 	var output strings.Builder
 
 	header := `
@@ -59,28 +61,28 @@ func RenderConnectHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("# Connect to instance with ID 'abc123'"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("tnr connect abc123"))
+	output.WriteString(CommandTextStyle.Render("tnr connect abc123"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Interactive instance selection"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("tnr connect"))
+	output.WriteString(CommandTextStyle.Render("tnr connect"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Connect with port forwarding"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("tnr connect abc123 --tunnel 8080:80 --tunnel 3000:3000"))
+	output.WriteString(CommandTextStyle.Render("tnr connect abc123 --tunnel 8080:80 --tunnel 3000:3000"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Connect with debug mode"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("tnr connect abc123 --debug"))
+	output.WriteString(CommandTextStyle.Render("tnr connect abc123 --debug"))
 	output.WriteString("\n\n")
 
 	// Flags Section

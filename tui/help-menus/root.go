@@ -8,44 +8,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
-var (
-	HeaderStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("39")).
-			Padding(1, 0)
-
-	SectionStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("15")).
-			MarginTop(1)
-
-	CommandStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#0391ff")).
-			Width(20)
-
-	DescStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("252"))
-
-	LinkStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("15")).
-			Underline(true)
-
-	FlagStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#ff6b35")).
-			Width(15)
-
-	ExampleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("245")).
-			Italic(true)
-)
-
 func RenderRootHelp(cmd *cobra.Command) {
+	InitHelpStyles(os.Stdout)
+
 	var output strings.Builder
 
 	// Get version from cobra command

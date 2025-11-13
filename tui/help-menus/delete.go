@@ -12,6 +12,8 @@ import (
 )
 
 func RenderDeleteHelp(cmd *cobra.Command) {
+	InitHelpStyles(os.Stdout)
+
 	var output strings.Builder
 
 	header := `
@@ -52,14 +54,14 @@ func RenderDeleteHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("# Interactive mode - select from a list"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("tnr delete"))
+	output.WriteString(CommandTextStyle.Render("tnr delete"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Direct deletion with instance ID"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("tnr delete 0"))
+	output.WriteString(CommandTextStyle.Render("tnr delete 0"))
 	output.WriteString("\n\n")
 
 	// What happens section

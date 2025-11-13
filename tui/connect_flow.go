@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
@@ -40,6 +39,8 @@ type ConnectFlowModel struct {
 	lastPhaseIdx  int
 	cancelled     bool
 	done          bool
+
+	styles connectFlowStyles
 }
 
 type PhaseUpdateMsg struct {
@@ -58,50 +59,17 @@ type ConnectCompleteMsg struct{}
 type ConnectErrorMsg struct{ Err error }
 type connectQuitNow struct{}
 
-var (
-	connectTitleStyle lipgloss.Style
-	phaseStyle        lipgloss.Style
-	inProgressStyle   lipgloss.Style
-	pendingStyle      lipgloss.Style
-	skippedStyle      lipgloss.Style
-	durationStyle     lipgloss.Style
-	helpStyleConnect  lipgloss.Style
-)
-
-func InitConnectFlowStyles(out io.Writer) {
-	r := lipgloss.NewRenderer(out)
-
-	connectTitleStyle = r.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#0391ff")).
-		MarginTop(1).
-		MarginBottom(1)
-
-	phaseStyle = r.NewStyle().
-		PaddingLeft(2)
-
-	inProgressStyle = r.NewStyle().
-		Foreground(lipgloss.Color("#0391ff"))
-
-	pendingStyle = r.NewStyle().
-		Foreground(lipgloss.Color("#888888"))
-
-	skippedStyle = r.NewStyle().
-		Foreground(lipgloss.Color("#6272A4"))
-
-	durationStyle = r.NewStyle().
-		Foreground(lipgloss.Color("#888888")).
-		Italic(true)
-
-	helpStyleConnect = r.NewStyle().
-		Foreground(lipgloss.Color("8")).
-		Italic(true)
+type connectFlowStyles struct {
+	title       lipgloss.Style
+	phase       lipgloss.Style
+	inProgress  lipgloss.Style
+	pending     lipgloss.Style
+	skipped     lipgloss.Style
+	duration    lipgloss.Style
 }
 
 func NewConnectFlowModel(instanceID string) ConnectFlowModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
+	s := NewPrimarySpinner()
 
 	phases := []Phase{
 		{Name: "Pre-connection setup", Status: PhasePending},
@@ -111,12 +79,22 @@ func NewConnectFlowModel(instanceID string) ConnectFlowModel {
 		{Name: "Setting up instance", Status: PhasePending},
 	}
 
+	styles := connectFlowStyles{
+		title:      PrimaryTitleStyle().MarginTop(1).MarginBottom(1),
+		phase:      lipgloss.NewStyle().PaddingLeft(2),
+		inProgress: PrimaryStyle(),
+		pending:    SubtleTextStyle(),
+		skipped:    PrimaryStyle().Foreground(lipgloss.Color("#6272A4")),
+		duration:   DurationStyle(),
+	}
+
 	return ConnectFlowModel{
 		phases:       phases,
 		currentPhase: -1,
 		spinner:      s,
 		startTime:    time.Now(),
 		lastPhaseIdx: -1,
+		styles:       styles,
 	}
 }
 
@@ -208,7 +186,7 @@ func (m ConnectFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m ConnectFlowModel) View() string {
 	var b strings.Builder
 
-	b.WriteString(connectTitleStyle.Render("⚡ Connecting to Thunder Instance"))
+	b.WriteString(m.styles.title.Render("⚡ Connecting to Thunder Instance"))
 	b.WriteString("\n")
 
 	for i, phase := range m.phases {
@@ -227,10 +205,10 @@ func (m ConnectFlowModel) View() string {
 			style = successStyle
 		case PhaseInProgress:
 			icon = m.spinner.View()
-			style = inProgressStyle
+			style = m.styles.inProgress
 		case PhaseSkipped:
 			icon = "○"
-			style = skippedStyle
+			style = m.styles.skipped
 		case PhaseWarning:
 			icon = "⚠"
 			style = warningStyleTUI
@@ -239,20 +217,20 @@ func (m ConnectFlowModel) View() string {
 			style = errorStyleTUI
 		default: // PhasePending
 			icon = "○"
-			style = pendingStyle
+			style = m.styles.pending
 		}
 
 		line = fmt.Sprintf("%s %s", icon, phase.Name)
 
 		if phase.Duration > 0 {
-			line += durationStyle.Render(fmt.Sprintf(" (%s)", phase.Duration.Round(time.Millisecond)))
+			line += m.styles.duration.Render(fmt.Sprintf(" (%s)", phase.Duration.Round(time.Millisecond)))
 		}
 
 		if phase.Message != "" && status != PhaseInProgress {
 			line += "\n  " + style.Render(phase.Message)
 		}
 
-		b.WriteString(phaseStyle.Render(style.Render(line)))
+		b.WriteString(m.styles.phase.Render(style.Render(line)))
 		b.WriteString("\n")
 	}
 

@@ -12,6 +12,8 @@ import (
 )
 
 func RenderCreateHelp(cmd *cobra.Command) {
+	InitHelpStyles(os.Stdout)
+
 	var output strings.Builder
 
 	header := `
@@ -58,21 +60,21 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("# Interactive mode with step-by-step wizard"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr create")
+	output.WriteString(CommandTextStyle.Render("tnr create"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Prototyping instance (lowest cost)"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr create --mode prototyping --gpu t4 --vcpus 8 --template ubuntu-22.04 --disk-size-gb 100")
+	output.WriteString(CommandTextStyle.Render("tnr create --mode prototyping --gpu t4 --vcpus 8 --template ubuntu-22.04 --disk-size-gb 100"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Production instance (highest stability)"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr create --mode production --num-gpus 2 --template pytorch --disk-size-gb 500")
+	output.WriteString(CommandTextStyle.Render("tnr create --mode production --num-gpus 2 --template pytorch --disk-size-gb 500"))
 	output.WriteString("\n\n")
 
 	// Flags Section

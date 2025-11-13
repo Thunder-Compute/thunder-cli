@@ -176,7 +176,6 @@ func runSCP(sources []string, destination string) error {
 	defer stop()
 
 	tui.InitCommonStyles(os.Stdout)
-	tui.InitSCPStyles(os.Stdout)
 
 	scpModel := tui.NewSCPModel(direction, "Validating...")
 	p := tea.NewProgram(

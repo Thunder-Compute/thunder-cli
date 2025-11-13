@@ -26,54 +26,43 @@ type ConnectModel struct {
 	err         error
 	displayToID map[string]string
 	noInstances bool
+
+	styles connectStyles
 }
 
-var (
-	connectMainTitleStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("#0391ff")).
-				MarginTop(1).
-				MarginBottom(1)
+type connectStyles struct {
+	title    lipgloss.Style
+	cursor   lipgloss.Style
+	selected lipgloss.Style
+	help     lipgloss.Style
+}
 
-	connectCursorStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#0391ff"))
-
-	connectSelectedStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("#0391ff"))
-
-	connectHelpStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("8")).
-				Italic(true)
-)
+func newConnectStyles() connectStyles {
+	return connectStyles{
+		title:    PrimaryTitleStyle().MarginTop(1).MarginBottom(1),
+		cursor:   PrimaryCursorStyle(),
+		selected: PrimarySelectedStyle(),
+		help:     HelpStyle(),
+	}
+}
 
 func NewConnectModel(instances []string) ConnectModel {
-	if instances == nil {
-		instances = []string{
-			"instance-1 (us-east-1)",
-			"instance-2 (us-west-2)",
-			"instance-3 (eu-west-1)",
-			"instance-4 (ap-south-1)",
-		}
-	}
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
+	s := NewPrimarySpinner()
 	return ConnectModel{
 		instances: instances,
+		styles:    newConnectStyles(),
 		spin:      s,
 	}
 }
 
 func NewConnectFetchModel(client *api.Client) ConnectModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
+	s := NewPrimarySpinner()
 	return ConnectModel{
 		loading:     true,
 		spin:        s,
 		client:      client,
 		displayToID: make(map[string]string),
+		styles:      newConnectStyles(),
 	}
 }
 
@@ -188,7 +177,7 @@ func (m ConnectModel) View() string {
 		return ""
 	}
 
-	b.WriteString(connectMainTitleStyle.Render("⚡ Select Thunder Instance to Connect"))
+	b.WriteString(m.styles.title.Render("⚡ Select Thunder Instance to Connect"))
 	b.WriteString("\n")
 	b.WriteString("Select an instance to connect to:")
 	b.WriteString("\n\n")
@@ -196,11 +185,11 @@ func (m ConnectModel) View() string {
 	for i, instance := range m.instances {
 		cursor := "  "
 		if m.cursor == i {
-			cursor = connectCursorStyle.Render("▶ ")
+			cursor = m.styles.cursor.Render("▶ ")
 		}
 		line := instance
 		if m.cursor == i {
-			line = connectSelectedStyle.Render(instance)
+			line = m.styles.selected.Render(instance)
 		}
 		b.WriteString(fmt.Sprintf("%s%s\n", cursor, line))
 	}
@@ -218,9 +207,9 @@ func (m ConnectModel) View() string {
 
 	b.WriteString("\n")
 	if m.done || m.cancelled {
-		b.WriteString(connectHelpStyle.Render("Press 'Q' to close"))
+		b.WriteString(m.styles.help.Render("Press 'Q' to close"))
 	} else {
-		b.WriteString(connectHelpStyle.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n"))
+		b.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n"))
 	}
 
 	return b.String()
@@ -229,6 +218,8 @@ func (m ConnectModel) View() string {
 func RunConnect(instances []string) (string, error) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+
+	InitCommonStyles(os.Stdout)
 
 	m := NewConnectModel(instances)
 	p := tea.NewProgram(

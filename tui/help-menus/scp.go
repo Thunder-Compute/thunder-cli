@@ -12,6 +12,8 @@ import (
 )
 
 func RenderSCPHelp(cmd *cobra.Command) {
+	InitHelpStyles(os.Stdout)
+
 	var output strings.Builder
 
 	header := `
@@ -64,35 +66,35 @@ func RenderSCPHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("# Upload a single file"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr scp myfile.py 0:/home/ubuntu/")
+	output.WriteString(CommandTextStyle.Render("tnr scp myfile.py 0:/home/ubuntu/"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Download a file"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr scp 0:/home/ubuntu/results.txt ./")
+	output.WriteString(CommandTextStyle.Render("tnr scp 0:/home/ubuntu/results.txt ./"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Upload multiple files"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr scp file1.py file2.py config.json 0:/home/ubuntu/")
+	output.WriteString(CommandTextStyle.Render("tnr scp file1.py file2.py config.json 0:/home/ubuntu/"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Upload a directory recursively"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr scp -r ./my-project/ 0:/home/ubuntu/projects/")
+	output.WriteString(CommandTextStyle.Render("tnr scp -r ./my-project/ 0:/home/ubuntu/projects/"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Download a directory"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr scp -r 0:/home/ubuntu/data/ ./local-data/")
+	output.WriteString(CommandTextStyle.Render("tnr scp -r 0:/home/ubuntu/data/ ./local-data/"))
 	output.WriteString("\n\n")
 
 	// Flags Section

@@ -8,26 +8,36 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var (
-	busyTextStyle = lipgloss.NewStyle().
-		// Bold(true).
-		Foreground(lipgloss.Color("#FFFFFF"))
-)
-
 type BusyDoneMsg struct{}
 
 type BusyModel struct {
 	text     string
 	spin     spinner.Model
 	Quitting bool
+
+	styles busyStyles
+}
+
+type busyStyles struct {
+	text lipgloss.Style
+	help lipgloss.Style
+}
+
+func newBusyStyles() busyStyles {
+	return busyStyles{
+		text: LabelStyle().Bold(false),
+		help: HelpStyle(),
+	}
 }
 
 func NewBusyModel(text string) BusyModel {
 	InitCommonStyles(os.Stdout)
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
-	return BusyModel{text: text, spin: s}
+	s := NewPrimarySpinner()
+	return BusyModel{
+		text:   text,
+		spin:   s,
+		styles: newBusyStyles(),
+	}
 }
 
 func (m BusyModel) Init() tea.Cmd {
@@ -56,5 +66,5 @@ func (m BusyModel) View() string {
 	if m.Quitting {
 		return ""
 	}
-	return m.spin.View() + " " + busyTextStyle.Render(m.text) + "\n" + helpStyleTUI.Render("Press 'Q' to cancel\n")
+	return m.spin.View() + " " + m.styles.text.Render(m.text) + "\n" + m.styles.help.Render("Press 'Q' to cancel\n")
 }

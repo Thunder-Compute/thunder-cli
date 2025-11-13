@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -28,6 +29,8 @@ type LoginModel struct {
 	token      string
 	err        error
 	quitting   bool
+
+	styles loginStyles
 }
 
 type LoginSuccessMsg struct {
@@ -46,39 +49,44 @@ type TokenSubmitMsg struct {
 
 type SwitchToTokenMsg struct{}
 
-var (
-	loginPromptStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#a3a3a3")).
-				MarginBottom(1)
+type loginStyles struct {
+	prompt lipgloss.Style
+	help   lipgloss.Style
+	input  lipgloss.Style
+}
 
-	loginHelpStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#888888")).
-			Italic(true).
-			MarginTop(1)
-
-	tokenInputStyle = lipgloss.NewStyle().
+func newLoginStyles() loginStyles {
+	return loginStyles{
+		prompt: SubtleTextStyle().MarginBottom(1),
+		help:   HelpStyle().MarginTop(1),
+		input: PrimaryStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#0391ff")).
+			BorderForeground(lipgloss.Color(theme.PrimaryColorHex)).
 			Padding(0, 1).
-			MarginBottom(1)
-)
+			MarginBottom(1),
+	}
+}
 
 func NewLoginModel(authURL string) *LoginModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
+	s := NewPrimarySpinner()
+	styles := newLoginStyles()
 
 	ti := textinput.New()
 	ti.Placeholder = "Enter your Thunder Compute token..."
 	ti.CharLimit = 500
 	ti.Width = 50
 	ti.Focus()
+	ti.PromptStyle = PrimaryCursorStyle()
+	ti.TextStyle = PrimaryCursorStyle()
+	ti.PlaceholderStyle = SubtleTextStyle()
+	ti.Cursor.Style = PrimaryCursorStyle()
 
 	return &LoginModel{
 		state:      LoginStateWaiting,
 		authURL:    authURL,
 		spinner:    s,
 		tokenInput: ti,
+		styles:     styles,
 	}
 }
 
@@ -167,22 +175,22 @@ func (m LoginModel) View() string {
 
 	switch m.state {
 	case LoginStateWaiting:
-		b.WriteString(loginPromptStyle.Render("Authenticate with your browser. If this doesn't open automatically, visit:"))
+		b.WriteString(m.styles.prompt.Render("Authenticate with your browser. If this doesn't open automatically, visit:"))
 		b.WriteString("\n")
-		b.WriteString(loginPromptStyle.Render(m.authURL))
+		b.WriteString(m.styles.prompt.Render(m.authURL))
 		b.WriteString("\n\n")
 		b.WriteString(fmt.Sprintf("%s Waiting for browser callback...", m.spinner.View()))
 		b.WriteString("\n\n")
-		b.WriteString(loginHelpStyle.Render("Or, press 'T' to enter a token manually."))
+		b.WriteString(m.styles.help.Render("Or, press 'T' to enter a token manually."))
 		b.WriteString("\n\n")
-		b.WriteString(loginHelpStyle.Render("Press 'Q' to cancel."))
+		b.WriteString(m.styles.help.Render("Press 'Q' to cancel."))
 
 	case LoginStateTokenInput:
-		b.WriteString(loginPromptStyle.Render("Enter your Thunder Compute token:"))
+		b.WriteString(m.styles.prompt.Render("Enter your Thunder Compute token:"))
 		b.WriteString("\n\n")
-		b.WriteString(tokenInputStyle.Render(m.tokenInput.View()))
+		b.WriteString(m.styles.input.Render(m.tokenInput.View()))
 		b.WriteString("\n\n")
-		b.WriteString(loginHelpStyle.Render("Press Enter to submit, 'Esc' to go back"))
+		b.WriteString(m.styles.help.Render("Press Enter to submit, 'Esc' to go back"))
 	}
 
 	return b.String()

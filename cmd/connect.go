@@ -150,7 +150,6 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 	}
 
 	tui.InitCommonStyles(os.Stdout)
-	tui.InitConnectFlowStyles(os.Stdout)
 
 	flowModel := tui.NewConnectFlowModel(instanceID)
 	p := tea.NewProgram(

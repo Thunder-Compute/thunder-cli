@@ -12,6 +12,8 @@ import (
 )
 
 func RenderLogoutHelp(cmd *cobra.Command) {
+	InitHelpStyles(os.Stdout)
+
 	var output strings.Builder
 
 	header := `
@@ -46,7 +48,7 @@ func RenderLogoutHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("# Log out and remove credentials"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr logout")
+	output.WriteString(CommandTextStyle.Render("tnr logout"))
 	output.WriteString("\n\n")
 
 	// What happens section

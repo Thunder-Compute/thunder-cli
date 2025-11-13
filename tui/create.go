@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -54,53 +55,58 @@ type createModel struct {
 	quitting        bool
 	client          *api.Client
 	spinner         spinner.Model
+
+	styles createStyles
 }
 
-var (
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#0391ff")).
-			MarginBottom(1)
+type createStyles struct {
+	title    lipgloss.Style
+	selected lipgloss.Style
+	cursor   lipgloss.Style
+	panel    lipgloss.Style
+	label    lipgloss.Style
+	help     lipgloss.Style
+}
 
-	selectedStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#0391ff")).
-			Bold(true)
+func newCreateStyles() createStyles {
+	panelBase := PrimaryStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(theme.PrimaryColorHex)).
+		Padding(1, 2).
+		MarginTop(1).
+		MarginBottom(1)
 
-	cursorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#0391ff"))
-
-	panelStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#0391ff")).
-			Padding(1, 2).
-			MarginTop(1).
-			MarginBottom(1)
-
-	createLabelStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("#FFFFFF"))
-)
+	return createStyles{
+		title:    PrimaryTitleStyle().MarginBottom(1),
+		selected: PrimarySelectedStyle(),
+		cursor:   PrimaryCursorStyle(),
+		panel:    panelBase,
+		label:    LabelStyle(),
+		help:     HelpStyle(),
+	}
+}
 
 func NewCreateModel(client *api.Client) createModel {
+	styles := newCreateStyles()
+
 	ti := textinput.New()
 	ti.Placeholder = "100"
 	ti.CharLimit = 4
 	ti.Width = 20
 	ti.Prompt = "▶ "
-	ti.PromptStyle = cursorStyle
-	ti.TextStyle = cursorStyle
-	ti.PlaceholderStyle = cursorStyle
-	ti.Cursor.Style = cursorStyle
+	ti.PromptStyle = styles.cursor
+	ti.TextStyle = styles.cursor
+	ti.PlaceholderStyle = styles.cursor
+	ti.Cursor.Style = styles.cursor
 
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
+	s := NewPrimarySpinner()
 
 	return createModel{
 		step:      stepMode,
 		client:    client,
 		diskInput: ti,
 		spinner:   s,
+		styles:    styles,
 		config: CreateConfig{
 			DiskSizeGB: 100,
 		},
@@ -316,7 +322,7 @@ func (m createModel) View() string {
 
 	var s strings.Builder
 	s.WriteString("\n")
-	s.WriteString(titleStyle.Render("⚡ Create Thunder Compute Instance"))
+	s.WriteString(m.styles.title.Render("⚡ Create Thunder Compute Instance"))
 	s.WriteString("\n")
 
 	progressSteps := []string{"Mode", "GPU", "Compute", "Template", "Disk", "Confirm"}
@@ -324,7 +330,7 @@ func (m createModel) View() string {
 	for i, stepName := range progressSteps {
 		adjustedStep := int(m.step)
 		if i == adjustedStep {
-			progress += selectedStyle.Render(fmt.Sprintf("[%s]", stepName))
+			progress += m.styles.selected.Render(fmt.Sprintf("[%s]", stepName))
 		} else if i < adjustedStep {
 			progress += fmt.Sprintf("[✓ %s]", stepName)
 		} else {
@@ -344,11 +350,11 @@ func (m createModel) View() string {
 		for i, mode := range modes {
 			cursor := "  "
 			if m.cursor == i {
-				cursor = cursorStyle.Render("▶ ")
+				cursor = m.styles.cursor.Render("▶ ")
 			}
 			display := mode
 			if m.cursor == i {
-				display = selectedStyle.Render(mode)
+				display = m.styles.selected.Render(mode)
 			}
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, display))
 		}
@@ -359,7 +365,7 @@ func (m createModel) View() string {
 		for i, gpu := range gpus {
 			cursor := "  "
 			if m.cursor == i {
-				cursor = cursorStyle.Render("▶ ")
+				cursor = m.styles.cursor.Render("▶ ")
 			}
 			displayName := strings.ToUpper(gpu)
 
@@ -381,7 +387,7 @@ func (m createModel) View() string {
 				}
 			}
 			if m.cursor == i {
-				displayName = selectedStyle.Render(displayName)
+				displayName = m.styles.selected.Render(displayName)
 			}
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, displayName))
 		}
@@ -393,12 +399,12 @@ func (m createModel) View() string {
 			for i, vcpu := range vcpus {
 				cursor := "  "
 				if m.cursor == i {
-					cursor = cursorStyle.Render("▶ ")
+					cursor = m.styles.cursor.Render("▶ ")
 				}
 				ram := vcpu * 8
 				line := fmt.Sprintf("%s%d vCPUs (%d GB RAM)", cursor, vcpu, ram)
 				if m.cursor == i {
-					line = fmt.Sprintf("%s%s", cursor, selectedStyle.Render(fmt.Sprintf("%d vCPUs (%d GB RAM)", vcpu, ram)))
+					line = fmt.Sprintf("%s%s", cursor, m.styles.selected.Render(fmt.Sprintf("%d vCPUs (%d GB RAM)", vcpu, ram)))
 				}
 				s.WriteString(line + "\n")
 			}
@@ -408,12 +414,12 @@ func (m createModel) View() string {
 			for i, num := range numGPUs {
 				cursor := "  "
 				if m.cursor == i {
-					cursor = cursorStyle.Render("▶ ")
+					cursor = m.styles.cursor.Render("▶ ")
 				}
 				vcpus := num * 18
 				text := fmt.Sprintf("%d GPU(s) → %d vCPUs", num, vcpus)
 				if m.cursor == i {
-					text = selectedStyle.Render(text)
+					text = m.styles.selected.Render(text)
 				}
 				s.WriteString(fmt.Sprintf("%s%s\n", cursor, text))
 			}
@@ -427,14 +433,14 @@ func (m createModel) View() string {
 			for i, template := range m.templates {
 				cursor := "  "
 				if m.cursor == i {
-					cursor = cursorStyle.Render("▶ ")
+					cursor = m.styles.cursor.Render("▶ ")
 				}
 				name := template.DisplayName
 				if template.ExtendedDescription != "" {
 					name += fmt.Sprintf(" - %s", template.ExtendedDescription)
 				}
 				if m.cursor == i {
-					name = selectedStyle.Render(name)
+					name = m.styles.selected.Render(name)
 				}
 				s.WriteString(fmt.Sprintf("%s%s\n", cursor, name))
 			}
@@ -449,21 +455,21 @@ func (m createModel) View() string {
 			s.WriteString(errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v", m.err)))
 			s.WriteString("\n")
 		}
-		s.WriteString(helpStyleTUI.Render("Press Enter to continue\n"))
+		s.WriteString(m.styles.help.Render("Press Enter to continue\n"))
 
 	case stepConfirmation:
 		s.WriteString("Review your configuration:\n")
 
 		var panel strings.Builder
-		panel.WriteString(createLabelStyle.Render("Mode:       ") + utils.Capitalize(m.config.Mode) + "\n")
-		panel.WriteString(createLabelStyle.Render("GPU Type:   ") + strings.ToUpper(m.config.GPUType) + "\n")
-		panel.WriteString(createLabelStyle.Render("GPUs:       ") + strconv.Itoa(m.config.NumGPUs) + "\n")
-		panel.WriteString(createLabelStyle.Render("vCPUs:      ") + strconv.Itoa(m.config.VCPUs) + "\n")
-		panel.WriteString(createLabelStyle.Render("RAM:        ") + strconv.Itoa(m.config.VCPUs*8) + " GB\n")
-		panel.WriteString(createLabelStyle.Render("Template:   ") + utils.Capitalize(m.config.Template) + "\n")
-		panel.WriteString(createLabelStyle.Render("Disk Size:  ") + strconv.Itoa(m.config.DiskSizeGB) + " GB")
+		panel.WriteString(m.styles.label.Render("Mode:       ") + utils.Capitalize(m.config.Mode) + "\n")
+		panel.WriteString(m.styles.label.Render("GPU Type:   ") + strings.ToUpper(m.config.GPUType) + "\n")
+		panel.WriteString(m.styles.label.Render("GPUs:       ") + strconv.Itoa(m.config.NumGPUs) + "\n")
+		panel.WriteString(m.styles.label.Render("vCPUs:      ") + strconv.Itoa(m.config.VCPUs) + "\n")
+		panel.WriteString(m.styles.label.Render("RAM:        ") + strconv.Itoa(m.config.VCPUs*8) + " GB\n")
+		panel.WriteString(m.styles.label.Render("Template:   ") + utils.Capitalize(m.config.Template) + "\n")
+		panel.WriteString(m.styles.label.Render("Disk Size:  ") + strconv.Itoa(m.config.DiskSizeGB) + " GB")
 
-		s.WriteString(panelStyle.Render(panel.String()))
+		s.WriteString(m.styles.panel.Render(panel.String()))
 		s.WriteString("\n")
 
 		if m.config.Mode == "prototyping" {
@@ -478,11 +484,11 @@ func (m createModel) View() string {
 		for i, option := range options {
 			cursor := "  "
 			if m.cursor == i {
-				cursor = cursorStyle.Render("▶ ")
+				cursor = m.styles.cursor.Render("▶ ")
 			}
 			text := option
 			if m.cursor == i {
-				text = selectedStyle.Render(option)
+				text = m.styles.selected.Render(option)
 			}
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, text))
 		}
@@ -490,10 +496,10 @@ func (m createModel) View() string {
 
 	if m.step != stepConfirmation {
 		s.WriteString("\n")
-		s.WriteString(helpStyleTUI.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n"))
+		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n"))
 	} else {
 		s.WriteString("\n")
-		s.WriteString(helpStyleTUI.Render("↑/↓: Navigate  Enter: Confirm  Q: Cancel\n"))
+		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Confirm  Q: Cancel\n"))
 	}
 
 	return s.String()

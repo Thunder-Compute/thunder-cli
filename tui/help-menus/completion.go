@@ -12,6 +12,8 @@ import (
 )
 
 func RenderCompletionHelp(cmd *cobra.Command) {
+	InitHelpStyles(os.Stdout)
+
 	var output strings.Builder
 
 	header := `
