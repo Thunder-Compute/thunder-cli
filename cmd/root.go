@@ -160,7 +160,7 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result) {
 
 	if err := runSelfUpdate(updateCtx, res); err != nil {
 		fmt.Fprintf(os.Stderr, "Automatic update failed: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Download the latest version from GitHub: https://github.com/Thunder-Compute/thunder-cli/releases/tag/%s or run `tnr self-update`.\n", releaseTag(res))
+		fmt.Fprintf(os.Stderr, "Download the latest version from GitHub: https://github.com/Thunder-Compute/thunder-cli/releases/tag/%s and reinstall the CLI.\n", releaseTag(res))
 		os.Exit(1)
 	}
 
@@ -181,7 +181,7 @@ func handleOptionalUpdate(parentCtx context.Context, res updatepolicy.Result) {
 		fmt.Fprintf(os.Stderr, "Warning: unable to read optional update cache: %v\n", err)
 	}
 	if !lastAttempt.IsZero() && time.Since(lastAttempt) < updatepolicy.OptionalUpdateTTL {
-		fmt.Printf("ℹ️  Update available: %s → %s. Automatic update skipped (last attempt %s). Run `tnr self-update` to update now.\n",
+		fmt.Printf("ℹ️  Update available: %s → %s. Automatic update skipped (last attempt %s). Reinstall from the latest release to update now.\n",
 			displayVersion(res.CurrentVersion), displayVersion(res.LatestVersion), lastAttempt.Format(time.RFC1123))
 		return
 	}
@@ -201,7 +201,7 @@ func handleOptionalUpdate(parentCtx context.Context, res updatepolicy.Result) {
 		fmt.Println("Update finished! You can now re-run your command.")
 	} else {
 		fmt.Fprintf(os.Stderr, "Warning: optional update failed: %v\n", updateErr)
-		fmt.Printf("You can download the latest version from GitHub: https://github.com/Thunder-Compute/thunder-cli/releases/tag/%s or run `tnr self-update`.\n", releaseTag(res))
+		fmt.Printf("You can download the latest version from GitHub: https://github.com/Thunder-Compute/thunder-cli/releases/tag/%s and reinstall the CLI.\n", releaseTag(res))
 	}
 	os.Exit(0)
 }
@@ -250,7 +250,7 @@ func shouldSkipUpdateCheck(cmd *cobra.Command) bool {
 
 	for current := cmd; current != nil; current = current.Parent() {
 		switch current.Name() {
-		case "self-update", "help", "completion", "version":
+		case "help", "completion", "version":
 			return true
 		}
 

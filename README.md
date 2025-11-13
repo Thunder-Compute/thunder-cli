@@ -22,7 +22,7 @@
 - **📊 Real-time Monitoring** – Track instance status, resource usage, and configuration details
 - **🎨 Pre-configured Templates** – Launch instances with Ollama, ComfyUI, or WebUI Forge pre-installed
 - **🌍 Cross-platform Support** – Native binaries for macOS, Linux, and Windows
-- **🔄 Auto-update** – Keep the CLI current with `tnr self-update`
+- **🔄 Auto-update** – Automatically checks for updates whenever you run commands
 - **🎯 Port Forwarding** – Easily expose remote services to your local machine
 
 ---
@@ -250,34 +250,13 @@ tnr scp -r 0:/remote/directory/ ./local-path/
 - Remote: `<instance_id>:/path` (e.g., `0:/home/user/data`)
 - Local: Standard absolute or relative paths
 
-### Self-Update
+### Updates
 
-Keep your CLI up-to-date with the latest features and bug fixes.
+`tnr` checks for updates automatically before running most commands. When a newer version is required or recommended, the CLI downloads and applies the update for you—no manual command needed.
 
-#### Check Current Version
+#### Package manager installations
 
-```bash
-tnr --version
-```
-
-#### Update to Latest Version
-
-**For manual installations (install script or direct download):**
-
-```bash
-tnr self-update
-```
-
-This command will:
-
-- Check for the latest release on GitHub
-- Download the appropriate binary for your OS/architecture
-- Replace the current binary automatically
-- Preserve all your settings and configuration
-
-**For package manager installations:**
-
-If you installed via Homebrew, Scoop, or Winget, use your package manager's update command instead:
+If you installed via Homebrew, Scoop, or Winget, continue to use your package manager's upgrade command:
 
 ```bash
 # Homebrew
@@ -290,23 +269,19 @@ scoop update tnr
 winget upgrade Thunder.tnr
 ```
 
-The `tnr self-update` command will automatically detect package manager installations and direct you to use the appropriate command.
+#### Manual installations
 
-#### Disable Auto-Update
+Download the latest release from GitHub and replace your existing `tnr` binary. Restart the CLI to use the updated version.
 
-If you need to prevent self-updates (e.g., in CI/CD environments or for testing), set the `TNR_NO_SELFUPDATE` environment variable:
+#### Disable automatic updates
+
+If you need to prevent automatic updates (e.g., in CI/CD environments or for testing), set the `TNR_NO_SELFUPDATE` environment variable:
 
 ```bash
 export TNR_NO_SELFUPDATE=1
-tnr self-update  # Will skip update and show a message
 ```
 
-#### Notes
-
-- Self-update requires write access to the binary location
-- Development builds (`dev` version) cannot use self-update
-- The CLI will automatically verify the integrity of downloaded updates
-- After updating, you may need to restart any active sessions to use the new version
+When disabled, the CLI will skip update checks but continue running your commands.
 
 ### Shell Completion
 
@@ -423,12 +398,12 @@ Contributions are welcome! Please:
 
 ## Updating
 
-For detailed update instructions, including how to check your current version and disable auto-updates, see the [Self-Update](#self-update) section above.
+For detailed update behavior, including how to check your current version and disable auto-updates, see the [Updates](#updates) section above.
 
 **Quick reference:**
 
 - **Package managers:** Use `brew upgrade tnr`, `scoop update tnr`, or `winget upgrade Thunder.tnr`
-- **Manual installations:** Use `tnr self-update`
+- **Manual installations:** Download the latest release and reinstall the binary
 
 ---
 

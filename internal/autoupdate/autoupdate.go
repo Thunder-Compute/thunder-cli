@@ -69,7 +69,7 @@ func MaybeStartBackgroundUpdate(ctx context.Context, currentVersion string) {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		if err := PerformUpdate(bgCtx, source); err != nil {
-			// Quietly ignore errors in background; user can run manual self-update.
+			// Quietly ignore errors in background; user can always reinstall manually.
 		}
 	}()
 }
