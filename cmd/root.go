@@ -148,7 +148,7 @@ func checkIfUpdateNeeded(cmd *cobra.Command) {
 func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result) {
 	displayCurrent := displayVersion(res.CurrentVersion)
 	displayMin := displayVersion(res.MinVersion)
-	fmt.Fprintf(os.Stderr, "⚠️  Mandatory update required: current %s, minimum %s.\n", displayCurrent, displayMin)
+	fmt.Fprintf(os.Stderr, "⚠ Mandatory update required: current %s, minimum %s.\n", displayCurrent, displayMin)
 
 	binPath, _ := getCurrentBinaryPath()
 	if binPath != "" && isPMManaged(binPath) {
@@ -173,7 +173,7 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result) {
 func handleOptionalUpdate(parentCtx context.Context, res updatepolicy.Result) {
 	binPath, _ := getCurrentBinaryPath()
 	if binPath != "" && isPMManaged(binPath) {
-		fmt.Printf("⚠️  Update available: %s → %s. Update via your package manager (e.g. brew upgrade tnr).\n",
+		fmt.Printf("⚠ Update available: %s → %s. Update via your package manager (e.g. brew upgrade tnr).\n",
 			displayVersion(res.CurrentVersion), displayVersion(res.LatestVersion))
 		return
 	}

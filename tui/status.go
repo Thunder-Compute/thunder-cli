@@ -184,7 +184,7 @@ func (m StatusModel) View() string {
 
 func (m StatusModel) renderTable() string {
 	if len(m.instances) == 0 {
-		return warningStyleTUI.Render("⚠  No instances found. Use 'tnr create' to create a Thunder Compute instance.")
+		return warningStyleTUI.Render("⚠ No instances found. Use 'tnr create' to create a Thunder Compute instance.")
 	}
 
 	colWidths := map[string]int{
