@@ -49,6 +49,16 @@ try {
     Copy-Item $BinaryPath -Destination $WorkingBinary -Force
     Write-Host "✅ Copied binary to: $WorkingBinary"
 
+    # Write installation metadata used by the CLI to detect MSI installs
+    $InstallMeta = @{
+        installType = "msi"
+        source      = "msi"
+        version     = $Version
+    } | ConvertTo-Json -Depth 3
+    $InstallMetaPath = Join-Path $TempDir ".install-meta.json"
+    $InstallMeta | Set-Content -Path $InstallMetaPath -Encoding UTF8
+    Write-Host "✅ Wrote install metadata: $InstallMetaPath"
+
     # Read and process WiX template (replace GoReleaser template variables)
     $WxsContent = Get-Content $WxsTemplate -Raw
     $WxsContent = $WxsContent -replace '\{\{\s*\.ProjectName\s*\}\}', $ProjectName

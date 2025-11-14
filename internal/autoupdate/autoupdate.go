@@ -14,12 +14,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -144,90 +142,12 @@ func PerformUpdate(ctx context.Context, src Source) error {
 	// Ensure executable
 	_ = os.Chmod(newBinary, 0o755)
 
-	// Install
-	if runtime.GOOS == "windows" {
-		dir := filepath.Dir(exe)
-		staged := filepath.Join(dir, "tnr.new")
-		if err := copyFile(newBinary, staged); err != nil {
-			return fmt.Errorf("stage new binary: %w", err)
-		}
-		// Write marker to attempt swap on next run
-		_ = os.WriteFile(filepath.Join(dir, ".tnr-update"), []byte(version), 0o644)
-		fmt.Println("Update downloaded; will apply on next run.")
-		return nil
-	}
-
-	// Unix: replace atomically
-	dir := filepath.Dir(exe)
-	if runtime.GOOS != "windows" && !dirWritable(dir) {
-		if err := installWithSudo(newBinary, exe, version); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	tmpTarget := filepath.Join(dir, ".tnr-tmp")
-	if err := copyFile(newBinary, tmpTarget); err != nil {
+	// Install using platform-specific installer
+	inst := detectInstaller()
+	if err := inst.Install(ctx, exe, newBinary, version, src); err != nil {
 		return err
 	}
-	if err := os.Chmod(tmpTarget, 0o755); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpTarget, exe); err != nil {
-		if runtime.GOOS != "windows" && isPermissionError(err) {
-			if err := installWithSudo(newBinary, exe, version); err != nil {
-				return err
-			}
-			return nil
-		}
-		return fmt.Errorf("install failed: %w", err)
-	}
-	fmt.Printf("Successfully updated to version %s\n", version)
 	return nil
-}
-
-func installWithSudo(newBinary, exe, version string) error {
-	tempDir := filepath.Dir(newBinary)
-	tmpFile, err := os.CreateTemp(tempDir, "tnr-sudo-*")
-	if err != nil {
-		return err
-	}
-	tmpTarget := tmpFile.Name()
-	if err := tmpFile.Close(); err != nil {
-		_ = os.Remove(tmpTarget)
-		return err
-	}
-	defer os.Remove(tmpTarget)
-
-	if err := copyFile(newBinary, tmpTarget); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmpTarget, 0o755); err != nil {
-		return err
-	}
-
-	cmd := exec.Command("sudo", "mv", tmpTarget, exe)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("sudo install failed: %w", err)
-	}
-	fmt.Printf("Successfully updated to version %s\n", version)
-	return nil
-}
-
-func isPermissionError(err error) bool {
-	if errors.Is(err, os.ErrPermission) {
-		return true
-	}
-	var pathErr *os.PathError
-	if errors.As(err, &pathErr) {
-		if errno, ok := pathErr.Err.(syscall.Errno); ok {
-			return errno == syscall.EACCES || errno == syscall.EPERM
-		}
-	}
-	return false
 }
 
 func resolveSource(ctx context.Context, src Source) (downloadURL, assetName, checksumsURL, version, expectedChecksum string, err error) {

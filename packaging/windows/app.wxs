@@ -30,6 +30,7 @@
       <Directory Id="INSTALLFOLDER" Name="{{ .ProjectName }}">
         <Component Id="MainExecutable" Guid="ABCDDCBA-83F1-4F22-985B-FDB3C8ABD474">
           <File Id="{{ .Binary }}Exe" Name="{{ .Binary }}.exe" Source="{{ .Binary }}.exe" KeyPath="yes"/>
+          <File Id="InstallMeta" Name=".install-meta.json" Source=".install-meta.json" />
         </Component>
         <Component Id="PathEnv" Guid="*">
           <!-- Store install dir in registry as the component KeyPath -->
