@@ -3,6 +3,7 @@
 package autoupdate
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -21,17 +23,24 @@ import (
 const (
 	windowsUpdateHelperFlag = "--tnr-internal-update-helper"
 
-	helperArgFrom    = "--from"
-	helperArgTo      = "--to"
-	helperArgVersion = "--version"
-
-	installMetaFileName = ".install-meta.json"
+	helperArgFrom       = "--from"
+	helperArgTo         = "--to"
+	helperArgVersion    = "--version"
+	helperArgFinalize   = "--finalize"
+	helperArgLogFile    = "--log-file"
+	helperArgUpdateMeta = "--update-meta"
 )
 
 type installMeta struct {
 	InstallType string `json:"installType"`
 	Source      string `json:"source,omitempty"`
 	Version     string `json:"version,omitempty"`
+}
+
+func windowsMetaPath() string {
+	base := filepath.Join(os.Getenv("ProgramData"), "Thunder-Compute", "tnr")
+	_ = os.MkdirAll(base, 0o755)
+	return filepath.Join(base, "install-meta.json")
 }
 
 // MaybeRunWindowsUpdateHelper checks whether the current invocation is the
@@ -59,13 +68,6 @@ func (w windowsInstaller) Install(ctx context.Context, exe, newBinary, version s
 	return installOnWindows(ctx, exe, newBinary, version, src)
 }
 
-// installOnWindows installs the downloaded update on Windows, taking into
-// account MSI-managed installs and elevation requirements.
-//
-// It never overwrites the currently running executable directly. For manual
-// installs it stages a tnr.new next to the binary and writes a marker so that
-// the swap can be finalized on the next run. For MSI installs it triggers an
-// MSI upgrade instead of touching MSI-managed files.
 func installOnWindows(ctx context.Context, exe, newBinary, version string, src Source) error {
 	dir := filepath.Dir(exe)
 
@@ -73,25 +75,18 @@ func installOnWindows(ctx context.Context, exe, newBinary, version string, src S
 
 	switch installType {
 	case "msi":
-		// MSI-managed installs must be upgraded via MSI to avoid confusing
-		// Windows Installer and breaking Add/Remove Programs.
 		return runWindowsMSIUpgrade(ctx, version)
 	default:
-		// Treat everything else as a manual install. We still honour MSI
-		// metadata if present later.
 		return stageWindowsUpdateWithElevation(ctx, dir, newBinary, version)
 	}
 }
 
-// detectWindowsInstallType attempts to determine how tnr was installed.
-// It prefers an on-disk metadata file, and falls back to checking the
-// MSI registry key created by the WiX installer.
 func detectWindowsInstallType(exePath string) string {
 	dir := filepath.Dir(exePath)
 
-	// 1) Prefer metadata file next to the binary.
-	metaPath := filepath.Join(dir, installMetaFileName)
+	metaPath := windowsMetaPath()
 	if data, err := os.ReadFile(metaPath); err == nil {
+		data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
 		var meta installMeta
 		if err := json.Unmarshal(data, &meta); err == nil {
 			t := strings.ToLower(strings.TrimSpace(meta.InstallType))
@@ -101,7 +96,6 @@ func detectWindowsInstallType(exePath string) string {
 		}
 	}
 
-	// 2) Fall back to MSI registry key.
 	msiInstallDir, err := readMSIInstallDir()
 	if err == nil && msiInstallDir != "" {
 		if sameWindowsDir(msiInstallDir, dir) {
@@ -109,15 +103,10 @@ func detectWindowsInstallType(exePath string) string {
 		}
 	}
 
-	// 3) Default to manual.
 	return "manual"
 }
 
 func readMSIInstallDir() (string, error) {
-	// Matches the WiX installer definition in packaging/windows/app.wxs:
-	// Root="HKLM"
-	// Key="Software\Thunder Compute\{{ .ProjectName }}"
-	// Name="InstallDir"
 	const keyPath = `Software\Thunder Compute\tnr`
 
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, keyPath, registry.QUERY_VALUE)
@@ -139,15 +128,10 @@ func sameWindowsDir(a, b string) bool {
 	return a == b
 }
 
-// stageWindowsUpdateWithElevation stages a Windows update by placing a tnr.new
-// file next to the current executable and writing the .tnr-update marker.
-// When the install directory is not writable and the process is not already
-// elevated, it re-launches itself via UAC to perform the staging step.
 func stageWindowsUpdateWithElevation(ctx context.Context, dir, newBinary, version string) error {
 	staged := filepath.Join(dir, "tnr.new")
 	marker := filepath.Join(dir, ".tnr-update")
 
-	// Fast path: writable directory from the current process (per-user installs).
 	if dirWritable(dir) {
 		if err := copyFile(newBinary, staged); err != nil {
 			return fmt.Errorf("stage new binary: %w", err)
@@ -157,9 +141,8 @@ func stageWindowsUpdateWithElevation(ctx context.Context, dir, newBinary, versio
 		return nil
 	}
 
-	// If we are already elevated (e.g. launched from an elevated shell),
-	// we can stage directly even if the directory is normally protected.
-	if isElevated() {
+	elevated := isElevated()
+	if elevated {
 		if err := copyFile(newBinary, staged); err != nil {
 			return fmt.Errorf("stage new binary (elevated): %w", err)
 		}
@@ -168,8 +151,6 @@ func stageWindowsUpdateWithElevation(ctx context.Context, dir, newBinary, versio
 		return nil
 	}
 
-	// Otherwise, request elevation via UAC and have the elevated helper stage
-	// the update for us.
 	if err := runElevatedStagingHelper(ctx, dir, newBinary, version); err != nil {
 		return err
 	}
@@ -178,10 +159,34 @@ func stageWindowsUpdateWithElevation(ctx context.Context, dir, newBinary, versio
 	return nil
 }
 
-// runWindowsMSIUpgrade performs an MSI-based upgrade for MSI-managed installs.
-// It downloads the MSI for the target version and invokes msiexec to perform
-// the upgrade. Windows will handle UAC prompts for elevation.
 func runWindowsMSIUpgrade(ctx context.Context, version string) error {
+	exe, err := currentExecutable()
+	if err != nil {
+		return fmt.Errorf("failed to get current executable: %w", err)
+	}
+	installDir := filepath.Dir(exe)
+	metaPath := windowsMetaPath()
+
+	fmt.Fprintf(os.Stderr, "[MSI Upgrade] Starting MSI upgrade to version %s\n", version)
+	fmt.Fprintf(os.Stderr, "[MSI Upgrade] Install directory: %s\n", installDir)
+	fmt.Fprintf(os.Stderr, "[MSI Upgrade] Metadata file path: %s\n", metaPath)
+
+	var preservedMeta *installMeta
+	if data, err := os.ReadFile(metaPath); err == nil {
+		fmt.Fprintf(os.Stderr, "[MSI Upgrade] Found existing metadata file, preserving it\n")
+		data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
+		var meta installMeta
+		if err := json.Unmarshal(data, &meta); err == nil {
+			preservedMeta = &meta
+			fmt.Fprintf(os.Stderr, "[MSI Upgrade] Preserved metadata: installType=%s, source=%s, version=%s\n",
+				meta.InstallType, meta.Source, meta.Version)
+		} else {
+			fmt.Fprintf(os.Stderr, "[MSI Upgrade] Failed to parse existing metadata: %v\n", err)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "[MSI Upgrade] No existing metadata file found: %v\n", err)
+	}
+
 	msiURL, msiName := windowsMSIURL(version)
 	if msiURL == "" {
 		return errors.New("unable to determine MSI URL for upgrade")
@@ -198,11 +203,170 @@ func runWindowsMSIUpgrade(ctx context.Context, version string) error {
 		return fmt.Errorf("download MSI: %w", err)
 	}
 
-	// Run msiexec; let Windows handle any required UAC prompt.
-	cmd := exec.CommandContext(ctx, "msiexec.exe",
-		"/i", msiPath,
-		"/qn",
+	persistentMsiDir := filepath.Join(os.TempDir(), "tnr-msi-upgrade")
+	if err := os.MkdirAll(persistentMsiDir, 0o755); err != nil {
+		return fmt.Errorf("create persistent MSI directory: %w", err)
+	}
+	persistentMsiPath := filepath.Join(persistentMsiDir, msiName)
+	if err := copyFile(msiPath, persistentMsiPath); err != nil {
+		return fmt.Errorf("copy MSI to persistent location: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "[MSI Upgrade] Launching MSI installer: %s\n", persistentMsiPath)
+	cmd := exec.Command("msiexec.exe",
+		"/i", persistentMsiPath,
+		"/passive",
 		"/norestart",
+	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start MSI installer: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "[MSI Upgrade] MSI installer process started (PID: %d)\n", cmd.Process.Pid)
+	fmt.Fprintf(os.Stderr, "[MSI Upgrade] Waiting for MSI installer to complete...\n")
+
+	err = cmd.Wait()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[MSI Upgrade] MSI installer exited with error: %v\n", err)
+		return fmt.Errorf("MSI installer failed: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "[MSI Upgrade] MSI installer completed successfully\n")
+
+	time.Sleep(2 * time.Second)
+	fmt.Fprintf(os.Stderr, "[MSI Upgrade] Updating metadata file after MSI completion...\n")
+	updateInstallMetaAfterMSI(installDir, version, preservedMeta)
+
+	go func() {
+		time.Sleep(5 * time.Second)
+		_ = os.Remove(persistentMsiPath)
+		_ = os.Remove(persistentMsiDir)
+	}()
+
+	fmt.Println("MSI upgrade completed. Please re-run your command.")
+	return nil
+}
+
+func updateInstallMetaAfterMSI(installDir, version string, preservedMeta *installMeta) {
+	metaPath := windowsMetaPath()
+	fmt.Fprintf(os.Stderr, "[MSI Upgrade] Updating metadata file after MSI completion\n")
+	fmt.Fprintf(os.Stderr, "[MSI Upgrade] Target path: %s\n", metaPath)
+
+	var meta installMeta
+	if preservedMeta != nil {
+		meta.InstallType = preservedMeta.InstallType
+		meta.Source = preservedMeta.Source
+		fmt.Fprintf(os.Stderr, "[MSI Upgrade] Using preserved metadata: installType=%s, source=%s\n",
+			meta.InstallType, meta.Source)
+	} else {
+		meta.InstallType = "msi"
+		meta.Source = "msi"
+		fmt.Fprintf(os.Stderr, "[MSI Upgrade] No preserved metadata, using defaults: installType=msi, source=msi\n")
+	}
+	meta.Version = strings.TrimPrefix(strings.TrimPrefix(version, "v"), "V")
+
+	for i := 0; i < 5; i++ {
+		if data, err := os.ReadFile(metaPath); err == nil {
+			fmt.Fprintf(os.Stderr, "[MSI Upgrade] Found metadata file after MSI (attempt %d), reading it\n", i+1)
+			data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
+			var existingMeta installMeta
+			if err := json.Unmarshal(data, &existingMeta); err == nil {
+				fmt.Fprintf(os.Stderr, "[MSI Upgrade] Existing metadata: installType=%s, source=%s, version=%s\n",
+					existingMeta.InstallType, existingMeta.Source, existingMeta.Version)
+				if existingMeta.InstallType != "" {
+					meta.InstallType = existingMeta.InstallType
+				}
+				if existingMeta.Source != "" {
+					meta.Source = existingMeta.Source
+				}
+			} else {
+				fmt.Fprintf(os.Stderr, "[MSI Upgrade] Failed to parse existing metadata: %v\n", err)
+			}
+			break
+		} else {
+			fmt.Fprintf(os.Stderr, "[MSI Upgrade] Metadata file not found (attempt %d): %v\n", i+1, err)
+		}
+		if i < 4 {
+			time.Sleep(time.Second)
+		}
+	}
+
+	metaJSON, err := json.MarshalIndent(meta, "", "    ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[MSI Upgrade] Failed to marshal metadata: %v\n", err)
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "[MSI Upgrade] Writing metadata: installType=%s, source=%s, version=%s\n",
+		meta.InstallType, meta.Source, meta.Version)
+
+	metaDir := filepath.Dir(metaPath)
+	writable := dirWritable(metaDir)
+	elevated := isElevated()
+	fmt.Fprintf(os.Stderr, "[MSI Upgrade] Metadata directory writable: %v, Elevated: %v\n", writable, elevated)
+
+	if !writable && !elevated {
+		fmt.Fprintf(os.Stderr, "[MSI Upgrade] Directory not writable and not elevated, using elevated helper\n")
+		if err := updateInstallMetaWithElevation(metaDir, metaJSON); err != nil {
+			fmt.Fprintf(os.Stderr, "[MSI Upgrade] Failed to update metadata with elevation: %v\n", err)
+			return
+		}
+		fmt.Fprintf(os.Stderr, "[MSI Upgrade] Successfully updated metadata using elevated helper\n")
+		return
+	}
+
+	for i := 0; i < 5; i++ {
+		if err := os.WriteFile(metaPath, metaJSON, 0o644); err == nil {
+			fmt.Fprintf(os.Stderr, "[MSI Upgrade] Successfully wrote metadata file (attempt %d)\n", i+1)
+			if _, err := os.Stat(metaPath); err == nil {
+				fmt.Fprintf(os.Stderr, "[MSI Upgrade] Verified metadata file exists after write\n")
+			} else {
+				fmt.Fprintf(os.Stderr, "[MSI Upgrade] WARNING: Metadata file not found after write: %v\n", err)
+			}
+			return
+		}
+		fmt.Fprintf(os.Stderr, "[MSI Upgrade] Failed to write metadata file (attempt %d): %v\n", i+1, err)
+		if i < 4 {
+			time.Sleep(time.Second)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "[MSI Upgrade] ERROR: Failed to write metadata file after all retries\n")
+}
+
+func updateInstallMetaWithElevation(metaDir string, metaJSON []byte) error {
+	exe, err := currentExecutable()
+	if err != nil {
+		return fmt.Errorf("failed to get current executable: %w", err)
+	}
+
+	metaDir, err = filepath.Abs(metaDir)
+	if err != nil {
+		return err
+	}
+
+	tmpMetaFile := filepath.Join(os.TempDir(), "tnr-meta-"+fmt.Sprintf("%d", time.Now().UnixNano())+".json")
+	if err := os.WriteFile(tmpMetaFile, metaJSON, 0o644); err != nil {
+		return fmt.Errorf("failed to write temp metadata file: %w", err)
+	}
+	defer os.Remove(tmpMetaFile)
+
+	args := []string{
+		windowsUpdateHelperFlag,
+		helperArgUpdateMeta,
+		helperArgTo, metaDir,
+		helperArgFrom, tmpMetaFile,
+	}
+
+	psCommand := buildPowerShellElevationCommand(exe, args)
+
+	cmd := exec.Command("powershell.exe",
+		"-NoProfile",
+		"-NonInteractive",
+		"-Command",
+		psCommand,
 	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -210,17 +374,14 @@ func runWindowsMSIUpgrade(ctx context.Context, version string) error {
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return fmt.Errorf("msi upgrade failed with exit code %d", exitErr.ExitCode())
+			return fmt.Errorf("elevated metadata update helper failed with exit code %d", exitErr.ExitCode())
 		}
-		return fmt.Errorf("msi upgrade failed: %w", err)
+		return fmt.Errorf("failed to launch elevated metadata update helper: %w", err)
 	}
 
-	fmt.Println("Successfully upgraded via MSI. Please re-run your command.")
 	return nil
 }
 
-// windowsMSIURL constructs the expected MSI URL for the given version and
-// current architecture, matching the GoReleaser configuration.
 func windowsMSIURL(version string) (string, string) {
 	v := strings.TrimSpace(version)
 	if v == "" {
@@ -242,16 +403,12 @@ func windowsMSIURL(version string) (string, string) {
 	return url, msiName
 }
 
-// runElevatedStagingHelper launches an elevated instance of tnr in a special
-// helper mode to stage the update in a directory that normally requires
-// administrative rights (e.g. Program Files).
 func runElevatedStagingHelper(ctx context.Context, targetDir, newBinary, version string) error {
 	exe, err := currentExecutable()
 	if err != nil {
 		return err
 	}
 
-	// The helper will receive absolute paths.
 	newBinary, err = filepath.Abs(newBinary)
 	if err != nil {
 		return err
@@ -261,12 +418,82 @@ func runElevatedStagingHelper(ctx context.Context, targetDir, newBinary, version
 		return err
 	}
 
+	persistentBinaryDir := filepath.Join(os.TempDir(), "tnr-update-binary")
+	if err := os.MkdirAll(persistentBinaryDir, 0o755); err != nil {
+		return fmt.Errorf("create persistent binary directory: %w", err)
+	}
+	persistentBinary := filepath.Join(persistentBinaryDir, "tnr.exe")
+	if err := copyFile(newBinary, persistentBinary); err != nil {
+		return fmt.Errorf("copy binary to persistent location: %w", err)
+	}
+
 	args := []string{
 		windowsUpdateHelperFlag,
-		helperArgFrom, newBinary,
+		helperArgFrom, persistentBinary,
 		helperArgTo, targetDir,
 		helperArgVersion, version,
 	}
+
+	psCommand := buildPowerShellElevationCommand(exe, args)
+
+	helperLogFile := filepath.Join(os.TempDir(), "tnr-helper-staging.log")
+	args = append(args, helperArgLogFile, helperLogFile)
+
+	psCommand = buildPowerShellElevationCommand(exe, args)
+
+	cmd := exec.CommandContext(ctx, "powershell.exe",
+		"-NoProfile",
+		"-NonInteractive",
+		"-Command",
+		psCommand,
+	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			_ = os.Remove(persistentBinary)
+			_ = os.Remove(persistentBinaryDir)
+			return fmt.Errorf("elevated staging helper failed with exit code %d", exitErr.ExitCode())
+		}
+		_ = os.Remove(persistentBinary)
+		_ = os.Remove(persistentBinaryDir)
+		return fmt.Errorf("failed to launch elevated staging helper: %w", err)
+	}
+	_ = os.Remove(helperLogFile)
+
+	defer func() {
+		_ = os.Remove(persistentBinary)
+		_ = os.Remove(persistentBinaryDir)
+	}()
+
+	staged := filepath.Join(targetDir, "tnr.new")
+	if _, err := os.Stat(staged); err != nil {
+		return fmt.Errorf("staged file was not created: %w", err)
+	}
+	return nil
+}
+
+func runElevatedFinalizeHelper(ctx context.Context, targetDir string) error {
+	exe, err := currentExecutable()
+	if err != nil {
+		return err
+	}
+
+	targetDir, err = filepath.Abs(targetDir)
+	if err != nil {
+		return err
+	}
+
+	args := []string{
+		windowsUpdateHelperFlag,
+		helperArgFinalize,
+		helperArgTo, targetDir,
+	}
+
+	helperLogFile := filepath.Join(os.TempDir(), "tnr-helper-finalize.log")
+	args = append(args, helperArgLogFile, helperLogFile)
 
 	psCommand := buildPowerShellElevationCommand(exe, args)
 
@@ -282,48 +509,154 @@ func runElevatedStagingHelper(ctx context.Context, targetDir, newBinary, version
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			// Exit code 0xC0000142 and similar often indicate the user declined UAC.
-			return fmt.Errorf("elevated staging helper failed with exit code %d", exitErr.ExitCode())
+			_ = os.Remove(helperLogFile)
+			return fmt.Errorf("elevated finalize helper failed with exit code %d", exitErr.ExitCode())
 		}
-		return fmt.Errorf("failed to launch elevated staging helper: %w", err)
+		_ = os.Remove(helperLogFile)
+		return fmt.Errorf("failed to launch elevated finalize helper: %w", err)
 	}
+
+	_ = os.Remove(helperLogFile)
 
 	return nil
 }
 
-// buildPowerShellElevationCommand builds a PowerShell one-liner that launches
-// the current executable with elevation (UAC) and waits for completion,
-// propagating its exit code.
 func buildPowerShellElevationCommand(exe string, args []string) string {
 	psExe := psQuote(exe)
-	psArgs := psQuote(strings.Join(args, " "))
 
-	// Use Start-Process -Verb RunAs to trigger UAC, wait for completion and
-	// propagate the exit code to the PowerShell process (and thus to Go).
-	script := fmt.Sprintf(`$p = Start-Process -FilePath %s -ArgumentList %s -Verb RunAs -Wait -PassThru; exit $p.ExitCode`, psExe, psArgs)
+	var arrayElements []string
+	for _, arg := range args {
+		arrayElements = append(arrayElements, psQuote(quoteWindowsArg(arg)))
+	}
+	psArgsArray := "@(" + strings.Join(arrayElements, ",") + ")"
+
+	script := fmt.Sprintf(`$argArray = %s; $p = Start-Process -FilePath %s -ArgumentList $argArray -Verb RunAs -Wait -PassThru; exit $p.ExitCode`, psArgsArray, psExe)
 	return script
 }
 
 func psQuote(s string) string {
-	// Single-quote and escape existing single quotes for PowerShell.
 	s = strings.ReplaceAll(s, `'`, `''`)
 	return "'" + s + "'"
 }
 
+// quoteWindowsArg applies Windows command-line quoting rules so that Start-Process
+// forwards each argument as a single token even when it contains spaces, tabs,
+// double quotes, or trailing backslashes.
+func quoteWindowsArg(arg string) string {
+	if !needsWindowsQuoting(arg) {
+		return arg
+	}
+
+	var b strings.Builder
+	b.Grow(len(arg) + 2)
+	b.WriteByte('"')
+
+	backslashes := 0
+	for i := 0; i < len(arg); i++ {
+		c := arg[i]
+		switch c {
+		case '\\':
+			backslashes++
+		case '"':
+			for j := 0; j < backslashes*2+1; j++ {
+				b.WriteByte('\\')
+			}
+			backslashes = 0
+			b.WriteByte('"')
+		default:
+			for j := 0; j < backslashes; j++ {
+				b.WriteByte('\\')
+			}
+			backslashes = 0
+			b.WriteByte(c)
+		}
+	}
+
+	for j := 0; j < backslashes*2; j++ {
+		b.WriteByte('\\')
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+func needsWindowsQuoting(arg string) bool {
+	if arg == "" {
+		return true
+	}
+	for i := 0; i < len(arg); i++ {
+		switch arg[i] {
+		case ' ', '\t', '"':
+			return true
+		}
+	}
+	return false
+}
+
 func runWindowsUpdateHelper(args []string) int {
-	if !isElevated() {
-		fmt.Fprintln(os.Stderr, "tnr update helper: elevation required but not granted (UAC may have been cancelled).")
+	var logFile *os.File
+	var logFilePath string
+	for i := 0; i < len(args); i++ {
+		if args[i] == helperArgLogFile {
+			i++
+			if i < len(args) {
+				logFilePath = args[i]
+				if f, err := os.Create(logFilePath); err == nil {
+					logFile = f
+					defer logFile.Close()
+				}
+			}
+			break
+		}
+	}
+
+	writeLog := func(format string, a ...interface{}) {
+		msg := fmt.Sprintf(format, a...)
+		fmt.Fprint(os.Stderr, msg)
+		if logFile != nil {
+			fmt.Fprint(logFile, msg)
+		}
+	}
+
+	elevated := isElevated()
+	if !elevated {
+		writeLog("tnr update helper: elevation required but not granted (UAC may have been cancelled).\n")
 		return 1
+	}
+
+	if len(args) > 0 && args[0] == helperArgFinalize {
+		toDir, err := parseFinalizeArgs(args[1:])
+		if err != nil {
+			writeLog("tnr update helper: %v\n", err)
+			return 1
+		}
+		if err := finalizeUpdateInDir(toDir); err != nil {
+			writeLog("tnr update helper: failed to finalize update: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+
+	if len(args) > 0 && args[0] == helperArgUpdateMeta {
+		toDir, fromFile, err := parseUpdateMetaArgs(args[1:])
+		if err != nil {
+			writeLog("tnr update helper: %v\n", err)
+			return 1
+		}
+		if err := updateMetaInDir(toDir, fromFile); err != nil {
+			writeLog("tnr update helper: failed to update metadata: %v\n", err)
+			return 1
+		}
+		return 0
 	}
 
 	from, toDir, version, err := parseHelperArgs(args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tnr update helper: %v\n", err)
+		writeLog("tnr update helper: %v\n", err)
 		return 1
 	}
 
 	if err := stageUpdateInDir(from, toDir, version); err != nil {
-		fmt.Fprintf(os.Stderr, "tnr update helper: failed to stage update: %v\n", err)
+		writeLog("tnr update helper: failed to stage update: %v\n", err)
 		return 1
 	}
 
@@ -351,6 +684,13 @@ func parseHelperArgs(args []string) (from, toDir, version string, err error) {
 				return "", "", "", errors.New("missing value for --version")
 			}
 			version = args[i]
+		case helperArgLogFile:
+			i++
+			if i >= len(args) {
+				return "", "", "", errors.New("missing value for --log-file")
+			}
+		default:
+			return "", "", "", fmt.Errorf("unexpected argument: %s", args[i])
 		}
 	}
 
@@ -360,9 +700,82 @@ func parseHelperArgs(args []string) (from, toDir, version string, err error) {
 	return from, toDir, version, nil
 }
 
-// stageUpdateInDir performs the actual work of copying the new binary into
-// the target directory and writing the update marker. It assumes it is
-// running elevated and that the directory may normally be protected.
+func parseFinalizeArgs(args []string) (toDir string, err error) {
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case helperArgTo:
+			i++
+			if i >= len(args) {
+				return "", errors.New("missing value for --to")
+			}
+			toDir = args[i]
+		case helperArgLogFile:
+			i++
+			if i >= len(args) {
+				return "", errors.New("missing value for --log-file")
+			}
+		default:
+			return "", fmt.Errorf("unexpected argument: %s", args[i])
+		}
+	}
+	if toDir == "" {
+		return "", errors.New("missing required arguments")
+	}
+	return toDir, nil
+}
+
+func parseUpdateMetaArgs(args []string) (toDir, fromFile string, err error) {
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case helperArgTo:
+			i++
+			if i >= len(args) {
+				return "", "", errors.New("missing value for --to")
+			}
+			toDir = args[i]
+		case helperArgFrom:
+			i++
+			if i >= len(args) {
+				return "", "", errors.New("missing value for --from")
+			}
+			fromFile = args[i]
+		default:
+			return "", "", fmt.Errorf("unexpected argument: %s", args[i])
+		}
+	}
+	if toDir == "" || fromFile == "" {
+		return "", "", errors.New("missing required arguments")
+	}
+	return toDir, fromFile, nil
+}
+
+func updateMetaInDir(toDir, fromFile string) error {
+	toDir, err := filepath.Abs(toDir)
+	if err != nil {
+		return err
+	}
+	fromFile, err = filepath.Abs(fromFile)
+	if err != nil {
+		return err
+	}
+
+	metaData, err := os.ReadFile(fromFile)
+	if err != nil {
+		return fmt.Errorf("failed to read metadata file: %w", err)
+	}
+
+	metaPath := windowsMetaPath()
+	if err := os.MkdirAll(filepath.Dir(metaPath), 0o755); err != nil {
+		return fmt.Errorf("failed to create metadata directory: %w", err)
+	}
+
+	if err := os.WriteFile(metaPath, metaData, 0o644); err != nil {
+		return fmt.Errorf("failed to write metadata file: %w", err)
+	}
+
+	return nil
+}
+
 func stageUpdateInDir(from, toDir, version string) error {
 	from, err := filepath.Abs(from)
 	if err != nil {
@@ -383,6 +796,7 @@ func stageUpdateInDir(from, toDir, version string) error {
 	if err := copyFile(from, staged); err != nil {
 		return fmt.Errorf("copy new binary: %w", err)
 	}
+
 	if err := os.WriteFile(marker, []byte(version), 0o644); err != nil {
 		return fmt.Errorf("write marker: %w", err)
 	}
@@ -390,8 +804,59 @@ func stageUpdateInDir(from, toDir, version string) error {
 	return nil
 }
 
-// isElevated returns true when the current process is running with
-// administrative privileges.
+func finalizeUpdateInDir(toDir string) error {
+	toDir, err := filepath.Abs(toDir)
+	if err != nil {
+		return err
+	}
+
+	staged := filepath.Join(toDir, "tnr.new")
+	if _, err := os.Stat(staged); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+
+	exe := filepath.Join(toDir, "tnr.exe")
+	old := filepath.Join(toDir, "tnr.old")
+	marker := filepath.Join(toDir, ".tnr-update")
+
+	if err := os.MkdirAll(toDir, 0o755); err != nil {
+		return err
+	}
+
+	_ = os.Remove(old)
+
+	if err := os.Rename(exe, old); err != nil {
+		return fmt.Errorf("rename current binary: %w", err)
+	}
+
+	if err := os.Rename(staged, exe); err != nil {
+		_ = os.Rename(old, exe)
+		return fmt.Errorf("rename staged binary: %w", err)
+	}
+
+	_ = os.Remove(marker)
+	_ = removeOldBackup(old)
+
+	return nil
+}
+
+func removeOldBackup(oldPath string) error {
+	maxRetries := 3
+	for i := 0; i < maxRetries; i++ {
+		if err := os.Remove(oldPath); err == nil {
+			return nil
+		}
+		if i < maxRetries-1 {
+			delay := time.Duration(100*(1<<i)) * time.Millisecond
+			time.Sleep(delay)
+		}
+	}
+	return os.Remove(oldPath)
+}
+
 func isElevated() bool {
 	token := windows.GetCurrentProcessToken()
 	defer token.Close()
@@ -411,4 +876,36 @@ func isElevated() bool {
 		return false
 	}
 	return elevation.TokenIsElevated != 0
+}
+
+func TryFinalizeStagedUpdateImmediately(ctx context.Context, exePath string) (bool, error) {
+	dir := filepath.Dir(exePath)
+	staged := filepath.Join(dir, "tnr.new")
+
+	if _, err := os.Stat(staged); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	writable := dirWritable(dir)
+	elevated := isElevated()
+
+	if writable || elevated {
+		if err := finalizeUpdateInDir(dir); err != nil {
+			return false, fmt.Errorf("failed to finalize update: %w", err)
+		}
+		return true, nil
+	}
+
+	if err := runElevatedFinalizeHelper(ctx, dir); err != nil {
+		return false, nil
+	}
+
+	if _, err := os.Stat(staged); err == nil {
+		return false, nil
+	}
+
+	return true, nil
 }

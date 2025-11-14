@@ -12,12 +12,9 @@ import (
 	"syscall"
 )
 
-// unixInstaller handles installation on Unix-like systems (macOS, Linux).
 type unixInstaller struct{}
 
-// Install implements the installer interface for Unix systems.
 func (u unixInstaller) Install(ctx context.Context, exe, newBinary, version string, src Source) error {
-	// Unix: replace atomically
 	dir := filepath.Dir(exe)
 	if !dirWritable(dir) {
 		if err := installWithSudo(newBinary, exe, version); err != nil {

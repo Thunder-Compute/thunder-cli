@@ -19,7 +19,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "🔨 Building MSI for $ProjectName $Version ($Arch)"
+Write-Host "[BUILD] Building MSI for $ProjectName $Version ($Arch)"
 
 # Validate binary exists
 if (-not (Test-Path $BinaryPath)) {
@@ -47,7 +47,7 @@ try {
     $BinaryName = Split-Path -Leaf $BinaryPath
     $WorkingBinary = Join-Path $TempDir "$ProjectName.exe"
     Copy-Item $BinaryPath -Destination $WorkingBinary -Force
-    Write-Host "✅ Copied binary to: $WorkingBinary"
+    Write-Host "[OK] Copied binary to: $WorkingBinary"
 
     # Write installation metadata used by the CLI to detect MSI installs
     $InstallMeta = @{
@@ -57,7 +57,7 @@ try {
     } | ConvertTo-Json -Depth 3
     $InstallMetaPath = Join-Path $TempDir ".install-meta.json"
     $InstallMeta | Set-Content -Path $InstallMetaPath -Encoding UTF8
-    Write-Host "✅ Wrote install metadata: $InstallMetaPath"
+    Write-Host "[OK] Wrote install metadata: $InstallMetaPath"
 
     # Read and process WiX template (replace GoReleaser template variables)
     $WxsContent = Get-Content $WxsTemplate -Raw
@@ -69,21 +69,21 @@ try {
     # Write processed WiX source
     $WorkingWxs = Join-Path $TempDir "app.wxs"
     $WxsContent | Set-Content -Path $WorkingWxs -Encoding UTF8
-    Write-Host "✅ Prepared WiX source: $WorkingWxs"
+    Write-Host "[OK] Prepared WiX source: $WorkingWxs"
 
     # Copy license file for WiX UI
     $LicenseSource = Join-Path $RepoRoot "packaging/windows/license.rtf"
     $LicenseDest = Join-Path $TempDir "license.rtf"
     if (Test-Path $LicenseSource) {
         Copy-Item $LicenseSource -Destination $LicenseDest -Force
-        Write-Host "✅ Copied license: $LicenseDest"
+        Write-Host "[OK] Copied license: $LicenseDest"
     } else {
         Write-Warning "License file not found at $LicenseSource. The installer will not show a license dialog."
     }
 
     # Build MSI with WiX v4
     $OutputMsi = Join-Path $TempDir "$ProjectName-$Version-$Arch.msi"
-    Write-Host "🔧 Building MSI with WiX..."
+    Write-Host "[BUILD] Building MSI with WiX..."
 
     # Resolve WiX executable (allow override via WIX_EXE_PATH)
     $WixExe = $env:WIX_EXE_PATH
@@ -117,11 +117,11 @@ try {
         exit 1
     }
 
-    Write-Host "✅ MSI built successfully: $OutputMsi"
+    Write-Host "[OK] MSI built successfully: $OutputMsi"
 
     # Sign the MSI with YubiKey (if credentials are available)
     if ($env:CERT_THUMBPRINT -and $env:TIMESTAMP_SERVER) {
-        Write-Host "🔏 Signing MSI with YubiKey..."
+        Write-Host "[SIGN] Signing MSI with YubiKey..."
         
         # Find signtool.exe
         $SignTool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue | 
@@ -148,19 +148,19 @@ try {
             exit 1
         }
     
-        Write-Host "✅ MSI signed successfully"
+        Write-Host "[OK] MSI signed successfully"
     
         # Verify the signature
-        Write-Host "🔍 Verifying signature..."
+        Write-Host "[VERIFY] Verifying signature..."
         & $SignTool.FullName verify /pa /v $OutputMsi
         
         if ($LASTEXITCODE -ne 0) {
             Write-Warning "Signature verification failed (exit code: $LASTEXITCODE)"
         } else {
-            Write-Host "✅ Signature verified"
+            Write-Host "[OK] Signature verified"
         }
     } else {
-        Write-Warning "⚠️  Skipping MSI signing (CERT_THUMBPRINT or TIMESTAMP_SERVER not set)"
+        Write-Warning "[SKIP] Skipping MSI signing (CERT_THUMBPRINT or TIMESTAMP_SERVER not set)"
     }
 
     # Copy signed MSI to dist directory
@@ -171,11 +171,11 @@ try {
 
     $FinalMsi = Join-Path $DistDir "$ProjectName-$Version-$Arch.msi"
     Copy-Item $OutputMsi -Destination $FinalMsi -Force
-    Write-Host "✅ Copied MSI to: $FinalMsi"
+    Write-Host "[OK] Copied MSI to: $FinalMsi"
 
     # Display file info
     $FileInfo = Get-Item $FinalMsi
-    Write-Host "📦 MSI Package:"
+    Write-Host "[INFO] MSI Package:"
     Write-Host "   Path: $($FileInfo.FullName)"
     Write-Host "   Size: $([math]::Round($FileInfo.Length / 1MB, 2)) MB"
     Write-Host "   Modified: $($FileInfo.LastWriteTime)"
@@ -184,10 +184,10 @@ try {
     # Cleanup temp directory
     if (Test-Path $TempDir) {
         Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Host "🧹 Cleaned up temporary directory"
+        Write-Host "[CLEANUP] Cleaned up temporary directory"
     }
 }
 
-Write-Host "✨ MSI build complete!"
+Write-Host "[SUCCESS] MSI build complete!"
 exit 0
 

@@ -40,7 +40,6 @@ func MaybeStartBackgroundUpdate(ctx context.Context, currentVersion string) {
 		return
 	}
 
-	// Best-effort finalize any staged Windows update first.
 	_ = finalizeWindowsSwap()
 
 	exe, _ := currentExecutable()
@@ -48,11 +47,9 @@ func MaybeStartBackgroundUpdate(ctx context.Context, currentVersion string) {
 		return
 	}
 	if !dirWritable(filepath.Dir(exe)) && runtime.GOOS != "windows" {
-		// On Unix, we need a writable directory to atomically replace.
 		return
 	}
 
-	// Shallow dependency to avoid import cycle: call updatecheck.Check via function pointer.
 	latest, outdated, err := checkLatestVersion(ctx, currentVersion)
 	if err != nil || !outdated {
 		return
@@ -66,9 +63,7 @@ func MaybeStartBackgroundUpdate(ctx context.Context, currentVersion string) {
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		if err := PerformUpdate(bgCtx, source); err != nil {
-			// Quietly ignore errors in background; user can always reinstall manually.
-		}
+		_ = PerformUpdate(bgCtx, source)
 	}()
 }
 
@@ -130,7 +125,6 @@ func PerformUpdate(ctx context.Context, src Source) error {
 		newBinary = filepath.Join(extractedPath, "tnr")
 	}
 	if _, err := os.Stat(newBinary); err != nil {
-		// Fallback: find first file starting with tnr
 		matches, _ := filepath.Glob(filepath.Join(extractedPath, "tnr*"))
 		if len(matches) > 0 {
 			newBinary = matches[0]
@@ -139,10 +133,8 @@ func PerformUpdate(ctx context.Context, src Source) error {
 		}
 	}
 
-	// Ensure executable
 	_ = os.Chmod(newBinary, 0o755)
 
-	// Install using platform-specific installer
 	inst := detectInstaller()
 	if err := inst.Install(ctx, exe, newBinary, version, src); err != nil {
 		return err
@@ -224,8 +216,6 @@ func deriveVersionFromName(name string) string {
 	return ""
 }
 
-// --- helpers ---
-
 type ghRelease struct {
 	TagName string    `json:"tag_name"`
 	Assets  []ghAsset `json:"assets"`
@@ -244,10 +234,6 @@ func resolveAssetForCurrentPlatform(ctx context.Context, tag string) (ghAsset, s
 
 	osKey := runtime.GOOS
 	archKey := runtime.GOARCH
-	if archKey == "amd64" {
-		archKey = "amd64"
-	}
-	// Prefer OS-specific checksums file
 	var checksumsURL string
 	for _, a := range release.Assets {
 		l := strings.ToLower(a.Name)
@@ -265,7 +251,6 @@ func resolveAssetForCurrentPlatform(ctx context.Context, tag string) (ghAsset, s
 		}
 	}
 
-	// Select the asset matching current OS/arch
 	var candidate ghAsset
 	for _, a := range release.Assets {
 		name := strings.ToLower(a.Name)
@@ -370,7 +355,6 @@ func extractArchive(archivePath, destDir string) error {
 	if strings.HasSuffix(strings.ToLower(archivePath), ".zip") {
 		return extractZip(archivePath, destDir)
 	}
-	// assume tar.gz or tgz
 	return extractTarGz(archivePath, destDir)
 }
 
@@ -515,36 +499,59 @@ func finalizeWindowsSwap() error {
 	}
 	dir := filepath.Dir(exe)
 	staged := filepath.Join(dir, "tnr.new")
+	marker := filepath.Join(dir, ".tnr-update")
+	
 	if _, err := os.Stat(staged); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 		return nil
 	}
-	// Try atomic rename chain: move current to .old, then staged to exe.
-	old := filepath.Join(dir, "tnr.old")
-	_ = os.Remove(old)
-	if err := os.Rename(exe, old); err != nil {
+
+	writable := dirWritable(dir)
+	if writable {
+		old := filepath.Join(dir, "tnr.old")
+		_ = os.Remove(old)
+		if err := os.Rename(exe, old); err != nil {
+			return err
+		}
+		if err := os.Rename(staged, exe); err != nil {
+			_ = os.Rename(old, exe)
+			return err
+		}
+		_ = os.Remove(marker)
+		_ = removeOldBackupWithRetry(old)
+		return nil
+	}
+
+	if err := runElevatedFinalizeHelper(context.Background(), dir); err != nil {
 		return err
 	}
-	if err := os.Rename(staged, exe); err != nil {
-		// Try to rollback
-		_ = os.Rename(old, exe)
-		return err
-	}
-	_ = os.Remove(filepath.Join(dir, ".tnr-update"))
-	_ = os.Remove(old)
 	return nil
 }
 
-// FinalizeStagedWindowsUpdate attempts to apply a previously staged Windows update.
-// It is safe to call on non-Windows platforms (no-op) and errors are returned for callers
-// who wish to handle them. Most callers can ignore the error.
+func removeOldBackupWithRetry(oldPath string) error {
+	maxRetries := 3
+	var lastErr error
+	for i := 0; i < maxRetries; i++ {
+		err := os.Remove(oldPath)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if i < maxRetries-1 {
+			delay := time.Duration(100*(1<<i)) * time.Millisecond
+			time.Sleep(delay)
+		}
+	}
+	return lastErr
+}
+
 func FinalizeStagedWindowsUpdate() error {
 	return finalizeWindowsSwap()
 }
 
-// checkLatestVersion calls into the updatecheck.Check without importing it directly to avoid cycles.
-// Implemented here minimally by duplicating the HTTP call used by updatecheck.
 func checkLatestVersion(ctx context.Context, current string) (latest string, outdated bool, err error) {
-	// Fast path: reuse the same endpoint logic used by internal/updatecheck.
 	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/repos/Thunder-Compute/thunder-cli/releases/latest", nil)
 	if err != nil {
 		return "", false, err
@@ -571,7 +578,6 @@ func checkLatestVersion(ctx context.Context, current string) (latest string, out
 	if latest == "" || strings.EqualFold(strings.TrimSpace(current), "dev") || strings.TrimSpace(current) == "" {
 		return "", false, nil
 	}
-	// Compare semver (strip leading v)
 	cv := strings.TrimPrefix(strings.TrimPrefix(current, "v"), "V")
 	lv := strings.TrimPrefix(strings.TrimPrefix(latest, "v"), "V")
 	outdated = versionLess(cv, lv)

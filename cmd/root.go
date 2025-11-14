@@ -166,7 +166,21 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result) {
 		os.Exit(1)
 	}
 
-	fmt.Fprintln(os.Stderr, "Update completed successfully. Please re-run your command.")
+	// Try to finalize the update immediately if possible (Windows only, when already elevated or writable)
+	binPath, _ = getCurrentBinaryPath()
+	if binPath != "" {
+		shouldReexec, err := autoupdate.TryFinalizeStagedUpdateImmediately(parentCtx, binPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Update staged successfully. Please re-run your command to complete the update.")
+			os.Exit(0)
+		}
+		if shouldReexec {
+			fmt.Fprintln(os.Stderr, "Update completed successfully. Please re-run your command.")
+			os.Exit(0)
+		}
+	}
+	
+	fmt.Fprintln(os.Stderr, "Update staged successfully. Please re-run your command to complete the update.")
 	os.Exit(0)
 }
 
@@ -244,6 +258,7 @@ func displayVersion(v string) string {
 	}
 	return "v" + v
 }
+
 
 func shouldSkipUpdateCheck(cmd *cobra.Command) bool {
 	if cmd == nil {
