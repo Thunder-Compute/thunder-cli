@@ -142,7 +142,12 @@ func TestTemplateStruct(t *testing.T) {
 		StartupCommands:     []string{"sudo systemctl start docker"},
 		StartupMinutes:      5,
 		Version:             1,
-		Default:             true,
+		DefaultSpecs: ThunderTemplateDefaultSpecs{
+			Cores:   8,
+			GpuType: "t4",
+			NumGpus: 1,
+			Storage: 100,
+		},
 	}
 
 	jsonData, err := json.Marshal(template)
@@ -160,7 +165,7 @@ func TestTemplateStruct(t *testing.T) {
 	assert.Equal(t, template.StartupCommands, unmarshaled.StartupCommands)
 	assert.Equal(t, template.StartupMinutes, unmarshaled.StartupMinutes)
 	assert.Equal(t, template.Version, unmarshaled.Version)
-	assert.Equal(t, template.Default, unmarshaled.Default)
+	assert.Equal(t, template.DefaultSpecs, unmarshaled.DefaultSpecs)
 }
 
 func TestAddSSHKeyResponse(t *testing.T) {

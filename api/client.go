@@ -33,17 +33,24 @@ type Instance struct {
 	Promoted  bool   `json:"promoted"`
 }
 
+type ThunderTemplateDefaultSpecs struct {
+	Cores   int    `json:"cores"`
+	GpuType string `json:"gpu_type"`
+	NumGpus int    `json:"num_gpus"`
+	Storage int    `json:"storage"`
+}
+
 type Template struct {
-	Key                 string   `json:"-"`
-	DisplayName         string   `json:"displayName"`
-	ExtendedDescription string   `json:"extendedDescription,omitempty"`
-	AutomountFolders    []string `json:"automountFolders"`
-	CleanupCommands     []string `json:"cleanupCommands"`
-	OpenPorts           []int    `json:"openPorts"`
-	StartupCommands     []string `json:"startupCommands"`
-	StartupMinutes      int      `json:"startupMinutes,omitempty"`
-	Version             int      `json:"version,omitempty"`
-	Default             bool     `json:"default,omitempty"`
+	Key                 string                      `json:"-"`
+	DisplayName         string                      `json:"displayName"`
+	ExtendedDescription string                      `json:"extendedDescription,omitempty"`
+	AutomountFolders    []string                    `json:"automountFolders"`
+	CleanupCommands     []string                    `json:"cleanupCommands"`
+	OpenPorts           []int                       `json:"openPorts"`
+	StartupCommands     []string                    `json:"startupCommands"`
+	StartupMinutes      int                         `json:"startupMinutes,omitempty"`
+	Version             int                         `json:"version,omitempty"`
+	DefaultSpecs        ThunderTemplateDefaultSpecs `json:"defaultSpecs"`
 }
 
 type CreateInstanceRequest struct {

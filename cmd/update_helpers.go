@@ -21,4 +21,16 @@ func isPMManaged(binPath string) bool {
 		strings.Contains(binPath, "WindowsApps")
 }
 
-
+func detectPackageManager(binPath string) string {
+	p := strings.ToLower(binPath)
+	if strings.Contains(p, "/opt/homebrew/") || strings.Contains(p, "/usr/local/cellar/") {
+		return "homebrew"
+	}
+	if strings.Contains(p, "\\scoop\\apps\\") {
+		return "scoop"
+	}
+	if strings.Contains(p, "windowsapps") {
+		return "winget"
+	}
+	return ""
+}

@@ -152,7 +152,17 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result) {
 
 	binPath, _ := getCurrentBinaryPath()
 	if binPath != "" && isPMManaged(binPath) {
-		fmt.Fprintln(os.Stderr, "This installation is managed by a package manager. Please upgrade using brew/winget/scoop or reinstall the latest release.")
+		pm := detectPackageManager(binPath)
+		switch pm {
+		case "homebrew":
+			fmt.Fprintln(os.Stderr, "This installation is managed by Homebrew. Please run 'brew update' and then 'brew upgrade tnr' to update.")
+		case "scoop":
+			fmt.Fprintln(os.Stderr, "This installation is managed by Scoop. Please run 'scoop update tnr' to update.")
+		case "winget":
+			fmt.Fprintln(os.Stderr, "This installation is managed by Windows Package Manager. Please run 'winget upgrade Thunder.tnr' to update.")
+		default:
+			fmt.Fprintln(os.Stderr, "This installation is managed by a package manager. Please upgrade using brew/winget/scoop or reinstall the latest release.")
+		}
 		os.Exit(1)
 	}
 
@@ -179,7 +189,7 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result) {
 			os.Exit(0)
 		}
 	}
-	
+
 	fmt.Fprintln(os.Stderr, "Update staged successfully. Please re-run your command to complete the update.")
 	os.Exit(0)
 }
@@ -187,8 +197,21 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result) {
 func handleOptionalUpdate(parentCtx context.Context, res updatepolicy.Result) {
 	binPath, _ := getCurrentBinaryPath()
 	if binPath != "" && isPMManaged(binPath) {
-		fmt.Printf("⚠ Update available: %s → %s. Update via your package manager (e.g. brew upgrade tnr).\n",
-			displayVersion(res.CurrentVersion), displayVersion(res.LatestVersion))
+		pm := detectPackageManager(binPath)
+		switch pm {
+		case "homebrew":
+			fmt.Printf("⚠ Update available: %s → %s. For Homebrew, run 'brew update' and then 'brew upgrade tnr'.\n",
+				displayVersion(res.CurrentVersion), displayVersion(res.LatestVersion))
+		case "scoop":
+			fmt.Printf("⚠ Update available: %s → %s. For Scoop, run 'scoop update tnr'.\n",
+				displayVersion(res.CurrentVersion), displayVersion(res.LatestVersion))
+		case "winget":
+			fmt.Printf("⚠ Update available: %s → %s. For Windows Package Manager, run 'winget upgrade Thunder.tnr'.\n",
+				displayVersion(res.CurrentVersion), displayVersion(res.LatestVersion))
+		default:
+			fmt.Printf("⚠ Update available: %s → %s. Update via your package manager (e.g. brew upgrade tnr).\n",
+				displayVersion(res.CurrentVersion), displayVersion(res.LatestVersion))
+		}
 		return
 	}
 
@@ -258,7 +281,6 @@ func displayVersion(v string) string {
 	}
 	return "v" + v
 }
-
 
 func shouldSkipUpdateCheck(cmd *cobra.Command) bool {
 	if cmd == nil {

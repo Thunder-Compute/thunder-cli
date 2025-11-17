@@ -53,7 +53,7 @@ Examples:
   tnr create
 
   # Non-interactive prototyping instance
-  tnr create --mode prototyping --gpu t4 --vcpus 8 --template ubuntu-22.04 --disk-size-gb 100
+  tnr create --mode prototyping --gpu t4 --vcpus 8 --template base --disk-size-gb 100
 
   # Non-interactive production instance
   tnr create --mode production --num-gpus 2 --template pytorch --disk-size-gb 500`,

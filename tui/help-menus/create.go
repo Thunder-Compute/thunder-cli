@@ -67,14 +67,14 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("# Prototyping instance (lowest cost)"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr create --mode prototyping --gpu t4 --vcpus 8 --template ubuntu-22.04 --disk-size-gb 100"))
+	output.WriteString(CommandTextStyle.Render("tnr create --mode prototyping --gpu t4 --vcpus 8 --template base --disk-size-gb 100"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Production instance (highest stability)"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr create --mode production --num-gpus 2 --template pytorch --disk-size-gb 500"))
+	output.WriteString(CommandTextStyle.Render("tnr create --mode production --num-gpus 2 --template base --disk-size-gb 500"))
 	output.WriteString("\n\n")
 
 	// Flags Section
