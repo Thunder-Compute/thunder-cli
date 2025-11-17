@@ -420,10 +420,12 @@ jobs:
         run: |
           set -euo pipefail
 
+          VERSION_NO_V="${VERSION#v}"
+
           # Download checksum files from all platforms
-          aws s3 cp "s3://${BUCKET}/tnr/releases/${VERSION}/linux/checksums-linux.txt" checksums-linux.txt || echo "Warning: Linux checksums not found"
-          aws s3 cp "s3://${BUCKET}/tnr/releases/${VERSION}/macos/checksums-macos.txt" checksums-macos.txt || echo "Warning: macOS checksums not found"
-          aws s3 cp "s3://${BUCKET}/tnr/releases/${VERSION}/windows/checksums-windows.txt" checksums-windows.txt || echo "Warning: Windows checksums not found"
+          aws s3 cp "s3://${BUCKET}/tnr/releases/${VERSION_NO_V}/linux/checksums-linux.txt" checksums-linux.txt || echo "Warning: Linux checksums not found"
+          aws s3 cp "s3://${BUCKET}/tnr/releases/${VERSION_NO_V}/macos/checksums-macos.txt" checksums-macos.txt || echo "Warning: macOS checksums not found"
+          aws s3 cp "s3://${BUCKET}/tnr/releases/${VERSION_NO_V}/windows/checksums-windows.txt" checksums-windows.txt || echo "Warning: Windows checksums not found"
 
           # Combine all checksum files into one
           cat checksums-*.txt 2>/dev/null > checksums.txt || touch checksums.txt
@@ -436,7 +438,10 @@ jobs:
         env:
           BUCKET: ${{ secrets.TNR_S3_BUCKET }}
         run: |
-          aws s3 cp checksums.txt "s3://${BUCKET}/tnr/releases/${VERSION}/checksums.txt" \
+          # Strip 'v' prefix from VERSION for S3 paths
+          VERSION_NO_V="${VERSION#v}"
+
+          aws s3 cp checksums.txt "s3://${BUCKET}/tnr/releases/${VERSION_NO_V}/checksums.txt" \
             --cache-control "public, max-age=31536000, immutable" \
             --content-type "text/plain"
           echo "✅ Uploaded combined checksums.txt to S3"
@@ -449,21 +454,23 @@ jobs:
         run: |
           set -euo pipefail
 
-          BASE="https://${BUCKET}.s3.${REGION}.amazonaws.com/tnr/releases/${VERSION}"
+          VERSION_NO_V="${VERSION#v}"
+
+          BASE="https://${BUCKET}.s3.${REGION}.amazonaws.com/tnr/releases/${VERSION_NO_V}"
 
           cat > latest.json <<JSON
           {
             "version": "${VERSION}",
             "channel": "stable",
             "assets": {
-              "darwin/arm64": "${BASE}/macos/tnr_${VERSION}_darwin_arm64.tar.gz",
-              "darwin/amd64": "${BASE}/macos/tnr_${VERSION}_darwin_amd64.tar.gz",
-              "linux/arm64": "${BASE}/linux/tnr_${VERSION}_linux_arm64.tar.gz",
-              "linux/amd64": "${BASE}/linux/tnr_${VERSION}_linux_amd64.tar.gz",
-              "windows/arm64": "${BASE}/windows/tnr_${VERSION}_windows_arm64.zip",
-              "windows/amd64": "${BASE}/windows/tnr_${VERSION}_windows_amd64.zip",
-              "macos/pkg": "${BASE}/macos/tnr_${VERSION}_darwin_amd64.pkg",
-              "windows/installer": "${BASE}/windows/tnr-${VERSION}-amd64.msi",
+              "darwin/arm64": "${BASE}/macos/tnr_${VERSION_NO_V}_darwin_arm64.tar.gz",
+              "darwin/amd64": "${BASE}/macos/tnr_${VERSION_NO_V}_darwin_amd64.tar.gz",
+              "linux/arm64": "${BASE}/linux/tnr_${VERSION_NO_V}_linux_arm64.tar.gz",
+              "linux/amd64": "${BASE}/linux/tnr_${VERSION_NO_V}_linux_amd64.tar.gz",
+              "windows/arm64": "${BASE}/windows/tnr_${VERSION_NO_V}_windows_arm64.zip",
+              "windows/amd64": "${BASE}/windows/tnr_${VERSION_NO_V}_windows_amd64.zip",
+              "macos/pkg": "${BASE}/macos/tnr_${VERSION_NO_V}_darwin_amd64.pkg",
+              "windows/installer": "${BASE}/windows/tnr-${VERSION_NO_V}-amd64.msi",
               "checksums": "${BASE}/checksums.txt"
             }
           }

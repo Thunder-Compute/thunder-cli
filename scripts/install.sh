@@ -45,35 +45,68 @@ ensure_jq() {
   
   echo "jq not found. Attempting to install..."
   
+  # Check if running as root (use id -u for better compatibility)
+  local is_root=false
+  if [[ "$(id -u)" -eq 0 ]]; then
+    is_root=true
+  fi
+  
   # Try to detect if we can install packages
   local can_install=false
   local install_cmd=""
   
-  if command -v apt-get >/dev/null 2>&1 && ([[ "$EUID" -eq 0 ]] || sudo -n true 2>/dev/null); then
+  if command -v apt-get >/dev/null 2>&1; then
     # Debian/Ubuntu
-    can_install=true
-    install_cmd="sudo apt-get update -qq && sudo apt-get install -y jq"
-  elif command -v apt-get >/dev/null 2>&1; then
-    # Debian/Ubuntu without sudo
-    echo "jq is required. Please install it manually:" >&2
-    echo "  sudo apt-get update && sudo apt-get install -y jq" >&2
-    exit 1
-  elif command -v apk >/dev/null 2>&1 && ([[ "$EUID" -eq 0 ]] || sudo -n true 2>/dev/null); then
-    # Alpine
-    can_install=true
-    install_cmd="sudo apk add --no-cache jq"
+    if [[ "$is_root" == "true" ]]; then
+      can_install=true
+      install_cmd="apt-get update -qq && apt-get install -y jq"
+    elif sudo -n true 2>/dev/null; then
+      can_install=true
+      install_cmd="sudo apt-get update -qq && sudo apt-get install -y jq"
+    else
+      echo "jq is required. Please install it manually:" >&2
+      echo "  sudo apt-get update && sudo apt-get install -y jq" >&2
+      exit 1
+    fi
   elif command -v apk >/dev/null 2>&1; then
-    echo "jq is required. Please install it manually:" >&2
-    echo "  sudo apk add --no-cache jq" >&2
-    exit 1
-  elif command -v yum >/dev/null 2>&1 && ([[ "$EUID" -eq 0 ]] || sudo -n true 2>/dev/null); then
+    # Alpine
+    if [[ "$is_root" == "true" ]]; then
+      can_install=true
+      install_cmd="apk add --no-cache jq"
+    elif sudo -n true 2>/dev/null; then
+      can_install=true
+      install_cmd="sudo apk add --no-cache jq"
+    else
+      echo "jq is required. Please install it manually:" >&2
+      echo "  sudo apk add --no-cache jq" >&2
+      exit 1
+    fi
+  elif command -v yum >/dev/null 2>&1; then
     # RHEL/CentOS 7
-    can_install=true
-    install_cmd="sudo yum install -y jq"
-  elif command -v dnf >/dev/null 2>&1 && ([[ "$EUID" -eq 0 ]] || sudo -n true 2>/dev/null); then
+    if [[ "$is_root" == "true" ]]; then
+      can_install=true
+      install_cmd="yum install -y jq"
+    elif sudo -n true 2>/dev/null; then
+      can_install=true
+      install_cmd="sudo yum install -y jq"
+    else
+      echo "jq is required. Please install it manually:" >&2
+      echo "  sudo yum install -y jq" >&2
+      exit 1
+    fi
+  elif command -v dnf >/dev/null 2>&1; then
     # Fedora/RHEL/CentOS 8+
-    can_install=true
-    install_cmd="sudo dnf install -y jq"
+    if [[ "$is_root" == "true" ]]; then
+      can_install=true
+      install_cmd="dnf install -y jq"
+    elif sudo -n true 2>/dev/null; then
+      can_install=true
+      install_cmd="sudo dnf install -y jq"
+    else
+      echo "jq is required. Please install it manually:" >&2
+      echo "  sudo dnf install -y jq" >&2
+      exit 1
+    fi
   fi
   
   if [[ "$can_install" == "true" ]]; then
