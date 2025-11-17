@@ -247,8 +247,6 @@ jobs:
           $utilDll = Get-ChildItem "$pkgsRoot\WixToolset.Util.wixext" -Recurse -Filter WixToolset.Util.wixext.dll | Select-Object -First 1
           echo "WIX_EXT_UI_DLL=$($uiDll.FullName)"   | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "WIX_EXT_UTIL_DLL=$($utilDll.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "✅ WiX ready:"
-          & "$wixDir\wix.exe" --version
 
       # Install Syft for generating Software Bill of Materials
       - name: Install Syft (for SBOM)
@@ -289,25 +287,6 @@ jobs:
           # YubiKey signing credentials (used by before_publish hook)
           CERT_THUMBPRINT: ${{ secrets.CERT_THUMBPRINT }}
           TIMESTAMP_SERVER: ${{ secrets.TIMESTAMP_SERVER }}
-
-      # Debug step: Display MSI files created
-      - name: Show built MSI files
-        shell: pwsh
-        run: |
-          echo "=== Dist directory contents ==="
-          Get-ChildItem -Path dist -Recurse | Format-Table -Property Mode, LastWriteTime, Length, Name
-          echo ""
-          echo "=== Looking for MSI files ==="
-          Get-ChildItem -Path dist -Filter *.msi -Recurse | Format-List
-
-      # Debug step: Verify WiX installation
-      - name: Verify WiX is available
-        shell: pwsh
-        run: |
-          echo "=== WiX Version ==="
-          wix --version
-          echo "=== WiX Path ==="
-          Get-Command wix | Format-List
 
   # ============================================================================
   # Linux/Ubuntu Release Job
@@ -430,9 +409,6 @@ jobs:
           # Combine all checksum files into one
           cat checksums-*.txt 2>/dev/null > checksums.txt || touch checksums.txt
 
-          echo "Combined checksums.txt:"
-          cat checksums.txt
-
       # Upload combined checksums.txt to S3 root level
       - name: Upload combined checksums.txt to S3
         env:
@@ -444,7 +420,6 @@ jobs:
           aws s3 cp checksums.txt "s3://${BUCKET}/tnr/releases/${VERSION_NO_V}/checksums.txt" \
             --cache-control "public, max-age=31536000, immutable" \
             --content-type "text/plain"
-          echo "✅ Uploaded combined checksums.txt to S3"
 
       # Generate latest.json with complete S3 asset URLs
       - name: Generate latest.json
@@ -476,9 +451,6 @@ jobs:
           }
           JSON
 
-          echo "Generated latest.json:"
-          cat latest.json
-
       # Upload latest.json to S3
       - name: Upload latest.json to S3
         env:
@@ -487,7 +459,6 @@ jobs:
           aws s3 cp latest.json "s3://${BUCKET}/tnr/releases/latest.json" \
             --cache-control "public, max-age=120" \
             --content-type "application/json"
-          echo "✅ Uploaded latest.json to S3"
 
       # Install GitHub CLI
       - name: Install GitHub CLI
@@ -503,4 +474,3 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${TAG}" latest.json --repo Thunder-Compute/thunder-cli --clobber
-          echo "✅ Attached latest.json to GitHub release ${TAG}"

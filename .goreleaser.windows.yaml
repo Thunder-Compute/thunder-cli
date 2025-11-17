@@ -46,19 +46,6 @@ archives:
 checksum:
   name_template: "checksums-windows.txt"
 
-# Windows MSI installer configuration
-# Uses WiX v4 to create professional Windows installers
-# See: packaging/windows/app.wxs for installer definition
-# msi:
-#   - id: tnr-msi
-#     name: "tnr-{{ .Version }}-{{ .Arch }}"
-#     wxs: ./packaging/windows/app.wxs
-#     ids: [tnr]
-#     goamd64: v1
-#     version: v4
-#     replace: false
-#     mod_timestamp: "{{ .CommitTimestamp }}"
-
 # Software Bill of Materials (SBOM) generation
 sboms:
   - id: sbom

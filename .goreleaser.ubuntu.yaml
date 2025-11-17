@@ -86,17 +86,6 @@ blobs:
       - glob: "dist/*.rpm"
       - glob: "dist/*.apk"
 
-# Hook that runs before publishing
-# Updates the latest.json file in S3 to point to this version
-# before_publish:
-#   - cmd: |
-#       bash -lc '
-#         printf "{\"version\":\"%s\"}\n" "{{ .Version }}" > dist/latest.json &&
-#         aws s3 cp dist/latest.json "s3://{{ .Env.TNR_S3_BUCKET }}/tnr/releases/latest.json" \
-#           --cache-control "public, max-age=120" \
-#           --content-type "application/json"
-#       '
-
 # GitHub release configuration
 # NOTE: Do NOT add extra_files here for .deb/.rpm/.apk - they're auto-included from nfpms
 # Adding them causes "422 already_exists" errors

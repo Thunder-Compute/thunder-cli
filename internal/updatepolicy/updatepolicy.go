@@ -32,7 +32,7 @@ const (
 	manifestCacheName      = "latest_manifest.json"
 	checksumsCacheTemplate = "checksums_%s_%s.json" // version, os
 
-	cacheTTL = time.Hour
+	cacheTTL = 24 * time.Hour
 
 	defaultLatestPath = "/tnr/releases/latest.json"
 	defaultS3Region   = "ap-southeast-2"

@@ -39,15 +39,11 @@ builds:
 
           # Sign the binary before packaging to avoid ad-hoc signature inside PKG
           if [ -n "${DEVELOPER_ID_APP:-}" ]; then
-            echo "🔏 Signing binary: $BIN"
             /usr/bin/codesign --force --timestamp --options runtime \
               --sign "$DEVELOPER_ID_APP" "$BIN"
 
             # Verify signature
-            /usr/bin/codesign --verify --verbose "$BIN"
-            echo "✅ Binary signed successfully"
-          else
-            echo "⚠️  Skipping binary signing (DEVELOPER_ID_APP not set)"
+            /usr/bin/codesign --verify --verbose "$BIN" || exit 1
           fi
 
           WORK="$(/usr/bin/mktemp -d -t ${NAME}.pkg.${ARCH}.XXXXXX)";
@@ -76,8 +72,6 @@ builds:
 
           # Notarize the .pkg file after signing
           if [ -n "${MACOS_NOTARY_KEY_PATH:-}" ] && [ -n "${MACOS_NOTARY_KEY_ID:-}" ] && [ -n "${MACOS_NOTARY_ISSUER_ID:-}" ]; then
-            echo "🔐 Notarizing package: $PKG_SIGNED"
-            
             # Submit for notarization (notarytool blocks until complete with --wait)
             if xcrun notarytool submit "$PKG_SIGNED" \
               --key "$MACOS_NOTARY_KEY_PATH" \
@@ -86,18 +80,13 @@ builds:
               --wait \
               --timeout 20m; then
               
-              echo "✅ Notarization successful!"
               # Staple the notarization ticket to the package
-              xcrun stapler staple "$PKG_SIGNED" || echo "⚠️  Stapling failed (ticket may not be available yet)"
+              xcrun stapler staple "$PKG_SIGNED" || true
             else
-              echo "❌ Notarization failed!"
+              echo "❌ Notarization failed!" >&2
               exit 1
             fi
-          else
-            echo "⚠️  Skipping notarization (credentials not configured)"
           fi
-
-          ls -lh dist/*.pkg;
           '
 
 # macOS notarization configuration (alternative method, not currently used)
