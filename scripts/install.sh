@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Install tnr by reading latest.json from GCS, verifying signature, and
+# Install tnr by reading latest.json from S3, verifying checksums, and
 # installing to ~/.tnr/bin.
 
 CHANNEL=${TNR_UPDATE_CHANNEL:-stable}
 VERSION=${TNR_VERSION:-}
 LATEST_URL=${TNR_LATEST_URL:-}
 INSTALL_DIR="${HOME}/.tnr/bin"
+
+# Default S3 bucket and region (can be overridden with env vars)
+TNR_S3_BUCKET=${TNR_S3_BUCKET:-thunder-cli-releases}
+AWS_REGION=${AWS_REGION:-ap-southeast-2}
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -17,14 +21,84 @@ case "$ARCH" in
   *) echo "Unsupported arch: $ARCH" >&2; exit 1;;
 esac
 
+# Check for required commands
+check_deps() {
+  local missing=()
+  command -v curl >/dev/null 2>&1 || missing+=("curl")
+  command -v tar >/dev/null 2>&1 || missing+=("tar")
+  command -v gzip >/dev/null 2>&1 || missing+=("gzip")
+  
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "Error: Missing required commands: ${missing[*]}" >&2
+    echo "Please install: ${missing[*]}" >&2
+    exit 1
+  fi
+}
+
+check_deps
+
+# Install jq if missing
+ensure_jq() {
+  if command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+  
+  echo "jq not found. Attempting to install..."
+  
+  # Try to detect if we can install packages
+  local can_install=false
+  local install_cmd=""
+  
+  if command -v apt-get >/dev/null 2>&1 && ([[ "$EUID" -eq 0 ]] || sudo -n true 2>/dev/null); then
+    # Debian/Ubuntu
+    can_install=true
+    install_cmd="sudo apt-get update -qq && sudo apt-get install -y jq"
+  elif command -v apt-get >/dev/null 2>&1; then
+    # Debian/Ubuntu without sudo
+    echo "jq is required. Please install it manually:" >&2
+    echo "  sudo apt-get update && sudo apt-get install -y jq" >&2
+    exit 1
+  elif command -v apk >/dev/null 2>&1 && ([[ "$EUID" -eq 0 ]] || sudo -n true 2>/dev/null); then
+    # Alpine
+    can_install=true
+    install_cmd="sudo apk add --no-cache jq"
+  elif command -v apk >/dev/null 2>&1; then
+    echo "jq is required. Please install it manually:" >&2
+    echo "  sudo apk add --no-cache jq" >&2
+    exit 1
+  elif command -v yum >/dev/null 2>&1 && ([[ "$EUID" -eq 0 ]] || sudo -n true 2>/dev/null); then
+    # RHEL/CentOS 7
+    can_install=true
+    install_cmd="sudo yum install -y jq"
+  elif command -v dnf >/dev/null 2>&1 && ([[ "$EUID" -eq 0 ]] || sudo -n true 2>/dev/null); then
+    # Fedora/RHEL/CentOS 8+
+    can_install=true
+    install_cmd="sudo dnf install -y jq"
+  fi
+  
+  if [[ "$can_install" == "true" ]]; then
+    echo "Installing jq..."
+    if eval "$install_cmd"; then
+      if command -v jq >/dev/null 2>&1; then
+        echo "✓ jq installed successfully"
+        return 0
+      fi
+    fi
+  fi
+  
+  # If we get here, installation failed or not supported
+  echo "Error: jq is required but could not be installed automatically." >&2
+  echo "Please install jq manually: https://stedolan.github.io/jq/download/" >&2
+  exit 1
+}
+
+ensure_jq
+
 if [[ -z "$LATEST_URL" ]]; then
   if [[ -n "${TNR_DOWNLOAD_BASE:-}" ]]; then
     LATEST_URL="${TNR_DOWNLOAD_BASE}/tnr/releases/latest.json"
   else
-    if [[ -z "${TNR_S3_BUCKET:-}" || -z "${AWS_REGION:-}" ]]; then
-      echo "Set TNR_LATEST_URL or TNR_DOWNLOAD_BASE, or TNR_S3_BUCKET and AWS_REGION" >&2
-      exit 1
-    fi
+    # Use defaults - no env vars required!
     LATEST_URL="https://${TNR_S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/tnr/releases/latest.json"
   fi
 fi
@@ -40,13 +114,23 @@ if [[ -z "$VERSION" ]]; then
 fi
 
 asset_key="${OS}/${ARCH}"
-if [[ "$OS" == "darwin" ]]; then
+url=$(jq -r --arg k "$asset_key" '.assets[$k]' "$tmpdir/latest.json")
+
+# Detect archive extension from URL - Linux uses .tar.gz, Windows uses .zip
+if [[ "$url" == *.tar.gz ]]; then
   archive="$tmpdir/tnr.tar.gz"
-else
+elif [[ "$url" == *.zip ]]; then
   archive="$tmpdir/tnr.zip"
+  # Check for unzip if we need it
+  if ! command -v unzip >/dev/null 2>&1; then
+    echo "Error: unzip is required for .zip archives but not installed." >&2
+    exit 1
+  fi
+else
+  echo "Unknown archive format in URL: $url" >&2
+  exit 1
 fi
 
-url=$(jq -r --arg k "$asset_key" '.assets[$k]' "$tmpdir/latest.json")
 checksums=$(jq -r '.assets["checksums"]' "$tmpdir/latest.json")
 
 echo "Downloading $url"
@@ -70,9 +154,16 @@ install -m 0755 "$tmpdir/tnr" "$INSTALL_DIR/tnr"
 
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
-  *) echo "Add $INSTALL_DIR to your PATH";;
+  *) 
+    echo ""
+    echo "Add $INSTALL_DIR to your PATH:"
+    echo "  export PATH=\"\$HOME/.tnr/bin:\$PATH\""
+    echo ""
+    echo "Or add to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
+    echo "  echo 'export PATH=\"\$HOME/.tnr/bin:\$PATH\"' >> ~/.bashrc"
+    ;;
 esac
 
-echo "Installed tnr $VERSION to $INSTALL_DIR"
+echo "✓ Installed tnr $VERSION to $INSTALL_DIR"
 
 
