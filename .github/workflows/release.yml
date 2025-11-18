@@ -177,6 +177,45 @@ jobs:
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
 
+      # Copy files to latest/macos folder
+      # Copies all uploaded files to stable latest/ paths with simplified naming
+      - name: Copy to latest/macos
+        env:
+          BUCKET: ${{ secrets.TNR_S3_BUCKET }}
+        run: |
+          set -euo pipefail
+
+          # Get version from git tag or manual input
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION_NO_V="${{ inputs.version }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION_NO_V="${TAG#v}"
+          fi
+
+          SOURCE_PREFIX="s3://${BUCKET}/tnr/releases/${VERSION_NO_V}/macos/"
+          DEST_PREFIX="s3://${BUCKET}/tnr/releases/latest/macos/"
+
+          # Copy archives (.tar.gz)
+          aws s3 cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_amd64.tar.gz" \
+            "${DEST_PREFIX}tnr_darwin_amd64.tar.gz" \
+            --cache-control "public, max-age=3600" || true
+
+          aws s3 cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_arm64.tar.gz" \
+            "${DEST_PREFIX}tnr_darwin_arm64.tar.gz" \
+            --cache-control "public, max-age=3600" || true
+
+          # Copy installers (.pkg)
+          aws s3 cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_amd64.pkg" \
+            "${DEST_PREFIX}tnr_darwin_amd64.pkg" \
+            --cache-control "public, max-age=3600" || true
+
+          aws s3 cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_arm64.pkg" \
+            "${DEST_PREFIX}tnr_darwin_arm64.pkg" \
+            --cache-control "public, max-age=3600" || true
+
+          echo "✅ Copied macOS files to latest/macos/"
+
   # ============================================================================
   # Windows Release Job
   # ============================================================================
@@ -288,6 +327,44 @@ jobs:
           CERT_THUMBPRINT: ${{ secrets.CERT_THUMBPRINT }}
           TIMESTAMP_SERVER: ${{ secrets.TIMESTAMP_SERVER }}
 
+      # Copy files to latest/windows folder
+      # Copies all uploaded files to stable latest/ paths with simplified naming
+      - name: Copy to latest/windows
+        shell: pwsh
+        env:
+          BUCKET: ${{ secrets.TNR_S3_BUCKET }}
+        run: |
+          # Get version from git tag or manual input
+          if ("${{ inputs.version }}" -ne "") {
+            $versionNoV = "${{ inputs.version }}"
+          } else {
+            $tag = $env:GITHUB_REF -replace 'refs/tags/', ''
+            $versionNoV = $tag -replace '^v', ''
+          }
+
+          $sourcePrefix = "s3://$env:BUCKET/tnr/releases/$versionNoV/windows/"
+          $destPrefix = "s3://$env:BUCKET/tnr/releases/latest/windows/"
+
+          # Copy archives (.zip)
+          $srcZipAmd64 = "$sourcePrefix" + "tnr_$versionNoV" + "_windows_amd64.zip"
+          $destZipAmd64 = "$destPrefix" + "tnr_windows_amd64.zip"
+          aws s3 cp $srcZipAmd64 $destZipAmd64 --cache-control "public, max-age=3600" 2>&1 | Out-Null
+
+          $srcZipArm64 = "$sourcePrefix" + "tnr_$versionNoV" + "_windows_arm64.zip"
+          $destZipArm64 = "$destPrefix" + "tnr_windows_arm64.zip"
+          aws s3 cp $srcZipArm64 $destZipArm64 --cache-control "public, max-age=3600" 2>&1 | Out-Null
+
+          # Copy installers (.msi) - note: MSI naming uses hyphens
+          $srcMsiAmd64 = "$sourcePrefix" + "tnr-$versionNoV" + "-amd64.msi"
+          $destMsiAmd64 = "$destPrefix" + "tnr_windows_amd64.msi"
+          aws s3 cp $srcMsiAmd64 $destMsiAmd64 --cache-control "public, max-age=3600" 2>&1 | Out-Null
+
+          $srcMsiArm64 = "$sourcePrefix" + "tnr-$versionNoV" + "-arm64.msi"
+          $destMsiArm64 = "$destPrefix" + "tnr_windows_arm64.msi"
+          aws s3 cp $srcMsiArm64 $destMsiArm64 --cache-control "public, max-age=3600" 2>&1 | Out-Null
+
+          Write-Host "✅ Copied Windows files to latest/windows/"
+
   # ============================================================================
   # Linux/Ubuntu Release Job
   # ============================================================================
@@ -351,6 +428,45 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
           TNR_S3_BUCKET: ${{ secrets.TNR_S3_BUCKET }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
+
+      # Copy files to latest/linux folder
+      # Copies all uploaded files to stable latest/ paths with simplified naming
+      - name: Copy to latest/linux
+        env:
+          BUCKET: ${{ secrets.TNR_S3_BUCKET }}
+        run: |
+          set -euo pipefail
+
+          # Get version from git tag or manual input
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION_NO_V="${{ inputs.version }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION_NO_V="${TAG#v}"
+          fi
+
+          SOURCE_PREFIX="s3://${BUCKET}/tnr/releases/${VERSION_NO_V}/linux/"
+          DEST_PREFIX="s3://${BUCKET}/tnr/releases/latest/linux/"
+
+          # Copy archives (.tar.gz)
+          aws s3 cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_linux_amd64.tar.gz" \
+            "${DEST_PREFIX}tnr_linux_amd64.tar.gz" \
+            --cache-control "public, max-age=3600" || true
+
+          aws s3 cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_linux_arm64.tar.gz" \
+            "${DEST_PREFIX}tnr_linux_arm64.tar.gz" \
+            --cache-control "public, max-age=3600" || true
+
+          # Copy package files (.deb, .rpm, .apk)
+          for arch in amd64 arm64; do
+            for ext in deb rpm apk; do
+              aws s3 cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_linux_${arch}.${ext}" \
+                "${DEST_PREFIX}tnr_linux_${arch}.${ext}" \
+                --cache-control "public, max-age=3600" || true
+            done
+          done
+
+          echo "✅ Copied Linux files to latest/linux/"
 
   # ============================================================================
   # Generate latest.json Job
