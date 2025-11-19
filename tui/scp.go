@@ -108,7 +108,7 @@ func NewSCPModel(direction, instanceName string) SCPModel {
 	styles := newSCPStyles()
 
 	p := progress.New(
-		progress.WithScaledGradient("#0391ff", "#0391ff"),
+		progress.WithScaledGradient(theme.PrimaryColorHex, theme.PrimaryColorHex),
 		progress.WithWidth(60),
 	)
 

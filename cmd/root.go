@@ -55,10 +55,8 @@ func init() {
 	completionCmd := &cobra.Command{
 		Use:   "completion [shell]",
 		Short: "Generate the autocompletion script for tnr for the specified shell",
-		Long: `Generate the autocompletion script for tnr for the specified shell.
-See each sub-command's help for details on how to use the generated script.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			rootCmd.GenBashCompletionV2(os.Stdout, true)
+			_ = rootCmd.GenBashCompletionV2(os.Stdout, true) //nolint:errcheck // completion generation error is non-fatal
 		},
 	}
 
@@ -70,7 +68,7 @@ See each sub-command's help for details on how to use the generated script.`,
 		Use:   "bash",
 		Short: "Generate the autocompletion script for bash",
 		Run: func(cmd *cobra.Command, args []string) {
-			rootCmd.GenBashCompletionV2(os.Stdout, true)
+			_ = rootCmd.GenBashCompletionV2(os.Stdout, true) //nolint:errcheck // completion generation error is non-fatal
 		},
 	})
 
@@ -78,7 +76,7 @@ See each sub-command's help for details on how to use the generated script.`,
 		Use:   "zsh",
 		Short: "Generate the autocompletion script for zsh",
 		Run: func(cmd *cobra.Command, args []string) {
-			rootCmd.GenZshCompletion(os.Stdout)
+			_ = rootCmd.GenZshCompletion(os.Stdout) //nolint:errcheck // completion generation error is non-fatal
 		},
 	})
 
@@ -86,7 +84,7 @@ See each sub-command's help for details on how to use the generated script.`,
 		Use:   "fish",
 		Short: "Generate the autocompletion script for fish",
 		Run: func(cmd *cobra.Command, args []string) {
-			rootCmd.GenFishCompletion(os.Stdout, true)
+			_ = rootCmd.GenFishCompletion(os.Stdout, true) //nolint:errcheck // completion generation error is non-fatal
 		},
 	})
 
@@ -94,7 +92,7 @@ See each sub-command's help for details on how to use the generated script.`,
 		Use:   "powershell",
 		Short: "Generate the autocompletion script for powershell",
 		Run: func(cmd *cobra.Command, args []string) {
-			rootCmd.GenPowerShellCompletion(os.Stdout)
+			_ = rootCmd.GenPowerShellCompletion(os.Stdout) //nolint:errcheck // completion generation error is non-fatal
 		},
 	})
 
@@ -123,7 +121,7 @@ func checkIfUpdateNeeded(cmd *cobra.Command) {
 	ctx := context.Background()
 
 	// Apply any previously staged Windows update before checking again.
-	if err := autoupdate.FinalizeStagedWindowsUpdate(); err != nil {
+	if err := autoupdate.FinalizeWindowsSwap(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to finalize staged Windows update: %v\n", err)
 	}
 

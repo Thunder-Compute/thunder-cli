@@ -3,7 +3,6 @@ package updatecheck
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -78,12 +77,11 @@ func Check(ctx context.Context, current string) (Result, error) {
 	res.CheckedAt = time.Now()
 	res.Outdated = isOutdated(currentSemver, res.LatestVersion)
 
-	if err := writeCache(cachePayload{
+	// Cache write is best-effort; ignore all errors (non-fatal)
+	_ = writeCache(cachePayload{
 		CheckedAt:     res.CheckedAt,
 		LatestVersion: res.LatestVersion,
-	}); err != nil && !errors.Is(err, os.ErrPermission) {
-		// Non-fatal: loggable upstream if desired.
-	}
+	}) //nolint:errcheck // cache write failure is non-fatal
 
 	return res, nil
 }

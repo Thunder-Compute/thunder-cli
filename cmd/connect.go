@@ -31,17 +31,6 @@ var (
 var connectCmd = &cobra.Command{
 	Use:   "connect [instance_id]",
 	Short: "Establish an SSH connection to a Thunder Compute instance",
-	Long: `Connect to a Thunder Compute instance via SSH with automatic setup and configuration.
-
-This command performs setup including:
-- SSH key management
-- GPU virtualization configuration
-- Port forwarding
-- SSH config updates
-
-After initial setup, you can reconnect using: ssh tnr-{instance_id}
-
-If no instance ID is provided, an interactive selection menu will be displayed.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var instanceID string
 		if len(args) > 0 {
@@ -63,7 +52,7 @@ func init() {
 	rootCmd.AddCommand(connectCmd)
 	connectCmd.Flags().StringSliceVarP(&tunnelPorts, "tunnel", "t", []string{}, "Port forwarding (can specify multiple times: -t 8080 -t 3000)")
 	connectCmd.Flags().BoolVar(&debugMode, "debug", false, "Show detailed timing breakdown")
-	connectCmd.Flags().MarkHidden("debug")
+	_ = connectCmd.Flags().MarkHidden("debug") //nolint:errcheck // flag hiding failure is non-fatal
 }
 
 func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
@@ -318,11 +307,11 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 	if checkCancelled() {
 		return nil
 	}
-	
+
 	// If authentication fails, try generating a new key and retry
 	if err != nil && utils.IsAuthError(err) {
 		tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH key not found, retrying. This typically occurs when your node crashes due to OOM, low disk space, or other reasons. Data may have been lost.", 0)
-		
+
 		keyResp, keyErr := client.AddSSHKeyCtx(cancelCtx, instanceID)
 		if checkCancelled() {
 			return nil
@@ -331,14 +320,14 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 			shutdownTUI()
 			return fmt.Errorf("failed to generate new SSH key: %w", keyErr)
 		}
-		
+
 		if saveErr := utils.SavePrivateKey(instance.UUID, keyResp.Key); saveErr != nil {
 			shutdownTUI()
 			return fmt.Errorf("failed to save new private key: %w", saveErr)
 		}
-		
+
 		tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Retrying connection with new key to %s:%d...", instance.IP, port), 0)
-		
+
 		if checkCancelled() {
 			return nil
 		}

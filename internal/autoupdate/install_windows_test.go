@@ -2,7 +2,9 @@
 
 package autoupdate
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestQuoteWindowsArg(t *testing.T) {
 	t.Parallel()
@@ -53,3 +55,4 @@ func TestQuoteWindowsArg(t *testing.T) {
 		})
 	}
 }
+

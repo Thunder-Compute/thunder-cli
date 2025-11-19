@@ -26,30 +26,7 @@ var recursiveFlag bool
 var scpCmd = &cobra.Command{
 	Use:   "scp [source...] [destination]",
 	Short: "Securely copy files between local machine and Thunder Compute instances",
-	Long: `Copy files and directories between your local machine and Thunder Compute instances.
-
-Supports uploading/downloading files and directories with progress tracking.
-
-Path Syntax:
-  - Remote paths: instance_id:/path/to/file (e.g., 0:/home/ubuntu/myfile.py)
-  - Local paths: Regular file system paths (e.g., ./myfile.py or /tmp/file.txt)
-
-Examples:
-  # Upload a single file
-  tnr scp myfile.py 0:/home/ubuntu/
-
-  # Download a file
-  tnr scp 0:/home/ubuntu/results.txt ./
-
-  # Upload multiple files
-  tnr scp file1.py file2.py config.json 0:/home/ubuntu/
-
-  # Upload a directory recursively
-  tnr scp ./my-project/ 0:/home/ubuntu/projects/
-
-  # Download a directory
-  tnr scp 0:/home/ubuntu/data/ ./local-data/`,
-	Args: cobra.MinimumNArgs(2),
+	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 2 {
 			PrintError(fmt.Errorf("requires at least a source and destination"))
@@ -75,28 +52,27 @@ func init() {
 	scpCmd.Flags().BoolVarP(&recursiveFlag, "recursive", "r", false, "Recursively copy directories")
 }
 
-type pathInfo struct {
-	original   string
-	instanceID string
-	path       string
-	isRemote   bool
+type PathInfo struct {
+	Original   string
+	InstanceID string
+	Path       string
+	IsRemote   bool
 }
 
-// parsePath splits "instance_id:/path" into components, handling Windows edge cases
-func parsePath(path string) (pathInfo, error) {
-	info := pathInfo{
-		original: path,
+func parsePath(path string) (PathInfo, error) {
+	info := PathInfo{
+		Original: path,
 	}
 
 	// Windows edge cases: avoid treating "C:" or "\\server" as instance_id
 	if runtime.GOOS == "windows" {
 		if len(path) >= 2 && path[1] == ':' &&
 			((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) {
-			info.path = path
+			info.Path = path
 			return info, nil
 		}
 		if strings.HasPrefix(path, "\\\\") {
-			info.path = path
+			info.Path = path
 			return info, nil
 		}
 	}
@@ -107,14 +83,14 @@ func parsePath(path string) (pathInfo, error) {
 		instanceID := parts[0]
 
 		if isValidInstanceID(instanceID) {
-			info.instanceID = instanceID
-			info.path = parts[1]
-			info.isRemote = true
+			info.InstanceID = instanceID
+			info.Path = parts[1]
+			info.IsRemote = true
 			return info, nil
 		}
 	}
 
-	info.path = path
+	info.Path = path
 	return info, nil
 }
 
@@ -141,7 +117,7 @@ func runSCP(sources []string, destination string) error {
 		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
 	}
 
-	sourcePaths := make([]pathInfo, len(sources))
+	sourcePaths := make([]PathInfo, len(sources))
 	for i, src := range sources {
 		parsed, err := parsePath(src)
 		if err != nil {
@@ -162,11 +138,11 @@ func runSCP(sources []string, destination string) error {
 
 	if len(sourcePaths) > 1 {
 		if direction == "upload" {
-			if !strings.HasSuffix(destPath.path, "/") {
+			if !strings.HasSuffix(destPath.Path, "/") {
 				return fmt.Errorf("destination must be a directory when copying multiple files (add trailing /)")
 			}
 		} else {
-			if !strings.HasSuffix(destPath.path, "/") && !strings.HasSuffix(destPath.path, string(filepath.Separator)) {
+			if !strings.HasSuffix(destPath.Path, "/") && !strings.HasSuffix(destPath.Path, string(filepath.Separator)) {
 				return fmt.Errorf("destination must be a directory when copying multiple files")
 			}
 		}
@@ -335,14 +311,14 @@ func runSCP(sources []string, destination string) error {
 				return nil
 			}
 
-			localPath := src.path
+			localPath := src.Path
 			if strings.HasPrefix(localPath, "~/") {
 				homeDir, _ := os.UserHomeDir()
 				localPath = filepath.Join(homeDir, localPath[2:])
 			}
 			localPath = filepath.Clean(localPath)
 
-			remotePath := destPath.path
+			remotePath := destPath.Path
 			if len(sourcePaths) > 1 || strings.HasSuffix(remotePath, "/") {
 				remotePath = strings.TrimSuffix(remotePath, "/") + "/" + filepath.Base(localPath)
 			}
@@ -383,7 +359,7 @@ func runSCP(sources []string, destination string) error {
 				return nil
 			}
 
-			remotePath := src.path
+			remotePath := src.Path
 
 			exists, err := utils.VerifyRemotePath(sshClient, remotePath)
 			if checkCancelled() {
@@ -404,7 +380,7 @@ func runSCP(sources []string, destination string) error {
 			}
 
 			// Determine local path
-			localPath := destPath.path
+			localPath := destPath.Path
 			// If destination ends with / or \, it's a directory - append filename
 			if len(sourcePaths) > 1 || strings.HasSuffix(localPath, "/") || strings.HasSuffix(localPath, string(filepath.Separator)) {
 				localPath = filepath.Join(localPath, filepath.Base(remotePath))
@@ -474,27 +450,26 @@ func runSCP(sources []string, destination string) error {
 	return nil
 }
 
-// determineTransferDirection detects upload vs download and validates source consistency
-func determineTransferDirection(sources []pathInfo, dest pathInfo) (direction string, instanceID string, err error) {
+func determineTransferDirection(sources []PathInfo, dest PathInfo) (direction string, instanceID string, err error) {
 	remoteCount := 0
 	var remoteInstanceID string
 
 	for _, src := range sources {
-		if src.isRemote {
+		if src.IsRemote {
 			remoteCount++
 			if remoteInstanceID == "" {
-				remoteInstanceID = src.instanceID
-			} else if remoteInstanceID != src.instanceID {
+				remoteInstanceID = src.InstanceID
+			} else if remoteInstanceID != src.InstanceID {
 				return "", "", fmt.Errorf("cannot transfer between multiple instances")
 			}
 		}
 	}
 
-	if dest.isRemote {
+	if dest.IsRemote {
 		if remoteCount > 0 {
 			return "", "", fmt.Errorf("cannot transfer from remote to remote")
 		}
-		return "upload", dest.instanceID, nil
+		return "upload", dest.InstanceID, nil
 	}
 
 	if remoteCount == 0 {
@@ -508,7 +483,7 @@ func determineTransferDirection(sources []pathInfo, dest pathInfo) (direction st
 	return "download", remoteInstanceID, nil
 }
 
-func calculateTotalSize(client *utils.SSHClient, sources []pathInfo, direction string) (int64, error) {
+func calculateTotalSize(client *utils.SSHClient, sources []PathInfo, direction string) (int64, error) {
 	var totalSize int64
 
 	for _, src := range sources {
@@ -516,7 +491,7 @@ func calculateTotalSize(client *utils.SSHClient, sources []pathInfo, direction s
 		var err error
 
 		if direction == "upload" {
-			localPath := src.path
+			localPath := src.Path
 			if strings.HasPrefix(localPath, "~/") {
 				homeDir, _ := os.UserHomeDir()
 				localPath = filepath.Join(homeDir, localPath[2:])
@@ -525,12 +500,12 @@ func calculateTotalSize(client *utils.SSHClient, sources []pathInfo, direction s
 
 			size, err = utils.GetLocalSize(localPath)
 			if err != nil {
-				return 0, fmt.Errorf("failed to get size of %s: %w", src.original, err)
+				return 0, fmt.Errorf("failed to get size of %s: %w", src.Original, err)
 			}
 		} else {
-			size, err = utils.GetRemoteSize(client, src.path)
+			size, err = utils.GetRemoteSize(client, src.Path)
 			if err != nil {
-				return 0, fmt.Errorf("failed to get size of %s: %w", src.original, err)
+				return 0, fmt.Errorf("failed to get size of %s: %w", src.Original, err)
 			}
 		}
 

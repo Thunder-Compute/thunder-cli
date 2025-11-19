@@ -272,10 +272,9 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.config.Confirmed = true
 			m.step = stepComplete
 			return m, tea.Quit
-		} else {
-			m.quitting = true
-			return m, tea.Quit
 		}
+		m.quitting = true
+		return m, tea.Quit
 	}
 
 	return m, nil

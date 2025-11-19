@@ -169,6 +169,9 @@ type manifest struct {
 	Assets  map[string]string `json:"assets"`
 }
 
+// Manifest is exported for testing
+type Manifest = manifest
+
 func (m manifest) AssetFor(p platform) (assetURL, checksumURL string) {
 	if m.Assets == nil {
 		return "", ""
@@ -359,6 +362,10 @@ type platform struct {
 	Ext  string
 }
 
+// Platform is exported for testing
+type Platform = platform
+
+// detectPlatform detects the current platform
 func detectPlatform() platform {
 	var p platform
 	switch runtime.GOOS {
@@ -394,6 +401,7 @@ func normalizeVersion(v string) string {
 	return v
 }
 
+// targetArchiveName generates target archive name
 func targetArchiveName(version, osName string) string {
 	version = normalizeVersion(version)
 	fileOS := osName

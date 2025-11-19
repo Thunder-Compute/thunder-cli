@@ -22,7 +22,7 @@ func (w windowsInstaller) Install(ctx context.Context, exe, newBinary, version s
 
 // installOnWindows is only implemented on Windows; this stub should never be
 // called on other platforms.
-func installOnWindows(ctx context.Context, exe, newBinary, version string, src Source) error {
+func installOnWindows(ctx context.Context, exe, newBinary, version string, src Source) error { //nolint:unused // stub function for interface compatibility on non-Windows platforms
 	return nil
 }
 

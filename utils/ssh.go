@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,7 +29,7 @@ func (s *SSHClient) Close() error {
 }
 
 func testSocketConnection(ip string, port int) bool {
-	address := fmt.Sprintf("%s:%d", ip, port)
+	address := net.JoinHostPort(ip, strconv.Itoa(port))
 	conn, err := net.DialTimeout("tcp", address, 5*time.Second)
 	if err != nil {
 		return false
@@ -61,7 +62,7 @@ func RobustSSHConnectCtx(ctx context.Context, ip, keyFile string, port int, maxW
 		Timeout:         15 * time.Second,
 	}
 
-	address := fmt.Sprintf("%s:%d", ip, port)
+	address := net.JoinHostPort(ip, strconv.Itoa(port))
 	startTime := time.Now()
 
 	for {

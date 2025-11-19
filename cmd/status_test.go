@@ -5,26 +5,8 @@ import (
 	"testing"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/internal/testutils"
 	"github.com/stretchr/testify/assert"
 )
-
-// TestStatusCommand verifies that the status command is properly initialized
-// with the correct usage and description.
-func TestStatusCommand(t *testing.T) {
-	env := testutils.SetupTestEnvironment(t)
-	defer env.Cleanup()
-
-	assert.NotNil(t, statusCmd)
-	assert.Equal(t, "status", statusCmd.Use)
-	assert.Equal(t, "List and monitor Thunder Compute instances", statusCmd.Short)
-}
-
-// TestStatusCommandFlags verifies that the status command has the expected
-// command-line flags properly defined.
-func TestStatusCommandFlags(t *testing.T) {
-	assert.NotNil(t, statusCmd.Flags().Lookup("no-wait"))
-}
 
 // TestInstanceStatus verifies that instance status values are correctly
 // assigned and retrieved for various status types.
@@ -84,15 +66,10 @@ func TestInstanceFields(t *testing.T) {
 // 	t.Skip("Skipping status command validation test - Args function issues")
 // }
 
-// TestNoWaitFlag verifies that the noWait flag has the correct default value.
-func TestNoWaitFlag(t *testing.T) {
-	assert.False(t, noWait)
-}
-
-// TestRunStatus verifies that the runStatus function properly handles
+// TestRunStatus verifies that the RunStatus function properly handles
 // authentication errors when no valid configuration is available.
 func TestRunStatus(t *testing.T) {
-	err := runStatus()
+	err := RunStatus()
 	assert.Error(t, err)
 	errStr := err.Error()
 	isAuthError := strings.Contains(errStr, "not authenticated") || strings.Contains(errStr, "authentication")

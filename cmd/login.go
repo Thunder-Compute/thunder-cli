@@ -224,7 +224,6 @@ var loginToken string
 var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Authenticate with Thunder Compute",
-	Long:  `Login to Thunder Compute by authenticating through your browser. This will open your default browser to complete the authentication process.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runLogin(); err != nil {
 			PrintError(err)
@@ -386,7 +385,7 @@ func startCallbackServerWithContext(ctx context.Context) (int, <-chan AuthRespon
 			errChan <- fmt.Errorf("authentication error: %s", errorParam)
 			w.Header().Set("Content-Type", "text/html")
 			w.WriteHeader(http.StatusUnauthorized)
-			authFailedTemplate.Execute(w, map[string]string{"Error": errorParam})
+			_ = authFailedTemplate.Execute(w, map[string]string{"Error": errorParam}) //nolint:errcheck // template execution error is non-fatal
 			return
 		}
 
@@ -405,7 +404,7 @@ func startCallbackServerWithContext(ctx context.Context) (int, <-chan AuthRespon
 		authChan <- authResp
 
 		w.Header().Set("Content-Type", "text/html")
-		authSuccessTemplate.Execute(w, nil)
+		_ = authSuccessTemplate.Execute(w, nil) //nolint:errcheck // template execution error is non-fatal
 	})
 
 	go func() {
@@ -417,7 +416,7 @@ func startCallbackServerWithContext(ctx context.Context) (int, <-chan AuthRespon
 	cleanup := func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		server.Shutdown(shutdownCtx)
+		_ = server.Shutdown(shutdownCtx) //nolint:errcheck // shutdown error is non-fatal
 	}
 
 	return port, authChan, errChan, cleanup, nil

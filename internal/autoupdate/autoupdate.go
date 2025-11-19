@@ -40,7 +40,7 @@ func MaybeStartBackgroundUpdate(ctx context.Context, currentVersion string) {
 		return
 	}
 
-	_ = finalizeWindowsSwap()
+	_ = FinalizeWindowsSwap()
 
 	exe, _ := currentExecutable()
 	if isPMManaged(exe) {
@@ -489,7 +489,7 @@ func copyFile(src, dst string) error {
 
 // finalizeWindowsSwap attempts to replace tnr.exe with a previously staged tnr.new.
 // It is a no-op on non-Windows platforms.
-func finalizeWindowsSwap() error {
+func FinalizeWindowsSwap() error {
 	if runtime.GOOS != "windows" {
 		return nil
 	}
@@ -500,7 +500,7 @@ func finalizeWindowsSwap() error {
 	dir := filepath.Dir(exe)
 	staged := filepath.Join(dir, "tnr.new")
 	marker := filepath.Join(dir, ".tnr-update")
-	
+
 	if _, err := os.Stat(staged); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -545,10 +545,6 @@ func removeOldBackupWithRetry(oldPath string) error {
 		}
 	}
 	return lastErr
-}
-
-func FinalizeStagedWindowsUpdate() error {
-	return finalizeWindowsSwap()
 }
 
 func checkLatestVersion(ctx context.Context, current string) (latest string, outdated bool, err error) {
@@ -607,7 +603,7 @@ func parseParts(v string) [3]int {
 	segs := strings.Split(parts, ".")
 	for i := 0; i < len(segs) && i < 3; i++ {
 		var n int
-		fmt.Sscanf(segs[i], "%d", &n)
+		_, _ = fmt.Sscanf(segs[i], "%d", &n) //nolint:errcheck // parse failure results in 0, which is acceptable
 		out[i] = n
 	}
 	return out

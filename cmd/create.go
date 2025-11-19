@@ -29,34 +29,6 @@ var (
 var createCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new Thunder Compute GPU instance",
-	Long: `Create a new Thunder Compute GPU instance with customizable configuration.
-
-The command supports two modes:
-- Interactive: Run without flags to use the step-by-step wizard
-- Non-interactive: Provide all required flags for automated creation
-
-Instance Modes:
-1. Prototyping (default, lowest cost):
-   - GPU: T4 or A100 80GB
-   - GPU Count: Exactly 1 GPU
-   - vCPUs: Choose 4, 8, 16, or 32 vCPUs (8GB RAM per vCPU)
-   - Use Case: Development and testing
-
-2. Production (highest stability):
-   - GPU: A100 80GB or H100
-   - GPU Count: 1, 2, or 4 GPUs
-   - vCPUs: Fixed at 18 per GPU (144GB RAM per GPU)
-   - Use Case: Long-running production workloads
-
-Examples:
-  # Interactive mode
-  tnr create
-
-  # Non-interactive prototyping instance
-  tnr create --mode prototyping --gpu t4 --vcpus 8 --template base --disk-size-gb 100
-
-  # Non-interactive production instance
-  tnr create --mode production --num-gpus 2 --template pytorch --disk-size-gb 500`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runCreate(cmd); err != nil {
 			PrintError(err)
@@ -113,7 +85,7 @@ type createInstanceResultMsg struct {
 func newCreateProgressModel(client *api.Client, message string, req api.CreateInstanceRequest) createProgressModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff"))
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#8dc8ff"))
 
 	return createProgressModel{
 		spinner: s,
@@ -180,13 +152,13 @@ func (m createProgressModel) View() string {
 			return ""
 		}
 
-		headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#0391ff")).Bold(true)
+		headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8dc8ff")).Bold(true)
 		labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 		valueStyle := lipgloss.NewStyle().Bold(true)
 		cmdStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CCCCCC"))
 		boxStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#0391ff")).
+			BorderForeground(lipgloss.Color("#8dc8ff")).
 			Padding(1, 2)
 
 		var lines []string

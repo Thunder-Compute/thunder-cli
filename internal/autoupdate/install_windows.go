@@ -526,7 +526,7 @@ func buildPowerShellElevationCommand(exe string, args []string) string {
 
 	var arrayElements []string
 	for _, arg := range args {
-		arrayElements = append(arrayElements, psQuote(quoteWindowsArg(arg)))
+		arrayElements = append(arrayElements, psQuote(QuoteWindowsArg(arg)))
 	}
 	psArgsArray := "@(" + strings.Join(arrayElements, ",") + ")"
 
@@ -541,7 +541,7 @@ func psQuote(s string) string {
 
 // quoteWindowsArg applies Windows command-line quoting rules so that Start-Process
 // forwards each argument as a single token even when it contains spaces, tabs,
-// double quotes, or trailing backslashes.
+// double quotes, or trailing backslashes
 func quoteWindowsArg(arg string) string {
 	if !needsWindowsQuoting(arg) {
 		return arg

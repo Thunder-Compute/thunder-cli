@@ -5,9 +5,12 @@ tnr
 
 # Test binaries
 *.test
+*.test.exe
 
 # Output of the go coverage tool
 *.out
+docs
+plan.txt
 
 # Dependency directories
 vendor/
@@ -29,5 +32,15 @@ Thumbs.db
 # Build artifacts
 /bin/
 /dist/
+*.pkg
+*.msi
+*.deb
+*.rpm
+*.apk
+*.zip
+*.tar.gz
 
-test.txt
+# Environment files
+.env
+.env.local
+.env.*.local

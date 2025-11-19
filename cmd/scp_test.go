@@ -17,72 +17,72 @@ func TestParsePath(t *testing.T) {
 		name        string
 		path        string
 		expectError bool
-		expected    pathInfo
+		expected    PathInfo
 	}{
 		{
 			name:        "local file path",
 			path:        "./testfile.txt",
 			expectError: false,
-			expected: pathInfo{
-				isRemote: false,
-				path:     "./testfile.txt",
+			expected: PathInfo{
+				IsRemote: false,
+				Path:     "./testfile.txt",
 			},
 		},
 		{
 			name:        "local absolute path",
 			path:        "/home/user/file.txt",
 			expectError: false,
-			expected: pathInfo{
-				isRemote: false,
-				path:     "/home/user/file.txt",
+			expected: PathInfo{
+				IsRemote: false,
+				Path:     "/home/user/file.txt",
 			},
 		},
 		{
 			name:        "remote path with instance ID",
 			path:        "0:/home/ubuntu/file.txt",
 			expectError: false,
-			expected: pathInfo{
-				isRemote:   true,
-				instanceID: "0",
-				path:       "/home/ubuntu/file.txt",
+			expected: PathInfo{
+				IsRemote:   true,
+				InstanceID: "0",
+				Path:       "/home/ubuntu/file.txt",
 			},
 		},
 		{
 			name:        "remote path with numeric instance ID",
 			path:        "123:/var/log/app.log",
 			expectError: false,
-			expected: pathInfo{
-				isRemote:   true,
-				instanceID: "123",
-				path:       "/var/log/app.log",
+			expected: PathInfo{
+				IsRemote:   true,
+				InstanceID: "123",
+				Path:       "/var/log/app.log",
 			},
 		},
 		{
 			name:        "invalid remote path format (treated as remote)",
 			path:        "invalid:/path",
 			expectError: false,
-			expected: pathInfo{
-				isRemote:   true,
-				instanceID: "invalid",
-				path:       "/path",
+			expected: PathInfo{
+				IsRemote:   true,
+				InstanceID: "invalid",
+				Path:       "/path",
 			},
 		},
 		{
 			name:        "empty path (treated as local)",
 			path:        "",
 			expectError: false,
-			expected: pathInfo{
-				isRemote: false,
-				path:     "",
+			expected: PathInfo{
+				IsRemote: false,
+				Path:     "",
 			},
 		},
 		{
 			name:        "path with only colon (treated as local)",
 			path:        ":",
 			expectError: false,
-			expected: pathInfo{
-				isRemote: false,
-				path:     ":",
+			expected: PathInfo{
+				IsRemote: false,
+				Path:     ":",
 			},
 		},
 	}
@@ -95,10 +95,10 @@ func TestParsePath(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tt.expected.isRemote, result.isRemote)
-				assert.Equal(t, tt.expected.path, result.path)
-				if tt.expected.isRemote {
-					assert.Equal(t, tt.expected.instanceID, result.instanceID)
+				assert.Equal(t, tt.expected.IsRemote, result.IsRemote)
+				assert.Equal(t, tt.expected.Path, result.Path)
+				if tt.expected.IsRemote {
+					assert.Equal(t, tt.expected.InstanceID, result.InstanceID)
 				}
 			}
 		})
@@ -183,57 +183,57 @@ func TestIsValidInstanceID(t *testing.T) {
 func TestDetermineTransferDirection(t *testing.T) {
 	tests := []struct {
 		name        string
-		sources     []pathInfo
-		dest        pathInfo
+		sources     []PathInfo
+		dest        PathInfo
 		expectError bool
 		expectedDir string
 		expectedID  string
 	}{
 		{
 			name: "upload operation - local to remote",
-			sources: []pathInfo{
-				{isRemote: false, path: "./local.txt"},
+			sources: []PathInfo{
+				{IsRemote: false, Path: "./local.txt"},
 			},
-			dest:        pathInfo{isRemote: true, instanceID: "0", path: "/remote/"},
+			dest:        PathInfo{IsRemote: true, InstanceID: "0", Path: "/remote/"},
 			expectError: false,
 			expectedDir: "upload",
 			expectedID:  "0",
 		},
 		{
 			name: "download operation - remote to local",
-			sources: []pathInfo{
-				{isRemote: true, instanceID: "0", path: "/remote/file.txt"},
+			sources: []PathInfo{
+				{IsRemote: true, InstanceID: "0", Path: "/remote/file.txt"},
 			},
-			dest:        pathInfo{isRemote: false, path: "./local/"},
+			dest:        PathInfo{IsRemote: false, Path: "./local/"},
 			expectError: false,
 			expectedDir: "download",
 			expectedID:  "0",
 		},
 		{
 			name: "mixed sources should error",
-			sources: []pathInfo{
-				{isRemote: false, path: "./local.txt"},
-				{isRemote: true, instanceID: "0", path: "/remote/file.txt"},
+			sources: []PathInfo{
+				{IsRemote: false, Path: "./local.txt"},
+				{IsRemote: true, InstanceID: "0", Path: "/remote/file.txt"},
 			},
-			dest:        pathInfo{isRemote: true, instanceID: "0", path: "/remote/"},
+			dest:        PathInfo{IsRemote: true, InstanceID: "0", Path: "/remote/"},
 			expectError: true,
 		},
 		{
 			name: "all remote sources should error",
-			sources: []pathInfo{
-				{isRemote: true, instanceID: "0", path: "/remote/file1.txt"},
-				{isRemote: true, instanceID: "0", path: "/remote/file2.txt"},
+			sources: []PathInfo{
+				{IsRemote: true, InstanceID: "0", Path: "/remote/file1.txt"},
+				{IsRemote: true, InstanceID: "0", Path: "/remote/file2.txt"},
 			},
-			dest:        pathInfo{isRemote: true, instanceID: "0", path: "/remote/"},
+			dest:        PathInfo{IsRemote: true, InstanceID: "0", Path: "/remote/"},
 			expectError: true,
 		},
 		{
 			name: "all local sources should error",
-			sources: []pathInfo{
-				{isRemote: false, path: "./local1.txt"},
-				{isRemote: false, path: "./local2.txt"},
+			sources: []PathInfo{
+				{IsRemote: false, Path: "./local1.txt"},
+				{IsRemote: false, Path: "./local2.txt"},
 			},
-			dest:        pathInfo{isRemote: false, path: "./local/"},
+			dest:        PathInfo{IsRemote: false, Path: "./local/"},
 			expectError: true,
 		},
 	}
@@ -253,46 +253,26 @@ func TestDetermineTransferDirection(t *testing.T) {
 	}
 }
 
-// TestSCPCommandStructure verifies that the SCP command is properly initialized
-// with the correct usage and description.
-func TestSCPCommandStructure(t *testing.T) {
-	assert.NotNil(t, scpCmd)
-	assert.Equal(t, "scp [source...] [destination]", scpCmd.Use)
-	assert.Equal(t, "Securely copy files between local machine and Thunder Compute instances", scpCmd.Short)
-	assert.True(t, len(scpCmd.Long) > 0)
-}
-
-// TestSCPCommandFlags verifies that the SCP command has the expected
-// command-line flags properly defined.
-func TestSCPCommandFlags(t *testing.T) {
-	assert.NotNil(t, scpCmd.Flags().Lookup("recursive"))
-}
-
-// TestRecursiveFlag verifies that the recursive flag has the correct default value.
-func TestRecursiveFlag(t *testing.T) {
-	assert.False(t, recursiveFlag)
-}
-
-// TestPathInfoStructure verifies that the pathInfo struct can be created
+// TestPathInfoStructure verifies that the PathInfo struct can be created
 // and accessed correctly.
 func TestPathInfoStructure(t *testing.T) {
-	localPath := pathInfo{
-		isRemote: false,
-		path:     "./test.txt",
+	localPath := PathInfo{
+		IsRemote: false,
+		Path:     "./test.txt",
 	}
 
-	remotePath := pathInfo{
-		isRemote:   true,
-		instanceID: "0",
-		path:       "/home/ubuntu/test.txt",
+	remotePath := PathInfo{
+		IsRemote:   true,
+		InstanceID: "0",
+		Path:       "/home/ubuntu/test.txt",
 	}
 
-	assert.False(t, localPath.isRemote)
-	assert.Equal(t, "./test.txt", localPath.path)
+	assert.False(t, localPath.IsRemote)
+	assert.Equal(t, "./test.txt", localPath.Path)
 
-	assert.True(t, remotePath.isRemote)
-	assert.Equal(t, "0", remotePath.instanceID)
-	assert.Equal(t, "/home/ubuntu/test.txt", remotePath.path)
+	assert.True(t, remotePath.IsRemote)
+	assert.Equal(t, "0", remotePath.InstanceID)
+	assert.Equal(t, "/home/ubuntu/test.txt", remotePath.Path)
 }
 
 // TestFileTransferScenarios verifies that file transfer operations can be
@@ -477,10 +457,10 @@ func TestSCPErrorHandling(t *testing.T) {
 		tmpDir := t.TempDir()
 		readOnlyFile := filepath.Join(tmpDir, "readonly.txt")
 
-		err := os.WriteFile(readOnlyFile, []byte("test"), 0444)
+		err := os.WriteFile(readOnlyFile, []byte("test"), 0o444)
 		require.NoError(t, err)
 
-		err = os.WriteFile(readOnlyFile, []byte("new content"), 0644)
+		_ = os.WriteFile(readOnlyFile, []byte("new content"), 0o644) //nolint:errcheck // test case intentionally ignores error
 		_, err = os.Stat(readOnlyFile)
 		assert.NoError(t, err)
 	})

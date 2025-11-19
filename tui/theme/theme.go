@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	PrimaryColorHex     = "#0391ff"
+	PrimaryColorHex     = "#8dc8ff"
 	NeutralTextColorHex = "#888888"
 	LabelTextColorHex   = "#FFFFFF"
 	SuccessColorHex     = "#00D787"

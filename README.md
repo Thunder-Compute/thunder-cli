@@ -16,20 +16,20 @@ Using a proprietary orchestration engine, Thunder Compute delivers fast provisio
 
 The `tnr` CLI supports:
 
-- Provisioning and managing GPU instances  
-- Configuring compute resources and instance specifications  
-- Secure SSH access and session management  
-- File transfer capabilities (SCP upload and download)  
-- Port forwarding for accessing remote services locally  
-- Automated update checks and version management  
-- Cross-platform support for macOS, Linux, and Windows  
+- Provisioning and managing GPU instances
+- Configuring compute resources and instance specifications
+- Secure SSH access and session management
+- File transfer capabilities (SCP upload and download)
+- Port forwarding for accessing remote services locally
+- Automated update checks and version management
+- Cross-platform support for macOS, Linux, and Windows
 
 # Documentation
 
-- **CLI Reference:** https://www.thundercompute.com/docs/cli-reference  
-- **API Reference:** https://www.thundercompute.com/docs/api-reference  
-- **Get Started:** https://www.thundercompute.com/docs/quickstart  
-- **Troubleshooting:** https://www.thundercompute.com/docs/troubleshooting  
+- **CLI Reference:** https://www.thundercompute.com/docs/cli-reference
+- **API Reference:** https://www.thundercompute.com/docs/api-reference
+- **Get Started:** https://www.thundercompute.com/docs/quickstart
+- **Troubleshooting:** https://www.thundercompute.com/docs/troubleshooting
 
 # Installation
 

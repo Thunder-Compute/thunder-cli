@@ -60,12 +60,12 @@ type ConnectErrorMsg struct{ Err error }
 type connectQuitNow struct{}
 
 type connectFlowStyles struct {
-	title       lipgloss.Style
-	phase       lipgloss.Style
-	inProgress  lipgloss.Style
-	pending     lipgloss.Style
-	skipped     lipgloss.Style
-	duration    lipgloss.Style
+	title      lipgloss.Style
+	phase      lipgloss.Style
+	inProgress lipgloss.Style
+	pending    lipgloss.Style
+	skipped    lipgloss.Style
+	duration   lipgloss.Style
 }
 
 func NewConnectFlowModel(instanceID string) ConnectFlowModel {

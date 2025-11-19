@@ -1,0 +1,46 @@
+run:
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - gofmt
+    - goimports
+    - unused
+    - revive
+
+linters-settings:
+  revive:
+    rules:
+      - name: errorf
+      - name: unexported-return
+      - name: receiver-naming
+      - name: indent-error-flow
+      - name: if-return
+
+issues:
+  exclude-rules:
+    # Ignore complexity rules for updater/installer
+    - path: "autoupdate/"
+      linters:
+        - revive
+
+    # Ignore complexity in platform-specific files
+    - path: ".*_windows.go"
+      linters:
+        - revive
+
+    - path: ".*_darwin.go"
+      linters:
+        - revive
+
+    # Allow intentional errignore
+    - text: "nolint:errcheck"
+      linters:
+        - errcheck
+
+  max-issues-per-linter: 0
+  max-same-issues: 0

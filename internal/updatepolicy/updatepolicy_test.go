@@ -29,7 +29,7 @@ func TestCheckOptionalUpdateUsesCache(t *testing.T) {
 	var checksumHits int32
 	var minHits int32
 
-	manifest := manifest{
+	manifest := Manifest{
 		Version: version,
 		Channel: "stable",
 		Assets: map[string]string{

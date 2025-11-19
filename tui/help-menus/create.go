@@ -26,11 +26,6 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	`
 
 	output.WriteString(HeaderStyle.Render(header))
-	output.WriteString("\n\n")
-
-	// Description
-	output.WriteString(DescStyle.Render(cmd.Long))
-	output.WriteString("\n\n\n")
 
 	// Usage Section
 	output.WriteString(SectionStyle.Render("● USAGE"))

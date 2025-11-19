@@ -22,23 +22,7 @@ import (
 var deleteCmd = &cobra.Command{
 	Use:   "delete [instance_id]",
 	Short: "Delete a Thunder Compute instance",
-	Long: `Permanently delete a Thunder Compute instance.
-
-This command will:
-• Delete the instance from Thunder Compute servers
-• Clean up SSH configuration (~/.ssh/config)
-• Remove the instance from known hosts (~/.ssh/known_hosts)
-
-WARNING: This action is IRREVERSIBLE!
-All data on the instance will be permanently lost.
-
-Examples:
-  # Interactive mode - select from a list
-  tnr delete
-
-  # Direct deletion with instance ID
-  tnr delete 0`,
-	Args: cobra.MaximumNArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runDelete(args); err != nil {
 			PrintError(err)
@@ -169,7 +153,7 @@ func cleanupSSHConfig(instanceID, ipAddress string) error {
 		cmd := exec.Command("ssh-keygen", "-R", ipAddress)
 		cmd.Stdout = nil
 		cmd.Stderr = nil
-		cmd.Run()
+		_ = cmd.Run() //nolint:errcheck // known_hosts cleanup failure is non-fatal
 	}
 
 	return nil

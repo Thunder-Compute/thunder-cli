@@ -26,11 +26,6 @@ func RenderLogoutHelp(cmd *cobra.Command) {
 	`
 
 	output.WriteString(HeaderStyle.Render(header))
-	output.WriteString("\n\n")
-
-	// Description
-	output.WriteString(DescStyle.Render(cmd.Long))
-	output.WriteString("\n\n\n")
 
 	// Usage Section
 	output.WriteString(SectionStyle.Render("● USAGE"))
@@ -153,6 +148,20 @@ func RenderLogoutHelp(cmd *cobra.Command) {
 	output.WriteString(CommandStyle.Render("Safe"))
 	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Logout is safe and reversible"))
+	output.WriteString("\n\n")
+
+	// Resources Section
+	output.WriteString(SectionStyle.Render("● RESOURCES"))
+	output.WriteString("\n\n")
+	output.WriteString("  ")
+	output.WriteString(CommandStyle.Render("Docs"))
+	output.WriteString("   ")
+	output.WriteString(LinkStyle.Render("https://www.thundercompute.com/docs/cli-reference"))
+	output.WriteString("\n")
+	output.WriteString("  ")
+	output.WriteString(CommandStyle.Render("Troubleshooting"))
+	output.WriteString("   ")
+	output.WriteString(LinkStyle.Render("https://www.thundercompute.com/docs/troubleshooting"))
 	output.WriteString("\n\n")
 
 	fmt.Fprint(os.Stdout, output.String())

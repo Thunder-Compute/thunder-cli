@@ -145,10 +145,9 @@ func (m deleteModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.confirmed = true
 			m.step = deleteStepComplete
 			return m, tea.Quit
-		} else {
-			m.step = deleteStepSelect
-			m.cursor = 0
 		}
+		m.step = deleteStepSelect
+		m.cursor = 0
 	}
 
 	return m, nil

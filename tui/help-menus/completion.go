@@ -26,11 +26,6 @@ func RenderCompletionHelp(cmd *cobra.Command) {
 	`
 
 	output.WriteString(HeaderStyle.Render(header))
-	output.WriteString("\n\n")
-
-	// Description
-	output.WriteString(DescStyle.Render(cmd.Long))
-	output.WriteString("\n\n\n")
 
 	// Usage Section
 	output.WriteString(SectionStyle.Render("● USAGE"))
@@ -66,28 +61,28 @@ func RenderCompletionHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("# Generate bash completion script"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr completion bash")
+	output.WriteString(CommandTextStyle.Render("tnr completion bash"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Generate zsh completion script"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr completion zsh")
+	output.WriteString(CommandTextStyle.Render("tnr completion zsh"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Generate fish completion script"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr completion fish")
+	output.WriteString(CommandTextStyle.Render("tnr completion fish"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Generate PowerShell completion script"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString("tnr completion powershell")
+	output.WriteString(CommandTextStyle.Render("tnr completion powershell"))
 	output.WriteString("\n\n")
 
 	// Shell Support Section
@@ -195,6 +190,20 @@ func RenderCompletionHelp(cmd *cobra.Command) {
 	output.WriteString(CommandStyle.Render("Update"))
 	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Regenerate when adding new commands"))
+	output.WriteString("\n\n")
+
+	// Resources Section
+	output.WriteString(SectionStyle.Render("● RESOURCES"))
+	output.WriteString("\n\n")
+	output.WriteString("  ")
+	output.WriteString(CommandStyle.Render("Docs"))
+	output.WriteString("   ")
+	output.WriteString(LinkStyle.Render("https://www.thundercompute.com/docs/cli-reference"))
+	output.WriteString("\n")
+	output.WriteString("  ")
+	output.WriteString(CommandStyle.Render("Troubleshooting"))
+	output.WriteString("   ")
+	output.WriteString(LinkStyle.Render("https://www.thundercompute.com/docs/troubleshooting"))
 	output.WriteString("\n\n")
 
 	fmt.Fprint(os.Stdout, output.String())

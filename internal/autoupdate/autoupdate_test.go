@@ -1,6 +1,8 @@
 package autoupdate
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestParseParts(t *testing.T) {
 	tests := []struct {
