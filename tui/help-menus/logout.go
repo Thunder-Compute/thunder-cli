@@ -58,7 +58,7 @@ func RenderLogoutHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("2. Clean"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Remove config file from ~/.thunder-cli-draft/"))
+	output.WriteString(DescStyle.Render("Remove config file from ~/.thunder/cli_config.json"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

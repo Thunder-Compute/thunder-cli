@@ -39,13 +39,13 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Prototyping"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr create --mode prototyping --gpu t4 --vcpus 8"))
+	output.WriteString(DescStyle.Render("tnr create --mode prototyping --gpu {t4|a100} --vcpus {4|8|16|32} --template {base|comfy-ui|comfy-ui-wan|ollama|webui-forge} --disk-size-gb {100-400}"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Production"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr create --mode production --num-gpus 2"))
+	output.WriteString(DescStyle.Render("tnr create --mode production --num-gpus {1|2|4} --template {base|comfy-ui|comfy-ui-wan|ollama|webui-forge} --disk-size-gb {100-1000}"))
 	output.WriteString("\n\n")
 
 	// Examples Section
@@ -66,10 +66,10 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Production instance (highest stability)"))
+	output.WriteString(ExampleStyle.Render("# Production instance"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr create --mode production --num-gpus 2 --template base --disk-size-gb 500"))
+	output.WriteString(CommandTextStyle.Render("tnr create --mode production --gpu a100 --num-gpus 2 --template base --disk-size-gb 500"))
 	output.WriteString("\n\n")
 
 	// Flags Section
@@ -97,21 +97,19 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--vcpus"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("CPU cores (prototyping only): 4, 8, 16, or 32"))
+	output.WriteString(DescStyle.Render("CPU cores (prototyping only): 4, 8, 16, or 32, RAM: 8GB per vCPU. Production: 18 per GPU, RAM: 144GB per GPU"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--template"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("OS template key or name"))
+	output.WriteString(DescStyle.Render("base, comfy-ui, comfy-ui-wan, ollama, webui-forge"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--disk-size-gb"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Disk storage in GB (100-1000)"))
-	output.WriteString(" ")
-	output.WriteString(ExampleStyle.Render("(default: 100)"))
+	output.WriteString(DescStyle.Render("Disk storage in GB: 100-400 (prototyping), 100-1000 (production)"))
 	output.WriteString("\n\n")
 
 	// Instance Modes Section
@@ -119,9 +117,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Prototyping"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Default, lowest cost mode"))
+	output.WriteString(CommandTextStyle.Render("Prototyping (Lowest cost mode)"))
 	output.WriteString("\n")
 	output.WriteString("    ")
 	output.WriteString(DescStyle.Render("• GPU: T4 or A100"))
@@ -137,9 +133,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Production"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Highest stability mode"))
+	output.WriteString(CommandTextStyle.Render("Production (Highest stability mode)"))
 	output.WriteString("\n")
 	output.WriteString("    ")
 	output.WriteString(DescStyle.Render("• GPU: A100 or H100"))

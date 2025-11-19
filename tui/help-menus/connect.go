@@ -52,12 +52,6 @@ func RenderConnectHelp(cmd *cobra.Command) {
 	// Examples Section
 	output.WriteString(SectionStyle.Render("● EXAMPLES"))
 	output.WriteString("\n\n")
-	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Connect to instance with ID 'abc123'"))
-	output.WriteString("\n")
-	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr connect abc123"))
-	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Interactive instance selection"))
@@ -67,17 +61,24 @@ func RenderConnectHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
+	output.WriteString(ExampleStyle.Render("# Connect to instance with ID '0'"))
+	output.WriteString("\n")
+	output.WriteString("  ")
+	output.WriteString(CommandTextStyle.Render("tnr connect 0"))
+	output.WriteString("\n\n")
+
+	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Connect with port forwarding"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr connect abc123 --tunnel 8080:80 --tunnel 3000:3000"))
+	output.WriteString(CommandTextStyle.Render("tnr connect 0 --tunnel 8080 --tunnel 3000"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Connect with debug mode"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr connect abc123 --debug"))
+	output.WriteString(CommandTextStyle.Render("tnr connect 0 --debug"))
 	output.WriteString("\n\n")
 
 	// Flags Section
@@ -129,7 +130,7 @@ func RenderConnectHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Reconnect"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Use 'ssh tnr-{instance_id}' after initial setup"))
+	output.WriteString(DescStyle.Render("Use 'ssh tnr-{instance_id}' after initial setup. Example: ssh tnr-0"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

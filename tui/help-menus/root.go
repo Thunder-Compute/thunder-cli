@@ -45,25 +45,25 @@ func RenderRootHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("1.  Authenticate"))
 	output.WriteString("   ")
-	output.WriteString(LinkStyle.Render("tnr login"))
+	output.WriteString(DescStyle.Render("tnr login"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("2.  Create instance"))
 	output.WriteString("   ")
-	output.WriteString(LinkStyle.Render("tnr create"))
+	output.WriteString(DescStyle.Render("tnr create"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("3.  Connect SSH"))
 	output.WriteString("   ")
-	output.WriteString(LinkStyle.Render("tnr connect <id>"))
+	output.WriteString(DescStyle.Render("tnr connect <id>"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("4.  Check status"))
 	output.WriteString("   ")
-	output.WriteString(LinkStyle.Render("tnr status"))
+	output.WriteString(DescStyle.Render("tnr status"))
 	output.WriteString("\n\n")
 
 	// Commands Section

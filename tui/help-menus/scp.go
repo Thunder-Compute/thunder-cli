@@ -33,25 +33,25 @@ func RenderSCPHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Upload"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr scp local_file instance_id:/remote/path"))
+	output.WriteString(DescStyle.Render("tnr scp local_file <instance_id>:/remote/path"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Download"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr scp instance_id:/remote/file ./local/path"))
+	output.WriteString(DescStyle.Render("tnr scp <instance_id>:/remote/file ./local/path"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Multiple"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr scp file1 file2 file3 instance_id:/dest/"))
+	output.WriteString(DescStyle.Render("tnr scp file1 file2 file3 <instance_id>:/dest/"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Recursive"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr scp -r ./local_dir/ instance_id:/remote/"))
+	output.WriteString(DescStyle.Render("tnr scp -r ./local_dir/ <instance_id>:/remote/"))
 	output.WriteString("\n\n")
 
 	// Examples Section

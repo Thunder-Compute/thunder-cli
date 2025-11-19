@@ -20,7 +20,7 @@ func RenderDeleteHelp(cmd *cobra.Command) {
 ╭─────────────────────────────────────────────────────────────────────────────╮
 │                                                                             │
 │                               DELETE COMMAND                                │
-│                    Permanently remove Thunder Compute instances            │
+│                    Permanently remove Thunder Compute instances             │
 │                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────╯
 	`

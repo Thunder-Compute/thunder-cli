@@ -39,7 +39,7 @@ func RenderLoginHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Token"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr login --token <your_token>"))
+	output.WriteString(DescStyle.Render("tnr login --token <your_token_id>"))
 	output.WriteString("\n\n")
 
 	// Examples Section
@@ -101,9 +101,7 @@ func RenderLoginHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Browser Login"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Interactive OAuth flow (recommended)"))
+	output.WriteString(CommandTextStyle.Render("Browser Login (Interactive OAuth flow (recommended))"))
 	output.WriteString("\n")
 	output.WriteString("    ")
 	output.WriteString(DescStyle.Render("• Opens Thunder Compute login page"))
@@ -116,9 +114,7 @@ func RenderLoginHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Token Login"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Direct token authentication"))
+	output.WriteString(CommandTextStyle.Render("Token Login (Direct token authentication)"))
 	output.WriteString("\n")
 	output.WriteString("    ")
 	output.WriteString(DescStyle.Render("• Use existing API token"))
