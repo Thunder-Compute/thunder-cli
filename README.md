@@ -33,12 +33,12 @@ The `tnr` CLI supports:
 
 # Installation
 
-Install `tnr` using one of the supported methods below.  
-You may also download installers and binaries directly from the latest release page:
-
-**Latest Releases:** https://github.com/Thunder-Compute/thunder-cli/releases
+Install `tnr` using one of the supported methods below. You may also download installers and binaries directly from the [Latest Release](https://github.com/Thunder-Compute/thunder-cli/releases) page.
 
 ### macOS
+
+- [Download for macOS (Apple Silicon)](https://gettnr.com/tnr/releases/latest/macos/tnr_darwin_arm64.pkg)  
+- [Download for macOS (Intel)](https://gettnr.com/tnr/releases/latest/macos/tnr_darwin_amd64.pkg)    
 
 **Homebrew:**
 
@@ -47,10 +47,12 @@ brew tap Thunder-Compute/tnr
 brew install tnr
 ```
 
-**Direct download:**  
-Download the `tnr_{version}_darwin_{amd64 or arm64}.pkg` installer from the latest release.
+---
 
 ### Linux
+
+- [Download for Linux (Intel/AMD)](https://gettnr.com/tnr/releases/latest/linux/tnr_linux_amd64.tar.gz)
+- [Download for Linux (ARM)](https://gettnr.com/tnr/releases/latest/linux/tnr_linux_arm64.tar.gz)
 
 **Install script (recommended):**
 
@@ -58,10 +60,15 @@ Download the `tnr_{version}_darwin_{amd64 or arm64}.pkg` installer from the late
 curl -fsSL https://raw.githubusercontent.com/Thunder-Compute/thunder-cli/main/scripts/install.sh | bash
 ```
 
-**Direct download:**  
-Download the `tnr_{ version }_linux_{ amd64 / arm64 }.{ apk / deb / rpm }` package from the latest release.
+---
 
 ### Windows
+
+**Direct download:**
+
+- [Download for Windows (Intel/AMD)](https://gettnr.com/tnr/releases/latest/windows/tnr_windows_amd64.msi) **(Temporarily Unavailable)**
+- [Download for Windows (ARM)](https://gettnr.com/tnr/releases/latest/windows/tnr_windows_arm64.msi) **(Temporarily Unavailable)**
+
 
 **Scoop:**
 
@@ -75,9 +82,6 @@ scoop install tnr
 ```powershell
 winget install Thunder.tnr
 ```
-
-**Direct download:**  
-Download the `tnr_{ version }_windows_{ amd64 / arm64 }.msi` installer from the latest release.
 
 ### Build from Source
 
