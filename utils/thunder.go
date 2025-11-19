@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -95,13 +96,16 @@ func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpu
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	writeConfigCmd := fmt.Sprintf("echo '%s' > %s && sudo ln -sf %s /etc/thunder/config.json", string(configJSON), thunderConfigPath, thunderConfigPath)
+	// base64-encode so it contains no quotes
+	configB64 := base64.StdEncoding.EncodeToString(configJSON)
+	writeConfigCmd := fmt.Sprintf("echo '%s' | base64 -d > %s && sudo ln -sf %s /etc/thunder/config.json", configB64, thunderConfigPath, thunderConfigPath)
 	if _, err := ExecuteSSHCommand(client, writeConfigCmd); err != nil {
 		return fmt.Errorf("failed to write Thunder config: %w", err)
 	}
 
 	// Write token
-	writeTokenCmd := fmt.Sprintf("echo '%s' > %s && sudo ln -sf %s %s", token, tokenPath, tokenPath, tokenSymlink)
+	tokenB64 := base64.StdEncoding.EncodeToString([]byte(token))
+	writeTokenCmd := fmt.Sprintf("echo '%s' | base64 -d > %s && sudo ln -sf %s %s", tokenB64, tokenPath, tokenPath, tokenSymlink)
 	if _, err := ExecuteSSHCommand(client, writeTokenCmd); err != nil {
 		return fmt.Errorf("failed to write token: %w", err)
 	}
@@ -127,7 +131,8 @@ func RemoveThunderVirtualization(client *SSHClient, token string) error {
 	}
 
 	// Write token (keep this for API access)
-	writeTokenCmd := fmt.Sprintf("mkdir -p %s && echo '%s' > %s && sudo mkdir -p /etc/thunder && sudo ln -sf %s %s", thunderConfigDir, token, tokenPath, tokenPath, tokenSymlink)
+	tokenB64 := base64.StdEncoding.EncodeToString([]byte(token))
+	writeTokenCmd := fmt.Sprintf("mkdir -p %s && echo '%s' | base64 -d > %s && sudo mkdir -p /etc/thunder && sudo ln -sf %s %s", thunderConfigDir, tokenB64, tokenPath, tokenPath, tokenSymlink)
 	if _, err := ExecuteSSHCommand(client, writeTokenCmd); err != nil {
 		return fmt.Errorf("failed to write token: %w", err)
 	}
