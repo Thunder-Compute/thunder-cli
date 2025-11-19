@@ -362,22 +362,42 @@ func extractZip(path, dest string) error {
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return err
 	}
+
 	r, err := zip.OpenReader(path)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
+
+	destAbs, err := filepath.Abs(dest)
+	if err != nil {
+		return err
+	}
+
 	for _, f := range r.File {
-		fp := filepath.Join(dest, f.Name)
+		rel := filepath.Clean(f.Name)
+
+		if filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || rel == ".." {
+			return fmt.Errorf("zip entry has invalid path: %q", f.Name)
+		}
+
+		fp := filepath.Join(destAbs, rel)
+
+		if !strings.HasPrefix(fp, destAbs+string(os.PathSeparator)) && fp != destAbs {
+			return fmt.Errorf("zip entry escapes destination: %q", f.Name)
+		}
+
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(fp, f.Mode()); err != nil {
 				return err
 			}
 			continue
 		}
+
 		if err := os.MkdirAll(filepath.Dir(fp), 0o755); err != nil {
 			return err
 		}
+
 		rc, err := f.Open()
 		if err != nil {
 			return err
@@ -395,6 +415,7 @@ func extractZip(path, dest string) error {
 		rc.Close()
 		out.Close()
 	}
+
 	return nil
 }
 
@@ -402,17 +423,26 @@ func extractTarGz(path, dest string) error {
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return err
 	}
+
+	destAbs, err := filepath.Abs(dest)
+	if err != nil {
+		return err
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+
 	gzr, err := gzip.NewReader(f)
 	if err != nil {
 		return err
 	}
 	defer gzr.Close()
+
 	tr := tar.NewReader(gzr)
+
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -421,7 +451,18 @@ func extractTarGz(path, dest string) error {
 		if err != nil {
 			return err
 		}
-		fp := filepath.Join(dest, hdr.Name)
+
+		rel := filepath.Clean(hdr.Name)
+		if filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || rel == ".." {
+			return fmt.Errorf("tar entry has invalid path: %q", hdr.Name)
+		}
+
+		fp := filepath.Join(destAbs, rel)
+
+		if !strings.HasPrefix(fp, destAbs+string(os.PathSeparator)) && fp != destAbs {
+			return fmt.Errorf("tar entry escapes destination: %q", hdr.Name)
+		}
+
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(fp, os.FileMode(hdr.Mode)); err != nil {
@@ -442,6 +483,7 @@ func extractTarGz(path, dest string) error {
 			out.Close()
 		}
 	}
+
 	return nil
 }
 
