@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Install tnr by reading latest.json from S3, verifying checksums, and
+# Install tnr by reading latest.json from Cloudflare R2 (via gettnr.com), verifying checksums, and
 # installing to ~/.tnr/bin.
 
 CHANNEL=${TNR_UPDATE_CHANNEL:-stable}
 VERSION=${TNR_VERSION:-}
 LATEST_URL=${TNR_LATEST_URL:-}
 INSTALL_DIR="${HOME}/.tnr/bin"
-
-# Default S3 bucket and region (can be overridden with env vars)
-TNR_S3_BUCKET=${TNR_S3_BUCKET:-thunder-cli-releases}
-AWS_REGION=${AWS_REGION:-ap-southeast-2}
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -131,8 +127,8 @@ if [[ -z "$LATEST_URL" ]]; then
   if [[ -n "${TNR_DOWNLOAD_BASE:-}" ]]; then
     LATEST_URL="${TNR_DOWNLOAD_BASE}/tnr/releases/latest.json"
   else
-    # Use defaults - no env vars required!
-    LATEST_URL="https://${TNR_S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/tnr/releases/latest.json"
+    # Default to Cloudflare R2 via gettnr.com custom domain
+    LATEST_URL="https://gettnr.com/tnr/releases/latest.json"
   fi
 fi
 

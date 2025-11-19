@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-# Install tnr by reading latest.json from GCS and installing to %LOCALAPPDATA%\tnr\bin
+# Install tnr by reading latest.json from Cloudflare R2 (via gettnr.com) and installing to %LOCALAPPDATA%\tnr\bin
 
 $channel = $env:TNR_UPDATE_CHANNEL
 if (-not $channel) { $channel = 'stable' }
@@ -11,10 +11,8 @@ if (-not $latestUrl) {
   if ($env:TNR_DOWNLOAD_BASE) {
     $latestUrl = "$($env:TNR_DOWNLOAD_BASE)/tnr/releases/latest.json"
   } else {
-    if (-not $env:TNR_S3_BUCKET -or -not $env:AWS_REGION) {
-      Write-Error 'Set TNR_LATEST_URL or TNR_DOWNLOAD_BASE, or TNR_S3_BUCKET and AWS_REGION'
-    }
-    $latestUrl = "https://$($env:TNR_S3_BUCKET).s3.$($env:AWS_REGION).amazonaws.com/tnr/releases/latest.json"
+    # Default to Cloudflare R2 via gettnr.com custom domain
+    $latestUrl = "https://gettnr.com/tnr/releases/latest.json"
   }
 }
 

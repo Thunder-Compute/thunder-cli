@@ -1,33 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Generate a latest.json manifest pointing to versioned assets in S3 (or CloudFront).
+# Generate a latest.json manifest pointing to versioned assets in Cloudflare R2 (via gettnr.com).
 # Inputs:
 #   VERSION (e.g., v1.2.3)
-#   BUCKET (S3 bucket name)
-#   AWS_REGION (required if TNR_DOWNLOAD_BASE unset)
-#   TNR_DOWNLOAD_BASE (optional, e.g., https://dxxxxx.cloudfront.net)
+#   TNR_DOWNLOAD_BASE (optional, e.g., https://gettnr.com or custom CDN)
 #   CHANNEL (stable|beta) default stable
 
 VERSION=${VERSION:-}
-BUCKET=${BUCKET:-}
-AWS_REGION=${AWS_REGION:-}
 DOWNLOAD_BASE=${TNR_DOWNLOAD_BASE:-}
 CHANNEL=${CHANNEL:-stable}
 
-if [[ -z "$VERSION" || -z "$BUCKET" ]]; then
-  echo "VERSION and BUCKET are required" >&2
+if [[ -z "$VERSION" ]]; then
+  echo "VERSION is required" >&2
   exit 1
 fi
 
-if [[ -z "$DOWNLOAD_BASE" ]]; then
-  if [[ -z "$AWS_REGION" ]]; then
-    echo "AWS_REGION is required when TNR_DOWNLOAD_BASE is not set" >&2
-    exit 1
-  fi
-  base="https://${BUCKET}.s3.${AWS_REGION}.amazonaws.com/tnr/releases/${VERSION}"
-else
+if [[ -n "$DOWNLOAD_BASE" ]]; then
   base="${DOWNLOAD_BASE}/tnr/releases/${VERSION}"
+else
+  # Default to Cloudflare R2 via gettnr.com custom domain
+  base="https://gettnr.com/tnr/releases/${VERSION}"
 fi
 
 cat > latest.json <<JSON

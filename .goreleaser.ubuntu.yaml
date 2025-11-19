@@ -71,8 +71,8 @@ sboms:
 # extra_files needed here because NFPM packages aren't automatically included in blobs
 blobs:
   - provider: s3
-    bucket: "{{ .Env.TNR_S3_BUCKET }}"
-    region: "{{ .Env.AWS_REGION }}"
+    bucket: "{{ .Env.R2_BUCKET }}"
+    endpoint: "{{ .Env.R2_ENDPOINT }}"
     directory: "tnr/releases/{{ .Version }}/linux"
     cache_control:
       - public

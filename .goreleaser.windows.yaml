@@ -56,8 +56,8 @@ sboms:
 # extra_files needed here because MSI files aren't automatically included in blobs
 blobs:
   - provider: s3
-    bucket: "{{ .Env.TNR_S3_BUCKET }}"
-    region: "{{ .Env.AWS_REGION }}"
+    bucket: "{{ .Env.R2_BUCKET }}"
+    endpoint: "{{ .Env.R2_ENDPOINT }}"
     directory: "tnr/releases/{{ .Version }}/windows"
     cache_control:
       - public
@@ -93,7 +93,7 @@ changelog:
 scoops:
   - name: tnr
     ids: [archive]
-    url_template: "https://{{ .Env.TNR_S3_BUCKET }}.s3.{{ .Env.AWS_REGION }}.amazonaws.com/tnr/releases/{{ .Version }}/windows/{{ .ArtifactName }}"
+    url_template: "https://{{ .Env.R2_BUCKET }}.{{ .Env.R2_ENDPOINT }}/tnr/releases/{{ .Version }}/windows/{{ .ArtifactName }}"
     homepage: "https://github.com/Thunder-Compute/thunder-cli"
     description: "Thunder Compute CLI"
     license: MIT

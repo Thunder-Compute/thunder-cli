@@ -35,14 +35,12 @@ const (
 	cacheTTL = 24 * time.Hour
 
 	defaultLatestPath = "/tnr/releases/latest.json"
-	defaultS3Region   = "ap-southeast-2"
-	defaultBucket     = "thunder-cli-releases"
 
 	minVersionEnvKey = "TNR_MIN_VERSION_URL"
 )
 
 var defaultBases = []string{
-	fmt.Sprintf("https://%s.s3.%s.amazonaws.com", defaultBucket, defaultS3Region),
+	"https://gettnr.com",
 }
 
 // Result captures the outcome of the update policy evaluation.
@@ -507,17 +505,6 @@ func resolveLatestURLs() []string {
 	} else if base := os.Getenv("TNR_DOWNLOAD_BASE"); base != "" {
 		base = strings.TrimRight(strings.TrimSpace(base), "/")
 		urls = append(urls, base+defaultLatestPath)
-	} else {
-		if bucket := strings.TrimSpace(os.Getenv("TNR_S3_BUCKET")); bucket != "" {
-			region := strings.TrimSpace(os.Getenv("TNR_S3_REGION"))
-			if region == "" {
-				region = strings.TrimSpace(os.Getenv("AWS_REGION"))
-			}
-			if region == "" {
-				region = defaultS3Region
-			}
-			urls = append(urls, fmt.Sprintf("https://%s.s3.%s.amazonaws.com%s", bucket, region, defaultLatestPath))
-		}
 	}
 	for _, base := range defaultBases {
 		base = strings.TrimRight(base, "/")
@@ -537,16 +524,7 @@ func defaultManifestBase() string {
 	if base := strings.TrimSpace(os.Getenv("TNR_DOWNLOAD_BASE")); base != "" {
 		return strings.TrimRight(base, "/")
 	}
-	if bucket := strings.TrimSpace(os.Getenv("TNR_S3_BUCKET")); bucket != "" {
-		region := strings.TrimSpace(os.Getenv("TNR_S3_REGION"))
-		if region == "" {
-			region = strings.TrimSpace(os.Getenv("AWS_REGION"))
-		}
-		if region == "" {
-			region = defaultS3Region
-		}
-		return fmt.Sprintf("https://%s.s3.%s.amazonaws.com", bucket, region)
-	}
+	// Return first non-empty default base (Cloudflare R2 via gettnr.com)
 	for _, base := range defaultBases {
 		if base != "" {
 			return strings.TrimRight(base, "/")

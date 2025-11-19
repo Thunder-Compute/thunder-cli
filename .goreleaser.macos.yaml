@@ -128,8 +128,8 @@ sboms:
 # extra_files needed here because .pkg files are created by custom hook
 blobs:
   - provider: s3
-    bucket: "{{ .Env.TNR_S3_BUCKET }}"
-    region: "{{ .Env.AWS_REGION }}"
+    bucket: "{{ .Env.R2_BUCKET }}"
+    endpoint: "{{ .Env.R2_ENDPOINT }}"
     directory: "tnr/releases/{{ .Version }}/macos"
     cache_control:
       - public
