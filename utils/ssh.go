@@ -6,11 +6,13 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 type SSHClient struct {
@@ -38,11 +40,7 @@ func testSocketConnection(ip string, port int) bool {
 	return true
 }
 
-func RobustSSHConnect(ip, keyFile string, port int, maxWait int) (*SSHClient, error) {
-	return RobustSSHConnectCtx(context.Background(), ip, keyFile, port, maxWait)
-}
-
-func RobustSSHConnectCtx(ctx context.Context, ip, keyFile string, port int, maxWait int) (*SSHClient, error) {
+func newSSHConfig(user, keyFile string) (*ssh.ClientConfig, error) {
 	keyData, err := os.ReadFile(keyFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key: %w", err)
@@ -53,13 +51,82 @@ func RobustSSHConnectCtx(ctx context.Context, ip, keyFile string, port int, maxW
 		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
 
-	config := &ssh.ClientConfig{
-		User: "ubuntu",
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get home dir: %w", err)
+	}
+
+	sshDir := filepath.Join(home, ".ssh")
+	knownHostsPath := filepath.Join(sshDir, "known_hosts")
+
+	if err := os.MkdirAll(sshDir, 0700); err != nil {
+		return nil, fmt.Errorf("failed to create .ssh directory: %w", err)
+	}
+
+	if _, err := os.Stat(knownHostsPath); os.IsNotExist(err) {
+		if err := os.WriteFile(knownHostsPath, []byte{}, 0644); err != nil {
+			return nil, fmt.Errorf("failed to create known_hosts file: %w", err)
+		}
+	}
+
+	hostKeyCallback, err := knownhosts.New(knownHostsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load known_hosts: %w", err)
+	}
+
+	wrappedCallback := func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		err := hostKeyCallback(hostname, remote, key)
+		if err == nil {
+			return nil
+		}
+
+		errMsg := err.Error()
+
+		if strings.Contains(errMsg, "host key mismatch") || strings.Contains(errMsg, "changed") {
+			return fmt.Errorf("host key changed for %s - possible security issue: %w", hostname, err)
+		}
+
+		if strings.Contains(errMsg, "key is unknown") || strings.Contains(errMsg, "not in known_hosts") {
+			hostForKnownHosts := hostname
+			if host, _, err := net.SplitHostPort(hostname); err == nil {
+				hostForKnownHosts = host
+			}
+			line := knownhosts.Line([]string{hostForKnownHosts}, key)
+			f, err := os.OpenFile(knownHostsPath, os.O_APPEND|os.O_WRONLY, 0644)
+			if err != nil {
+				return fmt.Errorf("failed to append to known_hosts: %w", err)
+			}
+			if _, err := fmt.Fprintln(f, line); err != nil {
+				f.Close()
+				return fmt.Errorf("failed to write to known_hosts: %w", err)
+			}
+			if err := f.Close(); err != nil {
+				return fmt.Errorf("failed to close known_hosts: %w", err)
+			}
+			return nil
+		}
+
+		return err
+	}
+
+	return &ssh.ClientConfig{
+		User: user,
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: wrappedCallback,
 		Timeout:         15 * time.Second,
+	}, nil
+}
+
+func RobustSSHConnect(ip, keyFile string, port int, maxWait int) (*SSHClient, error) {
+	return RobustSSHConnectCtx(context.Background(), ip, keyFile, port, maxWait)
+}
+
+func RobustSSHConnectCtx(ctx context.Context, ip, keyFile string, port int, maxWait int) (*SSHClient, error) {
+	config, err := newSSHConfig("ubuntu", keyFile)
+	if err != nil {
+		return nil, err
 	}
 
 	address := net.JoinHostPort(ip, strconv.Itoa(port))
