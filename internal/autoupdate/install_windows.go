@@ -526,7 +526,7 @@ func buildPowerShellElevationCommand(exe string, args []string) string {
 
 	var arrayElements []string
 	for _, arg := range args {
-		arrayElements = append(arrayElements, psQuote(QuoteWindowsArg(arg)))
+		arrayElements = append(arrayElements, psQuote(quoteWindowsArg(arg)))
 	}
 	psArgsArray := "@(" + strings.Join(arrayElements, ",") + ")"
 
