@@ -386,35 +386,6 @@ jobs:
           CERT_THUMBPRINT: ${{ secrets.CERT_THUMBPRINT }}
           TIMESTAMP_SERVER: ${{ secrets.TIMESTAMP_SERVER }}
 
-      - name: Install AWS CLI v2
-        shell: pwsh
-        run: |
-          $msi = "$env:RUNNER_TEMP\AWSCLIV2.msi"
-          Invoke-WebRequest "https://awscli.amazonaws.com/AWSCLIV2.msi" -OutFile $msi
-          Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn" -Wait
-          $awsPath = "C:\Program Files\Amazon\AWSCLIV2"
-          $awsExe = Join-Path $awsPath "aws.exe"
-
-          # Wait for installation to complete and verify
-          $maxWait = 30
-          $waited = 0
-          while (-not (Test-Path $awsExe) -and $waited -lt $maxWait) {
-            Start-Sleep -Seconds 1
-            $waited++
-          }
-
-          if (-not (Test-Path $awsExe)) {
-            Write-Error "AWS CLI installation failed or timed out. Expected: $awsExe"
-            exit 1
-          }
-
-          # Add to PATH for subsequent steps
-          echo "$awsPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-          # Verify it works
-          & $awsExe --version
-          Write-Host "✅ AWS CLI installed successfully at: $awsPath"
-
       # Copy files to latest/windows folder
       # Copies all uploaded files to stable latest/ paths with simplified naming
       - name: Copy to latest/windows
@@ -431,15 +402,6 @@ jobs:
             $versionNoV = $tag -replace '^v', ''
           }
 
-          # Find AWS CLI executable (use full path to avoid PATH issues)
-          $awsPath = "C:\Program Files\Amazon\AWSCLIV2"
-          $awsExe = Join-Path $awsPath "aws.exe"
-
-          if (-not (Test-Path $awsExe)) {
-            Write-Error "AWS CLI not found at: $awsExe"
-            exit 1
-          }
-
           $sourcePrefix = "s3://$env:BUCKET/tnr/releases/$versionNoV/windows/"
           $destPrefix = "s3://$env:BUCKET/tnr/releases/latest/windows/"
           $endpointUrl = $env:R2_ENDPOINT
@@ -447,20 +409,20 @@ jobs:
           # Copy archives (.zip)
           $srcZipAmd64 = "$sourcePrefix" + "tnr_$versionNoV" + "_windows_amd64.zip"
           $destZipAmd64 = "$destPrefix" + "tnr_windows_amd64.zip"
-          & $awsExe s3 cp $srcZipAmd64 $destZipAmd64 --endpoint-url $endpointUrl --cache-control "public, max-age=3600" 2>&1 | Out-Null
+          aws s3 cp $srcZipAmd64 $destZipAmd64 --endpoint-url $endpointUrl --cache-control "public, max-age=3600" 2>&1 | Out-Null
 
           $srcZipArm64 = "$sourcePrefix" + "tnr_$versionNoV" + "_windows_arm64.zip"
           $destZipArm64 = "$destPrefix" + "tnr_windows_arm64.zip"
-          & $awsExe s3 cp $srcZipArm64 $destZipArm64 --endpoint-url $endpointUrl --cache-control "public, max-age=3600" 2>&1 | Out-Null
+          aws s3 cp $srcZipArm64 $destZipArm64 --endpoint-url $endpointUrl --cache-control "public, max-age=3600" 2>&1 | Out-Null
 
           # Copy installers (.msi) - note: MSI naming uses hyphens
           $srcMsiAmd64 = "$sourcePrefix" + "tnr-$versionNoV" + "-amd64.msi"
           $destMsiAmd64 = "$destPrefix" + "tnr_windows_amd64.msi"
-          & $awsExe s3 cp $srcMsiAmd64 $destMsiAmd64 --endpoint-url $endpointUrl --cache-control "public, max-age=3600" 2>&1 | Out-Null
+          aws s3 cp $srcMsiAmd64 $destMsiAmd64 --endpoint-url $endpointUrl --cache-control "public, max-age=3600" 2>&1 | Out-Null
 
           $srcMsiArm64 = "$sourcePrefix" + "tnr-$versionNoV" + "-arm64.msi"
           $destMsiArm64 = "$destPrefix" + "tnr_windows_arm64.msi"
-          & $awsExe s3 cp $srcMsiArm64 $destMsiArm64 --endpoint-url $endpointUrl --cache-control "public, max-age=3600" 2>&1 | Out-Null
+          aws s3 cp $srcMsiArm64 $destMsiArm64 --endpoint-url $endpointUrl --cache-control "public, max-age=3600" 2>&1 | Out-Null
 
           Write-Host "✅ Copied Windows files to latest/windows/"
 
