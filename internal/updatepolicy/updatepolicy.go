@@ -40,7 +40,7 @@ const (
 )
 
 var defaultBases = []string{
-	"https://gettnr.com",
+	"https://download.thundercompute.com",
 }
 
 // Result captures the outcome of the update policy evaluation.

@@ -66,13 +66,12 @@ sboms:
   - id: sbom
     artifacts: archive
 
-# S3 upload configuration
-# Uploads archives and Linux packages to S3 for distribution
+# GCS upload configuration
+# Uploads archives and Linux packages to Google Cloud Storage for distribution
 # extra_files needed here because NFPM packages aren't automatically included in blobs
 blobs:
-  - provider: s3
-    bucket: "{{ .Env.R2_BUCKET }}"
-    endpoint: "{{ .Env.R2_ENDPOINT }}"
+  - provider: gs
+    bucket: "{{ .Env.GCP_BUCKET }}"
     directory: "tnr/releases/{{ .Version }}/linux"
     cache_control:
       - public

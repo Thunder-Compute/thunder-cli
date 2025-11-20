@@ -64,38 +64,26 @@ jobs:
         uses: actions/setup-go@v6
         with: { go-version: "1.25.x" }
 
-      # Configure R2 credentials directly (S3-compatible API)
-      # Uses R2 Access Key ID and Secret Access Key from GitHub secrets
-      - name: Configure R2 credentials
+      # Configure GCP credentials for GoReleaser + gcloud
+      - name: Configure GCP credentials
         env:
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
           set -euo pipefail
 
-          echo "=== R2 Credential Configuration Debug ==="
-          echo "R2 Access Key ID: ${R2_ACCESS_KEY_ID:0:10}... (truncated for security)"
-          echo "R2 Secret Access Key: ${R2_SECRET_ACCESS_KEY:+***SET***}"
+          CREDS_FILE="$RUNNER_TEMP/gcp-sa.json"
 
-          if [ -z "${R2_ACCESS_KEY_ID}" ] || [ -z "${R2_SECRET_ACCESS_KEY}" ]; then
-            echo "❌ R2 credentials not set in GitHub secrets"
-            echo "Please set R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY secrets"
-            exit 1
-          fi
+          echo "$GCP_SA_KEY" | base64 --decode > "$CREDS_FILE"
 
-          # Configure AWS CLI for R2
-          mkdir -p ~/.aws
-          cat > ~/.aws/credentials <<EOF
-          [default]
-          aws_access_key_id = ${R2_ACCESS_KEY_ID}
-          aws_secret_access_key = ${R2_SECRET_ACCESS_KEY}
-          EOF
+          # Make these credentials the default for ALL GCP SDKs and gcloud.
+          {
+            echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE"
+            echo "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=$CREDS_FILE"
+          } >> "$GITHUB_ENV"
 
-          echo "AWS_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
-
-          echo "✅ AWS CLI credentials configured for R2"
-          echo "========================================="
+      # Setup gcloud CLI
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
 
       # Install Syft for generating Software Bill of Materials
       - name: Install Syft (for SBOM)
@@ -187,8 +175,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
           GH_PAT: ${{ secrets.GH_PAT }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          GCP_BUCKET: ${{ secrets.GCP_BUCKET }}
 
           # Binary signing
           DEVELOPER_ID_APP: ${{ secrets.DEVELOPER_ID_APP }}
@@ -206,8 +193,7 @@ jobs:
       # Copies all uploaded files to stable latest/ paths with simplified naming
       - name: Copy to latest/macos
         env:
-          BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          BUCKET: ${{ secrets.GCP_BUCKET }}
         run: |
           set -euo pipefail
 
@@ -219,30 +205,25 @@ jobs:
             VERSION_NO_V="${TAG#v}"
           fi
 
-          SOURCE_PREFIX="s3://${BUCKET}/tnr/releases/${VERSION_NO_V}/macos/"
-          DEST_PREFIX="s3://${BUCKET}/tnr/releases/latest/macos/"
-          ENDPOINT_URL="${R2_ENDPOINT}"
+          SOURCE_PREFIX="gs://${BUCKET}/tnr/releases/${VERSION_NO_V}/macos/"
+          DEST_PREFIX="gs://${BUCKET}/tnr/releases/latest/macos/"
 
           # Copy archives (.tar.gz)
-          aws s3 cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_amd64.tar.gz" \
+          gcloud storage cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_amd64.tar.gz" \
             "${DEST_PREFIX}tnr_darwin_amd64.tar.gz" \
-            --endpoint-url "${ENDPOINT_URL}" \
             --cache-control "public, max-age=3600" || true
 
-          aws s3 cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_arm64.tar.gz" \
+          gcloud storage cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_arm64.tar.gz" \
             "${DEST_PREFIX}tnr_darwin_arm64.tar.gz" \
-            --endpoint-url "${ENDPOINT_URL}" \
             --cache-control "public, max-age=3600" || true
 
           # Copy installers (.pkg)
-          aws s3 cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_amd64.pkg" \
+          gcloud storage cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_amd64.pkg" \
             "${DEST_PREFIX}tnr_darwin_amd64.pkg" \
-            --endpoint-url "${ENDPOINT_URL}" \
             --cache-control "public, max-age=3600" || true
 
-          aws s3 cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_arm64.pkg" \
+          gcloud storage cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_arm64.pkg" \
             "${DEST_PREFIX}tnr_darwin_arm64.pkg" \
-            --endpoint-url "${ENDPOINT_URL}" \
             --cache-control "public, max-age=3600" || true
 
           echo "✅ Copied macOS files to latest/macos/"
@@ -252,7 +233,7 @@ jobs:
   # ============================================================================
   # Builds binaries for Windows amd64 and arm64
   # Creates MSI installers using WiX v4
-  # Publishes to GitHub releases, S3, Scoop bucket, and creates Winget PR
+  # Publishes to GitHub releases, GCS, Scoop bucket, and creates Winget PR
   # ============================================================================
   windows_release:
     runs-on:
@@ -279,40 +260,25 @@ jobs:
       - uses: actions/setup-go@v6
         with: { go-version: "1.25.x" }
 
-      # Configure R2 credentials directly (S3-compatible API)
-      # Uses R2 Access Key ID and Secret Access Key from GitHub secrets
-      - name: Configure R2 credentials
-        env:
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      # Configure GCP credentials for GoReleaser + gcloud
+      - name: Configure GCP credentials
         shell: pwsh
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
-          Write-Host "=== R2 Credential Configuration Debug ===" -ForegroundColor Cyan
-          Write-Host "R2 Access Key ID: $($env:R2_ACCESS_KEY_ID.Substring(0, [Math]::Min(10, $env:R2_ACCESS_KEY_ID.Length)))... (truncated)" -ForegroundColor Yellow
-          Write-Host "R2 Secret Access Key: $(if ($env:R2_SECRET_ACCESS_KEY) { '***SET***' } else { 'NOT SET' })" -ForegroundColor Yellow
+          $ErrorActionPreference = "Stop"
 
-          if (-not $env:R2_ACCESS_KEY_ID -or -not $env:R2_SECRET_ACCESS_KEY) {
-            Write-Host "❌ R2 credentials not set in GitHub secrets" -ForegroundColor Red
-            Write-Host "Please set R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY secrets" -ForegroundColor Red
-            exit 1
-          }
+          $credsFile = Join-Path $env:RUNNER_TEMP "gcp-sa.json"
 
-          # Configure AWS CLI for R2
-          $awsDir = Join-Path $env:USERPROFILE ".aws"
-          New-Item -ItemType Directory -Force -Path $awsDir | Out-Null
-          @"
-          [default]
-          aws_access_key_id = $env:R2_ACCESS_KEY_ID
-          aws_secret_access_key = $env:R2_SECRET_ACCESS_KEY
-          "@ | Out-File -FilePath (Join-Path $awsDir "credentials") -Encoding utf8
+          $decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:GCP_SA_KEY))
+          $decoded | Set-Content -Path $credsFile -Encoding utf8
 
-          echo "AWS_ACCESS_KEY_ID=$env:R2_ACCESS_KEY_ID" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "AWS_SECRET_ACCESS_KEY=$env:R2_SECRET_ACCESS_KEY" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "AWS_REGION=auto"          | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "AWS_DEFAULT_REGION=auto"  | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$credsFile" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=$credsFile" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-          Write-Host "✅ AWS CLI credentials configured for R2" -ForegroundColor Green
-          Write-Host "=========================================" -ForegroundColor Cyan
+      # Setup gcloud CLI
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
 
       # Install .NET SDK and WiX v4
       # Using temp directory to avoid permission issues with self-hosted runners
@@ -380,9 +346,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
           GH_PAT: ${{ secrets.GH_PAT }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-          # YubiKey signing credentials (used by before_publish hook)
+          GCP_BUCKET: ${{ secrets.GCP_BUCKET }}
           CERT_THUMBPRINT: ${{ secrets.CERT_THUMBPRINT }}
           TIMESTAMP_SERVER: ${{ secrets.TIMESTAMP_SERVER }}
 
@@ -391,8 +355,7 @@ jobs:
       - name: Copy to latest/windows
         shell: pwsh
         env:
-          BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          BUCKET: ${{ secrets.GCP_BUCKET }}
         run: |
           # Get version from git tag or manual input
           if ("${{ inputs.version }}" -ne "") {
@@ -402,27 +365,26 @@ jobs:
             $versionNoV = $tag -replace '^v', ''
           }
 
-          $sourcePrefix = "s3://$env:BUCKET/tnr/releases/$versionNoV/windows/"
-          $destPrefix = "s3://$env:BUCKET/tnr/releases/latest/windows/"
-          $endpointUrl = $env:R2_ENDPOINT
+          $sourcePrefix = "gs://$env:BUCKET/tnr/releases/$versionNoV/windows/"
+          $destPrefix = "gs://$env:BUCKET/tnr/releases/latest/windows/"
 
           # Copy archives (.zip)
           $srcZipAmd64 = "$sourcePrefix" + "tnr_$versionNoV" + "_windows_amd64.zip"
           $destZipAmd64 = "$destPrefix" + "tnr_windows_amd64.zip"
-          aws s3 cp $srcZipAmd64 $destZipAmd64 --endpoint-url $endpointUrl --cache-control "public, max-age=3600" 2>&1 | Out-Null
+          gcloud storage cp $srcZipAmd64 $destZipAmd64 --cache-control "public, max-age=3600" 2>&1 | Out-Null
 
           $srcZipArm64 = "$sourcePrefix" + "tnr_$versionNoV" + "_windows_arm64.zip"
           $destZipArm64 = "$destPrefix" + "tnr_windows_arm64.zip"
-          aws s3 cp $srcZipArm64 $destZipArm64 --endpoint-url $endpointUrl --cache-control "public, max-age=3600" 2>&1 | Out-Null
+          gcloud storage cp $srcZipArm64 $destZipArm64 --cache-control "public, max-age=3600" 2>&1 | Out-Null
 
           # Copy installers (.msi) - note: MSI naming uses hyphens
           $srcMsiAmd64 = "$sourcePrefix" + "tnr-$versionNoV" + "-amd64.msi"
           $destMsiAmd64 = "$destPrefix" + "tnr_windows_amd64.msi"
-          aws s3 cp $srcMsiAmd64 $destMsiAmd64 --endpoint-url $endpointUrl --cache-control "public, max-age=3600" 2>&1 | Out-Null
+          gcloud storage cp $srcMsiAmd64 $destMsiAmd64 --cache-control "public, max-age=3600" 2>&1 | Out-Null
 
           $srcMsiArm64 = "$sourcePrefix" + "tnr-$versionNoV" + "-arm64.msi"
           $destMsiArm64 = "$destPrefix" + "tnr_windows_arm64.msi"
-          aws s3 cp $srcMsiArm64 $destMsiArm64 --endpoint-url $endpointUrl --cache-control "public, max-age=3600" 2>&1 | Out-Null
+          gcloud storage cp $srcMsiArm64 $destMsiArm64 --cache-control "public, max-age=3600" 2>&1 | Out-Null
 
           Write-Host "✅ Copied Windows files to latest/windows/"
 
@@ -431,7 +393,7 @@ jobs:
   # ============================================================================
   # Builds binaries for Linux amd64 and arm64
   # Creates distribution packages (.deb, .rpm, .apk)
-  # Publishes to GitHub releases and S3
+  # Publishes to GitHub releases and GCS
   # ============================================================================
   ubuntu_release:
     runs-on: ubuntu-latest
@@ -461,38 +423,25 @@ jobs:
       - name: Run tests
         run: go test ./... -v
 
-      # Configure R2 credentials directly (S3-compatible API)
-      # Uses R2 Access Key ID and Secret Access Key from GitHub secrets
-      - name: Configure R2 credentials
+      # Configure GCP credentials for GoReleaser + gcloud
+      - name: Configure GCP credentials
         env:
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
           set -euo pipefail
 
-          echo "=== R2 Credential Configuration Debug ==="
-          echo "R2 Access Key ID: ${R2_ACCESS_KEY_ID:0:10}... (truncated for security)"
-          echo "R2 Secret Access Key: ${R2_SECRET_ACCESS_KEY:+***SET***}"
+          CREDS_FILE="$RUNNER_TEMP/gcp-sa.json"
 
-          if [ -z "${R2_ACCESS_KEY_ID}" ] || [ -z "${R2_SECRET_ACCESS_KEY}" ]; then
-            echo "❌ R2 credentials not set in GitHub secrets"
-            echo "Please set R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY secrets"
-            exit 1
-          fi
+          echo "$GCP_SA_KEY" | base64 --decode > "$CREDS_FILE"
 
-          # Configure AWS CLI for R2
-          mkdir -p ~/.aws
-          cat > ~/.aws/credentials <<EOF
-          [default]
-          aws_access_key_id = ${R2_ACCESS_KEY_ID}
-          aws_secret_access_key = ${R2_SECRET_ACCESS_KEY}
-          EOF
+          {
+            echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE"
+            echo "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=$CREDS_FILE"
+          } >> "$GITHUB_ENV"
 
-          echo "AWS_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
-
-          echo "✅ AWS CLI credentials configured for R2"
-          echo "========================================="
+      # Setup gcloud CLI
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
 
       - name: Install Syft (for SBOM)
         run: |
@@ -513,15 +462,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
           GH_PAT: ${{ secrets.GH_PAT }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          GCP_BUCKET: ${{ secrets.GCP_BUCKET }}
 
       # Copy files to latest/linux folder
       # Copies all uploaded files to stable latest/ paths with simplified naming
       - name: Copy to latest/linux
         env:
-          BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          BUCKET: ${{ secrets.GCP_BUCKET }}
         run: |
           set -euo pipefail
 
@@ -533,27 +480,23 @@ jobs:
             VERSION_NO_V="${TAG#v}"
           fi
 
-          SOURCE_PREFIX="s3://${BUCKET}/tnr/releases/${VERSION_NO_V}/linux/"
-          DEST_PREFIX="s3://${BUCKET}/tnr/releases/latest/linux/"
-          ENDPOINT_URL="${R2_ENDPOINT}"
+          SOURCE_PREFIX="gs://${BUCKET}/tnr/releases/${VERSION_NO_V}/linux/"
+          DEST_PREFIX="gs://${BUCKET}/tnr/releases/latest/linux/"
 
           # Copy archives (.tar.gz)
-          aws s3 cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_linux_amd64.tar.gz" \
+          gcloud storage cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_linux_amd64.tar.gz" \
             "${DEST_PREFIX}tnr_linux_amd64.tar.gz" \
-            --endpoint-url "${ENDPOINT_URL}" \
             --cache-control "public, max-age=3600" || true
 
-          aws s3 cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_linux_arm64.tar.gz" \
+          gcloud storage cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_linux_arm64.tar.gz" \
             "${DEST_PREFIX}tnr_linux_arm64.tar.gz" \
-            --endpoint-url "${ENDPOINT_URL}" \
             --cache-control "public, max-age=3600" || true
 
           # Copy package files (.deb, .rpm, .apk)
           for arch in amd64 arm64; do
             for ext in deb rpm apk; do
-              aws s3 cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_linux_${arch}.${ext}" \
+              gcloud storage cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_linux_${arch}.${ext}" \
                 "${DEST_PREFIX}tnr_linux_${arch}.${ext}" \
-                --endpoint-url "${ENDPOINT_URL}" \
                 --cache-control "public, max-age=3600" || true
             done
           done
@@ -564,8 +507,8 @@ jobs:
   # Generate latest.json Job
   # ============================================================================
   # Runs after all three release jobs complete
-  # Generates complete latest.json manifest with all S3 asset URLs
-  # Uploads to S3 and attaches to GitHub release
+  # Generates complete latest.json manifest with all GCS asset URLs
+  # Uploads to GCS and attaches to GitHub release
   # ============================================================================
   generate_latest_json:
     needs: [macos_release, ubuntu_release, windows_release]
@@ -593,81 +536,63 @@ jobs:
             echo "Using git tag: $TAG"
           fi
 
-      # Configure R2 credentials directly (S3-compatible API)
-      # Uses R2 Access Key ID and Secret Access Key from GitHub secrets
-      - name: Configure R2 credentials
+      # Configure GCP credentials for GoReleaser + gcloud
+      - name: Configure GCP credentials
         env:
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
           set -euo pipefail
 
-          echo "=== R2 Credential Configuration Debug ==="
-          echo "R2 Access Key ID: ${R2_ACCESS_KEY_ID:0:10}... (truncated for security)"
-          echo "R2 Secret Access Key: ${R2_SECRET_ACCESS_KEY:+***SET***}"
+          CREDS_FILE="$RUNNER_TEMP/gcp-sa.json"
 
-          if [ -z "${R2_ACCESS_KEY_ID}" ] || [ -z "${R2_SECRET_ACCESS_KEY}" ]; then
-            echo "❌ R2 credentials not set in GitHub secrets"
-            echo "Please set R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY secrets"
-            exit 1
-          fi
+          echo "$GCP_SA_KEY" | base64 --decode > "$CREDS_FILE"
 
-          # Configure AWS CLI for R2
-          mkdir -p ~/.aws
-          cat > ~/.aws/credentials <<EOF
-          [default]
-          aws_access_key_id = ${R2_ACCESS_KEY_ID}
-          aws_secret_access_key = ${R2_SECRET_ACCESS_KEY}
-          EOF
+          {
+            echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE"
+            echo "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=$CREDS_FILE"
+          } >> "$GITHUB_ENV"
 
-          echo "AWS_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
-
-          echo "✅ AWS CLI credentials configured for R2"
-          echo "========================================="
+      # Setup gcloud CLI
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
 
       # Download and combine checksum files from all platforms
       - name: Combine checksum files
         env:
-          BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          BUCKET: ${{ secrets.GCP_BUCKET }}
         run: |
           set -euo pipefail
 
           VERSION_NO_V="${VERSION#v}"
-          ENDPOINT_URL="${R2_ENDPOINT}"
 
           # Download checksum files from all platforms
-          aws s3 cp "s3://${BUCKET}/tnr/releases/${VERSION_NO_V}/linux/checksums-linux.txt" checksums-linux.txt --endpoint-url "${ENDPOINT_URL}" || echo "Warning: Linux checksums not found"
-          aws s3 cp "s3://${BUCKET}/tnr/releases/${VERSION_NO_V}/macos/checksums-macos.txt" checksums-macos.txt --endpoint-url "${ENDPOINT_URL}" || echo "Warning: macOS checksums not found"
-          aws s3 cp "s3://${BUCKET}/tnr/releases/${VERSION_NO_V}/windows/checksums-windows.txt" checksums-windows.txt --endpoint-url "${ENDPOINT_URL}" || echo "Warning: Windows checksums not found"
+          gcloud storage cp "gs://${BUCKET}/tnr/releases/${VERSION_NO_V}/linux/checksums-linux.txt" checksums-linux.txt || echo "Warning: Linux checksums not found"
+          gcloud storage cp "gs://${BUCKET}/tnr/releases/${VERSION_NO_V}/macos/checksums-macos.txt" checksums-macos.txt || echo "Warning: macOS checksums not found"
+          gcloud storage cp "gs://${BUCKET}/tnr/releases/${VERSION_NO_V}/windows/checksums-windows.txt" checksums-windows.txt || echo "Warning: Windows checksums not found"
 
           # Combine all checksum files into one
           cat checksums-*.txt 2>/dev/null > checksums.txt || touch checksums.txt
 
-      # Upload combined checksums.txt to R2 root level
-      - name: Upload combined checksums.txt to R2
+      # Upload combined checksums.txt to GCS root level
+      - name: Upload combined checksums.txt to GCS
         env:
-          BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          BUCKET: ${{ secrets.GCP_BUCKET }}
         run: |
-          # Strip 'v' prefix from VERSION for R2 paths
+          # Strip 'v' prefix from VERSION for GCS paths
           VERSION_NO_V="${VERSION#v}"
-          ENDPOINT_URL="${R2_ENDPOINT}"
 
-          aws s3 cp checksums.txt "s3://${BUCKET}/tnr/releases/${VERSION_NO_V}/checksums.txt" \
-            --endpoint-url "${ENDPOINT_URL}" \
+          gcloud storage cp checksums.txt "gs://${BUCKET}/tnr/releases/${VERSION_NO_V}/checksums.txt" \
             --cache-control "public, max-age=31536000, immutable" \
             --content-type "text/plain"
 
-      # Generate latest.json with complete R2 asset URLs using custom domain
+      # Generate latest.json with complete GCS asset URLs using custom domain
       - name: Generate latest.json
         run: |
           set -euo pipefail
 
           VERSION_NO_V="${VERSION#v}"
 
-          BASE="https://gettnr.com/tnr/releases/${VERSION_NO_V}"
+          BASE="https://download.thundercompute.com/tnr/releases/${VERSION_NO_V}"
 
           cat > latest.json <<JSON
           {
@@ -687,15 +612,12 @@ jobs:
           }
           JSON
 
-      # Upload latest.json to R2
-      - name: Upload latest.json to R2
+      # Upload latest.json to GCS
+      - name: Upload latest.json to GCS
         env:
-          BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          BUCKET: ${{ secrets.GCP_BUCKET }}
         run: |
-          ENDPOINT_URL="${R2_ENDPOINT}"
-          aws s3 cp latest.json "s3://${BUCKET}/tnr/releases/latest.json" \
-            --endpoint-url "${ENDPOINT_URL}" \
+          gcloud storage cp latest.json "gs://${BUCKET}/tnr/releases/latest.json" \
             --cache-control "public, max-age=120" \
             --content-type "application/json"
 
