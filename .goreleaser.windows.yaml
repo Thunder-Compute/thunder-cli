@@ -59,6 +59,7 @@ blobs:
     bucket: "{{ .Env.R2_BUCKET }}"
     endpoint: "{{ .Env.R2_ENDPOINT }}"
     directory: "tnr/releases/{{ .Version }}/windows"
+    region: auto
     cache_control:
       - public
       - max-age=31536000
