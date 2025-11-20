@@ -308,6 +308,8 @@ jobs:
 
           echo "AWS_ACCESS_KEY_ID=$env:R2_ACCESS_KEY_ID" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "AWS_SECRET_ACCESS_KEY=$env:R2_SECRET_ACCESS_KEY" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "AWS_REGION=auto"          | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "AWS_DEFAULT_REGION=auto"  | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
           Write-Host "✅ AWS CLI credentials configured for R2" -ForegroundColor Green
           Write-Host "=========================================" -ForegroundColor Cyan
@@ -383,6 +385,15 @@ jobs:
           # YubiKey signing credentials (used by before_publish hook)
           CERT_THUMBPRINT: ${{ secrets.CERT_THUMBPRINT }}
           TIMESTAMP_SERVER: ${{ secrets.TIMESTAMP_SERVER }}
+
+      - name: Install AWS CLI v2
+        shell: pwsh
+        run: |
+          $msi = "$env:RUNNER_TEMP\AWSCLIV2.msi"
+          Invoke-WebRequest "https://awscli.amazonaws.com/AWSCLIV2.msi" -OutFile $msi
+          Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn" -Wait
+          $awsPath = "C:\Program Files\Amazon\AWSCLIV2"
+          echo "$awsPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       # Copy files to latest/windows folder
       # Copies all uploaded files to stable latest/ paths with simplified naming
