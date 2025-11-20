@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Install tnr by reading latest.json from Google Cloud Storage (via download.thundercompute.com), verifying checksums, and
+# Install tnr by reading latest.json from Google Cloud Storage, verifying checksums, and
 # installing to ~/.tnr/bin.
 
 CHANNEL=${TNR_UPDATE_CHANNEL:-stable}
@@ -127,8 +127,8 @@ if [[ -z "$LATEST_URL" ]]; then
   if [[ -n "${TNR_DOWNLOAD_BASE:-}" ]]; then
     LATEST_URL="${TNR_DOWNLOAD_BASE}/tnr/releases/latest.json"
   else
-    # Default to Google Cloud Storage via download.thundercompute.com custom domain
-    LATEST_URL="https://download.thundercompute.com/tnr/releases/latest.json"
+    # Default to Google Cloud Storage
+    LATEST_URL="https://storage.googleapis.com/thunder-cli/tnr/releases/latest.json"
   fi
 fi
 

@@ -40,7 +40,7 @@ const (
 )
 
 var defaultBases = []string{
-	"https://download.thundercompute.com",
+	"https://storage.googleapis.com/thunder-cli",
 }
 
 // Result captures the outcome of the update policy evaluation.
@@ -401,12 +401,11 @@ func normalizeVersion(v string) string {
 
 // targetArchiveName generates target archive name
 func targetArchiveName(version, osName string) string {
-	version = normalizeVersion(version)
 	fileOS := osName
 	if osName == "macos" {
 		fileOS = "darwin"
 	}
-	return fmt.Sprintf("tnr_%s_%s_%s%s", version, fileOS, detectPlatform().Arch, detectPlatform().Ext)
+	return fmt.Sprintf("tnr_%s_%s%s", fileOS, detectPlatform().Arch, detectPlatform().Ext)
 }
 
 func checksumCandidates(explicitURL, assetURL, version string, osName string) []string {
@@ -440,19 +439,18 @@ func deriveReleaseRoot(assetURL string) string {
 }
 
 func defaultAssetURL(man manifest, p platform) string {
-	if p.OS == "" || p.Arch == "" || man.Version == "" {
+	if p.OS == "" || p.Arch == "" {
 		return ""
 	}
 	base := defaultManifestBase()
 	if base == "" {
 		return ""
 	}
-	version := normalizeVersion(man.Version)
 	fileOS := p.OS
 	if p.OS == "macos" {
 		fileOS = "darwin"
 	}
-	return fmt.Sprintf("%s/tnr/releases/%s/%s/tnr_%s_%s_%s%s", base, version, p.OS, version, fileOS, p.Arch, p.Ext)
+	return fmt.Sprintf("%s/tnr/releases/latest/%s/tnr_%s_%s%s", base, p.OS, fileOS, p.Arch, p.Ext)
 }
 
 func defaultChecksumURL(man manifest, p platform, assetURL string) string {
@@ -524,7 +522,7 @@ func defaultManifestBase() string {
 	if base := strings.TrimSpace(os.Getenv("TNR_DOWNLOAD_BASE")); base != "" {
 		return strings.TrimRight(base, "/")
 	}
-	// Return first non-empty default base (Cloudflare R2 via gettnr.com)
+	// Return first non-empty default base (Google Cloud Storage)
 	for _, base := range defaultBases {
 		if base != "" {
 			return strings.TrimRight(base, "/")

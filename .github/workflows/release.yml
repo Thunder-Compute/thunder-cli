@@ -585,28 +585,30 @@ jobs:
             --cache-control "public, max-age=31536000, immutable" \
             --content-type "text/plain"
 
-      # Generate latest.json with complete GCS asset URLs using custom domain
+      # Generate latest.json with complete GCS asset URLs
       - name: Generate latest.json
         run: |
           set -euo pipefail
 
           VERSION_NO_V="${VERSION#v}"
 
-          BASE="https://download.thundercompute.com/tnr/releases/${VERSION_NO_V}"
+          BASE="https://storage.googleapis.com/thunder-cli/tnr/releases/${VERSION_NO_V}"
 
           cat > latest.json <<JSON
           {
             "version": "${VERSION}",
             "channel": "stable",
             "assets": {
-              "darwin/arm64": "${BASE}/macos/tnr_${VERSION_NO_V}_darwin_arm64.tar.gz",
-              "darwin/amd64": "${BASE}/macos/tnr_${VERSION_NO_V}_darwin_amd64.tar.gz",
+              "macos/arm64": "${BASE}/macos/tnr_${VERSION_NO_V}_darwin_arm64.tar.gz",
+              "macos/amd64": "${BASE}/macos/tnr_${VERSION_NO_V}_darwin_amd64.tar.gz",
+              "macos/pkg-amd64": "${BASE}/macos/tnr_${VERSION_NO_V}_darwin_amd64.pkg",
+              "macos/pkg-arm64": "${BASE}/macos/tnr_${VERSION_NO_V}_darwin_arm64.pkg",
               "linux/arm64": "${BASE}/linux/tnr_${VERSION_NO_V}_linux_arm64.tar.gz",
               "linux/amd64": "${BASE}/linux/tnr_${VERSION_NO_V}_linux_amd64.tar.gz",
               "windows/arm64": "${BASE}/windows/tnr_${VERSION_NO_V}_windows_arm64.zip",
               "windows/amd64": "${BASE}/windows/tnr_${VERSION_NO_V}_windows_amd64.zip",
-              "macos/pkg": "${BASE}/macos/tnr_${VERSION_NO_V}_darwin_amd64.pkg",
-              "windows/installer": "${BASE}/windows/tnr-${VERSION_NO_V}-amd64.msi",
+              "windows/installer-amd64": "${BASE}/windows/tnr-${VERSION_NO_V}-amd64.msi",
+              "windows/installer-arm64": "${BASE}/windows/tnr-${VERSION_NO_V}-arm64.msi",
               "checksums": "${BASE}/checksums.txt"
             }
           }

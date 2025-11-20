@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-# Install tnr by reading latest.json from Google Cloud Storage (via download.thundercompute.com) and installing to %LOCALAPPDATA%\tnr\bin
+# Install tnr by reading latest.json from Google Cloud Storage and installing to %LOCALAPPDATA%\tnr\bin
 
 $channel = $env:TNR_UPDATE_CHANNEL
 if (-not $channel) { $channel = 'stable' }
@@ -11,8 +11,8 @@ if (-not $latestUrl) {
   if ($env:TNR_DOWNLOAD_BASE) {
     $latestUrl = "$($env:TNR_DOWNLOAD_BASE)/tnr/releases/latest.json"
   } else {
-    # Default to Google Cloud Storage via download.thundercompute.com custom domain
-    $latestUrl = "https://download.thundercompute.com/tnr/releases/latest.json"
+    # Default to Google Cloud Storage
+    $latestUrl = "https://storage.googleapis.com/thunder-cli/tnr/releases/latest.json"
   }
 }
 

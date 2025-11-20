@@ -92,7 +92,7 @@ changelog:
 scoops:
   - name: tnr
     ids: [archive]
-    url_template: "https://download.thundercompute.com/tnr/releases/{{ .Version }}/windows/{{ .ArtifactName }}"
+    url_template: "https://storage.googleapis.com/thunder-cli/tnr/releases/{{ .Version }}/windows/{{ .ArtifactName }}"
     homepage: "https://github.com/Thunder-Compute/thunder-cli"
     description: "Thunder Compute CLI"
     license: MIT
