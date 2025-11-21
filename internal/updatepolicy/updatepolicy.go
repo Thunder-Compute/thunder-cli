@@ -399,13 +399,17 @@ func normalizeVersion(v string) string {
 	return v
 }
 
-// targetArchiveName generates target archive name
+// targetArchiveName generates the expected archive filename for checksum lookup.
+// It must match the naming used in release artifacts, e.g. tnr_2.0.1_linux_amd64.tar.gz.
 func targetArchiveName(version, osName string) string {
+	v := normalizeVersion(version)
+
 	fileOS := osName
 	if osName == "macos" {
 		fileOS = "darwin"
 	}
-	return fmt.Sprintf("tnr_%s_%s%s", fileOS, detectPlatform().Arch, detectPlatform().Ext)
+
+	return fmt.Sprintf("tnr_%s_%s_%s%s", v, fileOS, detectPlatform().Arch, detectPlatform().Ext)
 }
 
 func checksumCandidates(explicitURL, assetURL, version string, osName string) []string {
