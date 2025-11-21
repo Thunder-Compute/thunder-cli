@@ -11,10 +11,15 @@ INSTALL_DIR="${HOME}/.tnr/bin"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
+
 case "$ARCH" in
   x86_64|amd64) ARCH=amd64;;
   arm64|aarch64) ARCH=arm64;;
   *) echo "Unsupported arch: $ARCH" >&2; exit 1;;
+esac
+
+case "$OS" in
+  darwin) OS="macos" ;;
 esac
 
 # Check for required commands
