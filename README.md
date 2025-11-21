@@ -66,8 +66,8 @@ curl -fsSL https://raw.githubusercontent.com/Thunder-Compute/thunder-cli/main/sc
 
 **Direct download:**
 
-- [Download for Windows (Intel/AMD)](https://storage.googleapis.com/thunder-cli/tnr/releases/latest/windows/tnr_windows_amd64.msi) **(Temporarily Unavailable)**
-- [Download for Windows (ARM)](https://storage.googleapis.com/thunder-cli/tnr/releases/latest/windows/tnr_windows_arm64.msi) **(Temporarily Unavailable)**
+- [Download for Windows (Intel/AMD)](https://storage.googleapis.com/thunder-cli/tnr/releases/latest/windows/tnr_windows_amd64.msi)
+- [Download for Windows (ARM)](https://storage.googleapis.com/thunder-cli/tnr/releases/latest/windows/tnr_windows_arm64.msi)
 
 **Scoop:**
 
