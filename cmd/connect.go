@@ -506,8 +506,7 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 }
 
 func checkWindowsOpenSSH() error {
-	cmd := exec.Command("ssh", "-V")
-	if err := cmd.Run(); err != nil {
+	if _, err := exec.LookPath("ssh"); err != nil {
 		return fmt.Errorf("OpenSSH not found. Please install OpenSSH on Windows")
 	}
 	return nil
