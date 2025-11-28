@@ -120,7 +120,6 @@ func runDelete(args []string) error {
 		return fmt.Errorf("instance '%s' is already being deleted", instanceID)
 	}
 
-	fmt.Println()
 	successMsg, err := tui.RunDeleteProgress(client, instanceID)
 	if err != nil {
 		return fmt.Errorf("failed to delete instance: %w\n\nPossible reasons:\n• Instance may already be deleted\n• Server error occurred\n\nTry running 'tnr status' to check the instance state", err)

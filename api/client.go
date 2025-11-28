@@ -35,14 +35,19 @@ func (c *Client) do(ctx context.Context, req *http.Request) (*http.Response, err
 	return c.httpClient.Do(req)
 }
 
+func (c *Client) setHeaders(req *http.Request) {
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Thunder-Client", "GO-CLI")
+}
+
 func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, error) {
 	req, err := http.NewRequest("GET", baseURL+"/instances/list?update_ips=true", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
 
 	resp, err := c.do(ctx, req)
 	if err != nil {
@@ -120,8 +125,7 @@ func (c *Client) AddSSHKeyCtx(ctx context.Context, instanceID string) (*AddSSHKe
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	httpReq.Header.Set("Authorization", "Bearer "+c.token)
-	httpReq.Header.Set("Content-Type", "application/json")
+	c.setHeaders(httpReq)
 
 	resp, err := c.do(ctx, httpReq)
 	if err != nil {
@@ -156,8 +160,7 @@ func (c *Client) GetNextDeviceIDCtx(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
 
 	resp, err := c.do(ctx, req)
 	if err != nil {
@@ -199,8 +202,7 @@ func (c *Client) ListInstances() ([]Instance, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -242,8 +244,7 @@ func (c *Client) ListTemplates() ([]Template, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("Content-Type", "application/json")
+	c.setHeaders(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -290,8 +291,7 @@ func (c *Client) CreateInstance(req CreateInstanceRequest) (*CreateInstanceRespo
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	httpReq.Header.Set("Authorization", "Bearer "+c.token)
-	httpReq.Header.Set("Content-Type", "application/json")
+	c.setHeaders(httpReq)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -328,8 +328,7 @@ func (c *Client) DeleteInstance(instanceID string) (*DeleteInstanceResponse, err
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	httpReq.Header.Set("Authorization", "Bearer "+c.token)
-	httpReq.Header.Set("Content-Type", "application/json")
+	c.setHeaders(httpReq)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {

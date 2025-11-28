@@ -178,19 +178,5 @@ func RenderSCPHelp(cmd *cobra.Command) {
 	output.WriteString(DescStyle.Render("Use instance ID from 'tnr status' command"))
 	output.WriteString("\n\n")
 
-	// Resources Section
-	output.WriteString(SectionStyle.Render("● RESOURCES"))
-	output.WriteString("\n\n")
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Docs"))
-	output.WriteString("   ")
-	output.WriteString(LinkStyle.Render("https://www.thundercompute.com/docs/cli-reference"))
-	output.WriteString("\n")
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Troubleshooting"))
-	output.WriteString("   ")
-	output.WriteString(LinkStyle.Render("https://www.thundercompute.com/docs/troubleshooting"))
-	output.WriteString("\n\n")
-
 	fmt.Fprint(os.Stdout, output.String())
 }

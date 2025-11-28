@@ -55,7 +55,7 @@ func RenderRootHelp(cmd *cobra.Command) {
 	output.WriteString("\n")
 
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("3.  Connect SSH"))
+	output.WriteString(CommandStyle.Render("3.  Connect"))
 	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("tnr connect <id>"))
 	output.WriteString("\n")
@@ -98,23 +98,9 @@ func RenderRootHelp(cmd *cobra.Command) {
 	output.WriteString("\n")
 
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Completion"))
+	output.WriteString(CommandStyle.Render("Version"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr completion <bash|zsh|fish|powershell>"))
-	output.WriteString("\n\n")
-
-	// Resources Section
-	output.WriteString(SectionStyle.Render("● RESOURCES"))
-	output.WriteString("\n\n")
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Docs"))
-	output.WriteString("   ")
-	output.WriteString(LinkStyle.Render("https://www.thundercompute.com/docs/cli-reference"))
-	output.WriteString("\n")
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Troubleshooting"))
-	output.WriteString("   ")
-	output.WriteString(LinkStyle.Render("https://www.thundercompute.com/docs/troubleshooting"))
+	output.WriteString(DescStyle.Render("tnr --version"))
 	output.WriteString("\n\n")
 
 	fmt.Fprint(os.Stdout, output.String())
