@@ -83,7 +83,7 @@ jobs:
 
       # Setup gcloud CLI
       - name: Setup gcloud CLI
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       # Install Syft for generating Software Bill of Materials
       - name: Install Syft (for SBOM)
@@ -278,7 +278,7 @@ jobs:
 
       # Setup gcloud CLI
       - name: Setup gcloud CLI
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       # Install .NET SDK and WiX v4
       # Using temp directory to avoid permission issues with self-hosted runners
@@ -441,7 +441,7 @@ jobs:
 
       # Setup gcloud CLI
       - name: Setup gcloud CLI
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Install Syft (for SBOM)
         run: |
@@ -554,7 +554,7 @@ jobs:
 
       # Setup gcloud CLI
       - name: Setup gcloud CLI
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       # Download and combine checksum files from all platforms
       - name: Combine checksum files
