@@ -138,6 +138,15 @@ func PerformSCPUploadCtx(ctx context.Context, client *SSHClient, localPath, remo
 		return uploadDirectoryCtx(ctx, scpClient, localPath, expandedRemote, progressCallback)
 	}
 
+	parentDir := filepath.Dir(expandedRemote)
+	if parentDir != "." && parentDir != "/" && parentDir != expandedRemote {
+		parentDir = strings.ReplaceAll(parentDir, "\\", "/")
+		cmd := fmt.Sprintf("mkdir -p %s", shellEscape(parentDir))
+		if _, err := ExecuteSSHCommand(client, cmd); err != nil {
+			return fmt.Errorf("failed to create remote directory: %w", err)
+		}
+	}
+
 	return uploadFileCtx(ctx, scpClient, localPath, expandedRemote, progressCallback)
 }
 

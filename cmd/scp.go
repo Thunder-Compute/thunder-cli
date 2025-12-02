@@ -319,7 +319,9 @@ func runSCP(sources []string, destination string) error {
 			localPath = filepath.Clean(localPath)
 
 			remotePath := destPath.Path
-			if len(sourcePaths) > 1 || strings.HasSuffix(remotePath, "/") {
+			if remotePath == "" {
+				remotePath = "./" + filepath.Base(localPath)
+			} else if len(sourcePaths) > 1 || strings.HasSuffix(remotePath, "/") {
 				remotePath = strings.TrimSuffix(remotePath, "/") + "/" + filepath.Base(localPath)
 			}
 

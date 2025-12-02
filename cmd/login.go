@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	tea "github.com/charmbracelet/bubbletea"
@@ -251,6 +252,14 @@ func runLogin() error {
 	// Check environment variable as fallback if no token in config file
 	if err != nil || config == nil || config.Token == "" {
 		if envToken := os.Getenv("TNR_API_TOKEN"); envToken != "" {
+			client := api.NewClient(envToken)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			if err := client.ValidateToken(ctx); err != nil {
+				return fmt.Errorf("token validation failed: %w", err)
+			}
+
 			authResp := AuthResponse{
 				Token: envToken,
 			}
@@ -263,6 +272,14 @@ func runLogin() error {
 	}
 
 	if loginToken != "" {
+		client := api.NewClient(loginToken)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := client.ValidateToken(ctx); err != nil {
+			return fmt.Errorf("token validation failed: %w", err)
+		}
+
 		authResp := AuthResponse{
 			Token: loginToken,
 		}
@@ -324,8 +341,17 @@ func runInteractiveLogin() error {
 	}
 
 	if model.State() == tui.LoginStateSuccess {
+		token := model.Token()
+		client := api.NewClient(token)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := client.ValidateToken(ctx); err != nil {
+			return fmt.Errorf("token validation failed: %w", err)
+		}
+
 		authResp := AuthResponse{
-			Token: model.Token(),
+			Token: token,
 		}
 		if err := saveConfig(authResp); err != nil {
 			return fmt.Errorf("failed to save credentials: %w", err)

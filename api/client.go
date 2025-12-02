@@ -41,6 +41,33 @@ func (c *Client) setHeaders(req *http.Request) {
 	req.Header.Set("Thunder-Client", "GO-CLI")
 }
 
+func (c *Client) ValidateToken(ctx context.Context) error {
+	req, err := http.NewRequest("GET", baseURL+"/v1/auth/validate", nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	c.setHeaders(req)
+
+	resp, err := c.do(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to validate token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		return fmt.Errorf("authentication failed: invalid token")
+	}
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("token validation failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	_, _ = io.ReadAll(resp.Body)
+	return nil
+}
+
 func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, error) {
 	req, err := http.NewRequest("GET", baseURL+"/instances/list?update_ips=true", nil)
 	if err != nil {
