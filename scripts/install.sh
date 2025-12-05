@@ -188,13 +188,58 @@ install -m 0755 "$tmpdir/tnr" "$INSTALL_DIR/tnr"
 
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
-  *) 
-    echo ""
-    echo "Add $INSTALL_DIR to your PATH:"
-    echo "  export PATH=\"\$HOME/.tnr/bin:\$PATH\""
-    echo ""
-    echo "Or add to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
-    echo "  echo 'export PATH=\"\$HOME/.tnr/bin:\$PATH\"' >> ~/.bashrc"
+  *)
+    # Detect shell and pick the right profile file
+    PROFILE=""
+    PROFILE_FALLBACK="$HOME/.profile"
+    
+    if [[ -n "${ZSH_VERSION:-}" ]] || [[ "$SHELL" == */zsh ]]; then
+      PROFILE="$HOME/.zshrc"
+    elif [[ -n "${BASH_VERSION:-}" ]] || [[ "$SHELL" == */bash ]]; then
+      PROFILE="$HOME/.bashrc"
+      # Support .bash_profile on macOS (default for login shells)
+      if [[ -f "$HOME/.bash_profile" ]]; then
+        PROFILE="$HOME/.bash_profile"
+      fi
+    else
+      PROFILE="$HOME/.profile"
+    fi
+
+    # Function to add PATH to a profile file
+    add_to_profile() {
+      local file="$1"
+      if [[ -w "$(dirname "$file")" ]] && ! grep -q '.tnr/bin' "$file" 2>/dev/null; then
+        echo "" >> "$file"
+        echo '# Added by tnr installer' >> "$file"
+        echo 'export PATH="$HOME/.tnr/bin:$PATH"' >> "$file"
+        return 0
+      fi
+      return 1
+    }
+
+    # Add to primary profile
+    ADDED_TO=""
+    if [[ -n "$PROFILE" ]] && add_to_profile "$PROFILE"; then
+      ADDED_TO="$PROFILE"
+    fi
+
+    # Also add to .profile for /bin/sh compatibility (unless it's already the primary)
+    if [[ "$PROFILE" != "$PROFILE_FALLBACK" ]] && add_to_profile "$PROFILE_FALLBACK"; then
+      if [[ -z "$ADDED_TO" ]]; then
+        ADDED_TO="$PROFILE_FALLBACK"
+      else
+        ADDED_TO="$ADDED_TO and $PROFILE_FALLBACK"
+      fi
+    fi
+
+    if [[ -n "$ADDED_TO" ]]; then
+      echo "✓ Added $INSTALL_DIR to PATH in $ADDED_TO"
+      echo "  Run '. $PROFILE' or 'source $PROFILE' or restart your terminal to use tnr"
+    else
+      echo ""
+      echo "Could not write to shell profile. Add $INSTALL_DIR to your PATH manually:"
+      echo "  export PATH=\"\$HOME/.tnr/bin:\$PATH\""
+    fi
     ;;
 esac
 

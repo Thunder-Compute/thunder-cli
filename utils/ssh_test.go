@@ -73,11 +73,23 @@ func savePrivateKeyToFile(t *testing.T, privateKey *rsa.PrivateKey, path string)
 // setupSSHTestServer creates and starts an SSH test server that accepts connections
 // using the provided client public key. Returns the server instance and a cleanup function.
 func setupSSHTestServer(t *testing.T, clientPublicKey ssh.PublicKey) (*testSSHServer, func()) {
-	hostSigner, err := rsa.GenerateKey(rand.Reader, 2048)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
+	server, cleanup, err := startSSHTestServerWithListener(listener, clientPublicKey)
+	require.NoError(t, err)
+	return server, cleanup
+}
+
+func startSSHTestServerWithListener(listener net.Listener, clientPublicKey ssh.PublicKey) (*testSSHServer, func(), error) {
+	hostSigner, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	hostKeySigner, err := ssh.NewSignerFromKey(hostSigner)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	config := &ssh.ServerConfig{
 		PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
@@ -89,61 +101,16 @@ func setupSSHTestServer(t *testing.T, clientPublicKey ssh.PublicKey) (*testSSHSe
 	}
 	config.AddHostKey(hostKeySigner)
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-
 	addr := listener.Addr().(*net.TCPAddr)
-	port := addr.Port
-
 	server := &testSSHServer{
 		listener: listener,
 		config:   config,
 		hostKey:  hostKeySigner,
-		port:     port,
+		port:     addr.Port,
 		stop:     make(chan struct{}),
 	}
 
-	go func() {
-		for {
-			select {
-			case <-server.stop:
-				return
-			default:
-				conn, err := listener.Accept()
-				if err != nil {
-					select {
-					case <-server.stop:
-						return
-					default:
-						continue
-					}
-				}
-
-				go func() {
-					_, chans, reqs, err := ssh.NewServerConn(conn, config)
-					if err != nil {
-						return
-					}
-
-					go ssh.DiscardRequests(reqs)
-
-					for newChannel := range chans {
-						if newChannel.ChannelType() != "session" {
-							newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
-							continue
-						}
-
-						channel, _, err := newChannel.Accept()
-						if err != nil {
-							continue
-						}
-
-						channel.Close()
-					}
-				}()
-			}
-		}
-	}()
+	go server.serve()
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -152,7 +119,64 @@ func setupSSHTestServer(t *testing.T, clientPublicKey ssh.PublicKey) (*testSSHSe
 		listener.Close()
 	}
 
-	return server, cleanup
+	return server, cleanup, nil
+}
+
+func (s *testSSHServer) serve() {
+	for {
+		select {
+		case <-s.stop:
+			return
+		default:
+		}
+
+		conn, err := s.listener.Accept()
+		if err != nil {
+			select {
+			case <-s.stop:
+				return
+			default:
+				continue
+			}
+		}
+
+		go s.handleConn(conn)
+	}
+}
+
+func (s *testSSHServer) handleConn(conn net.Conn) {
+	defer conn.Close()
+
+	_, chans, reqs, err := ssh.NewServerConn(conn, s.config)
+	if err != nil {
+		return
+	}
+
+	go ssh.DiscardRequests(reqs)
+
+	for newChannel := range chans {
+		if newChannel.ChannelType() != "session" {
+			newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
+			continue
+		}
+
+		channel, requests, err := newChannel.Accept()
+		if err != nil {
+			continue
+		}
+
+		for req := range requests {
+			if req.Type == "exec" {
+				req.Reply(true, nil)
+				exitStatus := []byte{0, 0, 0, 0}
+				channel.SendRequest("exit-status", false, exitStatus)
+				channel.Close()
+				break
+			}
+			req.Reply(false, nil)
+		}
+		channel.Close()
+	}
 }
 
 // readKnownHosts reads the known_hosts file and returns its contents
@@ -310,5 +334,247 @@ func TestSSHKnownHosts(t *testing.T) {
 
 		knownHostsContent := readKnownHosts(t, knownHostsPath)
 		assert.Empty(t, knownHostsContent, "known_hosts should not be modified when verification is disabled")
+	})
+}
+
+func TestRobustSSHConnectCtxRetriesUntilServerAvailable(t *testing.T) {
+	tmpDir, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	clientPrivateKey, _, clientPublicKey := generateRSAKeyPair(t)
+	keyFile := filepath.Join(tmpDir, "retry_key")
+	savePrivateKeyToFile(t, clientPrivateKey, keyFile)
+
+	// Reserve a port and release it so initial dials see connection refused.
+	tmpListener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := tmpListener.Addr().(*net.TCPAddr).Port
+	tmpListener.Close()
+
+	serverReady := make(chan func(), 1)
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+		if err != nil {
+			serverReady <- func() {}
+			return
+		}
+		server, srvCleanup, err := startSSHTestServerWithListener(listener, clientPublicKey)
+		if err != nil {
+			listener.Close()
+			serverReady <- func() {}
+			return
+		}
+		serverReady <- func() {
+			srvCleanup()
+		}
+		_ = server // keep reference alive until cleanup executes
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client, err := RobustSSHConnectCtx(ctx, "127.0.0.1", keyFile, port, 5)
+	require.NoError(t, err)
+	require.NotNil(t, client)
+	client.Close()
+
+	cleanupServer := <-serverReady
+	cleanupServer()
+}
+
+func TestRobustSSHConnectCtxHonorsContextCancellation(t *testing.T) {
+	tmpDir, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	clientPrivateKey, _, _ := generateRSAKeyPair(t)
+	keyFile := filepath.Join(tmpDir, "cancel_key")
+	savePrivateKeyToFile(t, clientPrivateKey, keyFile)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	_, err := RobustSSHConnectCtx(ctx, "127.0.0.1", keyFile, 65500, 5)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cancelled")
+}
+
+func TestVerifySSHConnectionCtxSuccess(t *testing.T) {
+	tmpDir, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	clientPrivateKey, _, clientPublicKey := generateRSAKeyPair(t)
+	keyFile := filepath.Join(tmpDir, "verify_key")
+	savePrivateKeyToFile(t, clientPrivateKey, keyFile)
+
+	server, serverCleanup := setupSSHTestServer(t, clientPublicKey)
+	defer serverCleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := VerifySSHConnectionCtx(ctx, "127.0.0.1", keyFile, server.port)
+	require.NoError(t, err)
+}
+
+func TestVerifySSHConnectionCtxRespectsContext(t *testing.T) {
+	tmpDir, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	clientPrivateKey, _, _ := generateRSAKeyPair(t)
+	keyFile := filepath.Join(tmpDir, "verify_cancel_key")
+	savePrivateKeyToFile(t, clientPrivateKey, keyFile)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	err := VerifySSHConnectionCtx(ctx, "127.0.0.1", keyFile, 65501)
+	require.Error(t, err)
+	// Error can be either "SSH verification failed" or "SSH connection cancelled" depending on timing
+	assert.True(t, strings.Contains(err.Error(), "SSH verification failed") ||
+		strings.Contains(err.Error(), "SSH connection cancelled"),
+		"unexpected error: %s", err.Error())
+}
+
+func TestNewSSHConfigErrors(t *testing.T) {
+	t.Run("missing key file", func(t *testing.T) {
+		_, err := newSSHConfig("ubuntu", filepath.Join(t.TempDir(), "missing"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to read private key")
+	})
+
+	t.Run("invalid key contents", func(t *testing.T) {
+		dir := t.TempDir()
+		keyPath := filepath.Join(dir, "bad_key")
+		require.NoError(t, os.WriteFile(keyPath, []byte("not a key"), 0600))
+		_, err := newSSHConfig("ubuntu", keyPath)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse private key")
+	})
+}
+
+func TestRobustSSHConnectCtxTimeoutVsCancellation(t *testing.T) {
+	tmpDir, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	clientPrivateKey, _, _ := generateRSAKeyPair(t)
+	keyFile := filepath.Join(tmpDir, "timeout_key")
+	savePrivateKeyToFile(t, clientPrivateKey, keyFile)
+
+	t.Run("timeout", func(t *testing.T) {
+		ctx := context.Background()
+		_, err := RobustSSHConnectCtx(ctx, "127.0.0.1", keyFile, 65520, 1)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "timeout")
+	})
+
+	t.Run("cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		_, err := RobustSSHConnectCtx(ctx, "127.0.0.1", keyFile, 65521, 5)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cancelled")
+	})
+}
+
+func TestRobustSSHConnectCtxAuthErrorRetries(t *testing.T) {
+	// Auth errors are now retried (key may still be propagating to instance)
+	// so this test verifies the retry behavior with a wrong key eventually times out
+	tmpDir, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	acceptedKey, acceptedSigner, acceptedPublic := generateRSAKeyPair(t)
+	_ = acceptedSigner // keep for clarity
+	rejectedKey, _, _ := generateRSAKeyPair(t)
+
+	acceptedKeyPath := filepath.Join(tmpDir, "accepted")
+	savePrivateKeyToFile(t, acceptedKey, acceptedKeyPath)
+
+	rejectedKeyPath := filepath.Join(tmpDir, "rejected")
+	savePrivateKeyToFile(t, rejectedKey, rejectedKeyPath)
+
+	server, serverCleanup := setupSSHTestServer(t, acceptedPublic)
+	defer serverCleanup()
+
+	// Use a short timeout since auth errors are now retried
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	_, err := RobustSSHConnectCtx(ctx, "127.0.0.1", rejectedKeyPath, server.port, 3)
+	require.Error(t, err)
+	// Should either timeout or be cancelled (auth errors are retried until timeout)
+	assert.True(t, strings.Contains(err.Error(), "timeout") ||
+		strings.Contains(err.Error(), "cancelled"),
+		"unexpected error: %s", err.Error())
+}
+
+// customNetError implements net.Error with configurable behavior
+type customNetError struct {
+	msg       string
+	timeout   bool
+	temporary bool
+}
+
+func (e *customNetError) Error() string   { return e.msg }
+func (e *customNetError) Timeout() bool   { return e.timeout }
+func (e *customNetError) Temporary() bool { return e.temporary }
+
+func TestShouldRetryDial(t *testing.T) {
+	t.Run("nil error", func(t *testing.T) {
+		assert.False(t, shouldRetryDial(nil))
+	})
+
+	t.Run("timeout net error", func(t *testing.T) {
+		err := &customNetError{msg: "timeout", timeout: true}
+		assert.True(t, shouldRetryDial(err))
+	})
+
+	t.Run("temporary net error", func(t *testing.T) {
+		err := &customNetError{msg: "temporary", temporary: true}
+		assert.True(t, shouldRetryDial(err))
+	})
+
+	t.Run("connection refused", func(t *testing.T) {
+		assert.True(t, shouldRetryDial(fmt.Errorf("dial tcp 1.2.3.4:22: connection refused")))
+	})
+
+	t.Run("no route to host", func(t *testing.T) {
+		assert.True(t, shouldRetryDial(fmt.Errorf("dial tcp 1.2.3.4:22: no route to host")))
+	})
+
+	t.Run("operation timed out", func(t *testing.T) {
+		assert.True(t, shouldRetryDial(fmt.Errorf("dial tcp: operation timed out")))
+	})
+
+	t.Run("non retryable", func(t *testing.T) {
+		assert.False(t, shouldRetryDial(fmt.Errorf("ssh: authentication failed")))
+	})
+}
+
+func TestShouldRetrySSH(t *testing.T) {
+	t.Run("nil error", func(t *testing.T) {
+		assert.False(t, shouldRetrySSH(nil))
+	})
+
+	t.Run("connection closed", func(t *testing.T) {
+		assert.True(t, shouldRetrySSH(fmt.Errorf("ssh: connection closed")))
+	})
+
+	t.Run("kex exchange issue", func(t *testing.T) {
+		assert.True(t, shouldRetrySSH(fmt.Errorf("kex_exchange_identification: Connection closed")))
+	})
+
+	t.Run("handshake failed", func(t *testing.T) {
+		assert.True(t, shouldRetrySSH(fmt.Errorf("ssh: handshake failed")))
+	})
+
+	t.Run("auth errors are retryable", func(t *testing.T) {
+		// Auth errors are now retried (key may still be propagating to instance)
+		assert.True(t, shouldRetrySSH(fmt.Errorf("ssh: unable to authenticate")))
+	})
+
+	t.Run("non retryable", func(t *testing.T) {
+		// Some errors should not be retried
+		assert.False(t, shouldRetrySSH(fmt.Errorf("some random unrelated error")))
 	})
 }

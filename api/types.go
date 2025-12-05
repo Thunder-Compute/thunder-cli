@@ -1,5 +1,7 @@
 package api
 
+import "context"
+
 type Instance struct {
 	ID        string `json:"-"`
 	UUID      string `json:"uuid"`
@@ -67,4 +69,14 @@ type AddSSHKeyResponse struct {
 
 type DeviceIDResponse struct {
 	ID string `json:"id"`
+}
+
+// ConnectClient defines the interface for API operations used by the connect command.
+// This interface allows for mocking in tests.
+type ConnectClient interface {
+	ListInstances() ([]Instance, error)
+	ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, error)
+	AddSSHKeyCtx(ctx context.Context, instanceID string) (*AddSSHKeyResponse, error)
+	GetLatestBinaryHashCtx(ctx context.Context) (string, error)
+	GetNextDeviceID() (string, error)
 }

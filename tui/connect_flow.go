@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -77,6 +78,7 @@ func NewConnectFlowModel(instanceID string) ConnectFlowModel {
 		{Name: "SSH key management", Status: PhasePending},
 		{Name: "Establishing SSH connection", Status: PhasePending},
 		{Name: "Setting up instance", Status: PhasePending},
+		{Name: "Verifying SSH connection", Status: PhasePending},
 	}
 
 	styles := connectFlowStyles{
@@ -84,7 +86,7 @@ func NewConnectFlowModel(instanceID string) ConnectFlowModel {
 		phase:      lipgloss.NewStyle().PaddingLeft(2),
 		inProgress: PrimaryStyle(),
 		pending:    SubtleTextStyle(),
-		skipped:    PrimaryStyle().Foreground(lipgloss.Color("#6272A4")),
+		skipped:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.NeutralColor)),
 		duration:   DurationStyle(),
 	}
 

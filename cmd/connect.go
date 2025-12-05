@@ -27,6 +27,33 @@ var (
 	debugMode   bool
 )
 
+// mocks for testing
+type connectOptions struct {
+	client       api.ConnectClient
+	skipTTYCheck bool
+	skipTUI      bool
+	sshConnector func(ctx context.Context, ip, keyFile string, port, maxWait int) (sshClient, error)
+	execCommand  func(name string, args ...string) *exec.Cmd
+	configLoader func() (*Config, error)
+}
+
+type sshClient interface {
+	Close() error
+}
+
+func defaultConnectOptions(token string) *connectOptions {
+	return &connectOptions{
+		client:       api.NewClient(token),
+		skipTTYCheck: false,
+		skipTUI:      false,
+		sshConnector: func(ctx context.Context, ip, keyFile string, port, maxWait int) (sshClient, error) {
+			return utils.RobustSSHConnectCtx(ctx, ip, keyFile, port, maxWait)
+		},
+		execCommand:  exec.Command,
+		configLoader: LoadConfig,
+	}
+}
+
 // connectCmd represents the connect command
 var connectCmd = &cobra.Command{
 	Use:   "connect [instance_id]",
@@ -56,7 +83,21 @@ func init() {
 }
 
 func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
-	config, err := LoadConfig()
+	return runConnectWithOptions(instanceID, tunnelPortsStr, debug, nil)
+}
+
+// runConnectWithOptions is the internal implementation that accepts options for testing.
+// If opts is nil, default options are used.
+func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug bool, opts *connectOptions) error {
+	var config *Config
+	var err error
+
+	configLoader := LoadConfig
+	if opts != nil && opts.configLoader != nil {
+		configLoader = opts.configLoader
+	}
+
+	config, err = configLoader()
 	if err != nil {
 		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
 	}
@@ -65,11 +106,17 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
 	}
 
-	if !termx.IsTerminal(os.Stdout.Fd()) {
+	skipTTYCheck := opts != nil && opts.skipTTYCheck
+	if !skipTTYCheck && !termx.IsTerminal(os.Stdout.Fd()) {
 		return fmt.Errorf("error running connect TUI: not a TTY")
 	}
 
-	client := api.NewClient(config.Token)
+	var client api.ConnectClient
+	if opts != nil && opts.client != nil {
+		client = opts.client
+	} else {
+		client = api.NewClient(config.Token)
+	}
 
 	busy := tui.NewBusyModel("Fetching instances...")
 	bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
@@ -266,6 +313,14 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 		port = 22
 	}
 
+	// Acquire per-instance lock to prevent concurrent connect operations
+	instanceLock, err := utils.AcquireInstanceLock(instanceID)
+	if err != nil {
+		shutdownTUI()
+		return err
+	}
+	defer instanceLock.Release()
+
 	phaseTimings["instance_validation"] = time.Since(phase2Start)
 	tui.SendPhaseUpdate(p, 1, tui.PhaseCompleted, fmt.Sprintf("Found: %s (%s)", instance.Name, instance.IP), phaseTimings["instance_validation"])
 
@@ -273,6 +328,7 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 	tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Checking SSH keys...", 0)
 
 	keyFile := utils.GetKeyFile(instance.UUID)
+	newKeyCreated := false
 	if checkCancelled() {
 		return nil
 	}
@@ -291,6 +347,7 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 			shutdownTUI()
 			return fmt.Errorf("failed to save private key: %w", err)
 		}
+		newKeyCreated = true
 	}
 
 	phaseTimings["ssh_key_management"] = time.Since(phase3Start)
@@ -299,18 +356,40 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 	phase4Start := time.Now()
 	tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Connecting to %s:%d...", instance.IP, port), 0)
 
+	progressCallback := func(info utils.SSHRetryInfo) {
+		switch info.Status {
+		case utils.SSHStatusDialing:
+			tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Waiting for instance to be ready...", 0)
+		case utils.SSHStatusHandshake:
+			if newKeyCreated {
+				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Setting up SSH, this can take a minute...", 0)
+			} else {
+				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Retrying SSH connection...", 0)
+			}
+		case utils.SSHStatusAuth:
+			if newKeyCreated {
+				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Waiting for key to propagate...", 0)
+			} else {
+				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Authentication failed, retrying...", 0)
+			}
+		case utils.SSHStatusSuccess:
+			tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "SSH connection established", 0)
+		}
+	}
+
 	// Establish SSH connection with 2-minute timeout and retry logic
 	if checkCancelled() {
 		return nil
 	}
-	sshClient, err := utils.RobustSSHConnectCtx(cancelCtx, instance.IP, keyFile, port, 120)
+	var sshClient *utils.SSHClient
+	sshClient, err = utils.RobustSSHConnectWithProgress(cancelCtx, instance.IP, keyFile, port, 120, progressCallback)
 	if checkCancelled() {
 		return nil
 	}
 
-	// If authentication fails, try generating a new key and retry
-	if err != nil && utils.IsAuthError(err) {
-		tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH key not found, retrying. This typically occurs when your node crashes due to OOM, low disk space, or other reasons. Data may have been lost.", 0)
+	// If auth/key error with an existing key, regenerate and retry once
+	if err != nil && (utils.IsAuthError(err) || utils.IsKeyParseError(err)) && !newKeyCreated {
+		tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH key not found on instance. This typically occurs when your node crashes due to OOM, low disk space, or other reasons.", 0)
 
 		keyResp, keyErr := client.AddSSHKeyCtx(cancelCtx, instanceID)
 		if checkCancelled() {
@@ -328,16 +407,27 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 
 		tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Retrying connection with new key to %s:%d...", instance.IP, port), 0)
 
+		retryCallback := func(info utils.SSHRetryInfo) {
+			switch info.Status {
+			case utils.SSHStatusDialing:
+				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Waiting for instance to be ready...", 0)
+			case utils.SSHStatusHandshake, utils.SSHStatusAuth:
+				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Waiting for new key to propagate, this can take a minute...", 0)
+			case utils.SSHStatusSuccess:
+				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "SSH connection established", 0)
+			}
+		}
+
 		if checkCancelled() {
 			return nil
 		}
-		sshClient, err = utils.RobustSSHConnectCtx(cancelCtx, instance.IP, keyFile, port, 120)
+		sshClient, err = utils.RobustSSHConnectWithProgress(cancelCtx, instance.IP, keyFile, port, 120, retryCallback)
 		if checkCancelled() {
 			return nil
 		}
 		if err != nil {
 			shutdownTUI()
-			return fmt.Errorf("failed to establish SSH connection after retry: %w", err)
+			return fmt.Errorf("failed to establish SSH connection after key regeneration: %w", err)
 		}
 	} else if err != nil {
 		shutdownTUI()
@@ -414,6 +504,21 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 	phaseTimings["instance_setup"] = time.Since(phase5Start)
 	tui.SendPhaseComplete(p, 4, phaseTimings["instance_setup"])
 
+	phase6Start := time.Now()
+	tui.SendPhaseUpdate(p, 5, tui.PhaseInProgress, "Verifying SSH connection...", 0)
+
+	if checkCancelled() {
+		return nil
+	}
+
+	if err := utils.VerifySSHConnectionCtx(cancelCtx, instance.IP, keyFile, port); err != nil {
+		shutdownTUI()
+		return fmt.Errorf("failed to verify SSH connection: %w", err)
+	}
+
+	phaseTimings["ssh_verification"] = time.Since(phase6Start)
+	tui.SendPhaseComplete(p, 5, phaseTimings["ssh_verification"])
+
 	tui.SendConnectComplete(p)
 
 	if checkCancelled() {
@@ -480,7 +585,12 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 
 	sshArgs = append(sshArgs, fmt.Sprintf("ubuntu@%s", instance.IP))
 
-	sshCmd := exec.Command("ssh", sshArgs...)
+	execCmd := exec.Command
+	if opts != nil && opts.execCommand != nil {
+		execCmd = opts.execCommand
+	}
+
+	sshCmd := execCmd("ssh", sshArgs...)
 	sshCmd.Stdin = os.Stdin
 	sshCmd.Stdout = os.Stdout
 	sshCmd.Stderr = os.Stderr
@@ -506,8 +616,48 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 }
 
 func checkWindowsOpenSSH() error {
-	if _, err := exec.LookPath("ssh"); err != nil {
-		return fmt.Errorf("OpenSSH not found. Please install OpenSSH on Windows")
+	if _, err := exec.LookPath("ssh"); err == nil {
+		return nil
 	}
-	return nil
+
+	fmt.Println("OpenSSH client not found. Attempting to install...")
+
+	// Try auto-install via PowerShell (requires admin privileges)
+	installCmd := exec.Command("powershell", "-Command",
+		"Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0")
+	installOutput, installErr := installCmd.CombinedOutput()
+
+	if installErr == nil {
+		if _, err := exec.LookPath("ssh"); err == nil {
+			fmt.Println("OpenSSH client installed successfully!")
+			return nil
+		}
+		// ssh still not in PATH after install - likely needs terminal restart
+		fmt.Println("OpenSSH installation completed. Please restart your terminal and try again.")
+		return fmt.Errorf("OpenSSH installed but not yet available. Please restart your terminal")
+	}
+
+	errDetails := ""
+	if len(installOutput) > 0 {
+		errDetails = string(installOutput)
+	}
+
+	return fmt.Errorf(`OpenSSH client not found and automatic installation failed.
+
+To install OpenSSH manually, choose one of these options:
+
+Option 1: Run PowerShell as Administrator and execute:
+  Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
+
+Option 2: Install via Windows Settings:
+  1. Open Settings > Apps > Optional Features
+  2. Click "Add a feature"
+  3. Search for "OpenSSH Client" and install it
+
+Option 3: Install via winget:
+  winget install Microsoft.OpenSSH.Client
+
+After installation, restart your terminal and try again.
+
+%s`, errDetails)
 }
