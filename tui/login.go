@@ -61,7 +61,7 @@ func newLoginStyles() loginStyles {
 		help:   HelpStyle().MarginTop(1),
 		input: PrimaryStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(theme.PrimaryColorHex)).
+			BorderForeground(lipgloss.Color(theme.PrimaryColor)).
 			Padding(0, 1).
 			MarginBottom(1),
 	}
@@ -178,18 +178,15 @@ func (m LoginModel) View() string {
 		b.WriteString(m.styles.prompt.Render("Authenticate with your browser. If this doesn't open automatically, visit:"))
 		b.WriteString("\n")
 		b.WriteString(m.styles.prompt.Render(m.authURL))
-		b.WriteString("\n\n")
+		b.WriteString("\n")
 		b.WriteString(fmt.Sprintf("%s Waiting for browser callback...", m.spinner.View()))
-		b.WriteString("\n\n")
-		b.WriteString(m.styles.help.Render("Or, press 'T' to enter a token manually."))
-		b.WriteString("\n\n")
-		b.WriteString(m.styles.help.Render("Press 'Q' to cancel."))
+		b.WriteString("\n")
+		b.WriteString(m.styles.help.Render("Or, press 'T' to enter a token manually. Press 'Q' to cancel"))
 
 	case LoginStateTokenInput:
 		b.WriteString(m.styles.prompt.Render("Enter your Thunder Compute token:"))
-		b.WriteString("\n\n")
+		b.WriteString("\n")
 		b.WriteString(m.styles.input.Render(m.tokenInput.View()))
-		b.WriteString("\n\n")
 		b.WriteString(m.styles.help.Render("Press Enter to submit, 'Esc' to go back"))
 	}
 

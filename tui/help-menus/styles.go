@@ -21,9 +21,8 @@ var (
 )
 
 const (
-	flagColorHex    = "#ff6b35"
-	descColorHex    = "#f2f2f2"
-	exampleColorHex = "#bcbcbc"
+	flagColor    = "9" // Bright Red
+	exampleColor = "8" // Bright Black (Gray)
 )
 
 func InitHelpStyles(out io.Writer) {
@@ -36,9 +35,9 @@ func InitHelpStyles(out io.Writer) {
 		SectionStyle = theme.Label().MarginTop(1)
 		CommandStyle = theme.Primary().Bold(true).Width(20)
 		CommandTextStyle = theme.Primary().Bold(true)
-		DescStyle = r.NewStyle().Foreground(lipgloss.Color(descColorHex))
+		DescStyle = r.NewStyle() // Uses terminal default foreground
 		LinkStyle = theme.Label().Underline(true)
-		FlagStyle = r.NewStyle().Foreground(lipgloss.Color(flagColorHex)).Bold(true).Width(15)
-		ExampleStyle = r.NewStyle().Foreground(lipgloss.Color(exampleColorHex)).Italic(true)
+		FlagStyle = r.NewStyle().Foreground(lipgloss.Color(flagColor)).Bold(true).Width(15)
+		ExampleStyle = r.NewStyle().Foreground(lipgloss.Color(exampleColor)).Italic(true)
 	})
 }

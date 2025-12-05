@@ -71,7 +71,7 @@ type createStyles struct {
 func newCreateStyles() createStyles {
 	panelBase := PrimaryStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.PrimaryColorHex)).
+		BorderForeground(lipgloss.Color(theme.PrimaryColor)).
 		Padding(1, 2).
 		MarginTop(1).
 		MarginBottom(1)

@@ -11,6 +11,7 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -83,9 +84,10 @@ type createInstanceResultMsg struct {
 }
 
 func newCreateProgressModel(client *api.Client, message string, req api.CreateInstanceRequest) createProgressModel {
+	theme.Init(os.Stdout)
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#8dc8ff"))
+	s.Style = theme.Primary()
 
 	return createProgressModel{
 		spinner: s,
@@ -152,17 +154,17 @@ func (m createProgressModel) View() string {
 			return ""
 		}
 
-		headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#8dc8ff")).Bold(true)
-		labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+		headerStyle := theme.Primary().Bold(true)
+		labelStyle := theme.Neutral()
 		valueStyle := lipgloss.NewStyle().Bold(true)
-		cmdStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CCCCCC"))
+		cmdStyle := theme.Neutral()
 		boxStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#8dc8ff")).
+			BorderForeground(lipgloss.Color(theme.PrimaryColor)).
 			Padding(1, 2)
 
 		var lines []string
-		successTitleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00D787")).Bold(true)
+		successTitleStyle := theme.Success()
 		lines = append(lines, successTitleStyle.Render("✓ Instance created successfully!"))
 		lines = append(lines, "")
 		lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(fmt.Sprintf("%d", m.resp.Identifier)))

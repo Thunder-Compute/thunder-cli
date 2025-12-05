@@ -92,12 +92,12 @@ func newSCPStyles() scpStyles {
 		log:        SubtleTextStyle(),
 		logSuccess: SuccessStyle().Bold(false),
 		file:       PrimaryStyle().Bold(true),
-		stats:      SubtleTextStyle().Foreground(lipgloss.Color("#CCCCCC")),
+		stats:      SubtleTextStyle(),
 		speed:      PrimaryStyle().Bold(true),
 		complete:   SuccessStyle(),
 		successBox: PrimaryStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(theme.PrimaryColorHex)).
+			BorderForeground(lipgloss.Color(theme.PrimaryColor)).
 			Padding(0, 2),
 		help: HelpStyle(),
 	}
@@ -108,7 +108,7 @@ func NewSCPModel(direction, instanceName string) SCPModel {
 	styles := newSCPStyles()
 
 	p := progress.New(
-		progress.WithScaledGradient(theme.PrimaryColorHex, theme.PrimaryColorHex),
+		progress.WithScaledGradient(theme.PrimaryColor, theme.PrimaryColor),
 		progress.WithWidth(60),
 	)
 

@@ -8,12 +8,11 @@ import (
 )
 
 const (
-	PrimaryColorHex     = "#8dc8ff"
-	NeutralTextColorHex = "#888888"
-	LabelTextColorHex   = "#FFFFFF"
-	SuccessColorHex     = "#00D787"
-	ErrorColorHex       = "#FF5555"
-	WarningColorHex     = "#FFB86C"
+	PrimaryColor = "12" // Bright Blue
+	NeutralColor = "8"  // Bright Black (Gray)
+	SuccessColor = "10" // Bright Green
+	ErrorColor   = "9"  // Bright Red
+	WarningColor = "11" // Bright Yellow
 )
 
 var (
@@ -30,12 +29,12 @@ var (
 func Init(out io.Writer) {
 	once.Do(func() {
 		renderer = lipgloss.NewRenderer(out)
-		primaryStyle = renderer.NewStyle().Foreground(lipgloss.Color(PrimaryColorHex))
-		neutralStyle = renderer.NewStyle().Foreground(lipgloss.Color(NeutralTextColorHex))
-		labelStyle = renderer.NewStyle().Foreground(lipgloss.Color(LabelTextColorHex)).Bold(true)
-		successStyle = renderer.NewStyle().Foreground(lipgloss.Color(SuccessColorHex)).Bold(true)
-		errorStyle = renderer.NewStyle().Foreground(lipgloss.Color(ErrorColorHex)).Bold(true)
-		warningStyle = renderer.NewStyle().Foreground(lipgloss.Color(WarningColorHex)).Bold(true)
+		primaryStyle = renderer.NewStyle().Foreground(lipgloss.Color(PrimaryColor))
+		neutralStyle = renderer.NewStyle().Foreground(lipgloss.Color(NeutralColor))
+		labelStyle = renderer.NewStyle().Bold(true) // Uses terminal default foreground
+		successStyle = renderer.NewStyle().Foreground(lipgloss.Color(SuccessColor)).Bold(true)
+		errorStyle = renderer.NewStyle().Foreground(lipgloss.Color(ErrorColor)).Bold(true)
+		warningStyle = renderer.NewStyle().Foreground(lipgloss.Color(WarningColor)).Bold(true)
 	})
 }
 

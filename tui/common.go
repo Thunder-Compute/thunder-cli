@@ -41,7 +41,7 @@ func InitCommonStyles(out io.Writer) {
 	durationTextStyle = subtleTextStyle.Italic(true)
 	warningBoxStyle = warningStyleTUI.
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.WarningColorHex)).
+		BorderForeground(lipgloss.Color(theme.WarningColor)).
 		Padding(1, 2)
 }
 
