@@ -1,6 +1,3 @@
-/*
-Copyright © 2025 NAME HERE <EMAIL ADDRESS>
-*/
 package helpmenus
 
 import (
@@ -11,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// RenderConnectHelp renders the custom help for the connect command
 func RenderConnectHelp(cmd *cobra.Command) {
 	InitHelpStyles(os.Stdout)
 

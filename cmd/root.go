@@ -1,12 +1,10 @@
-/*
-Copyright © 2025 NAME HERE <EMAIL ADDRESS>
-*/
 package cmd
 
 import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -26,7 +24,7 @@ var rootCmd = &cobra.Command{
 	Version:       version.BuildVersion,
 	SilenceErrors: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		tui.RenderCustomHelp(cmd)
+		helpmenus.RenderRootHelp(cmd)
 	},
 }
 
@@ -278,6 +276,35 @@ func displayVersion(v string) string {
 		return v
 	}
 	return "v" + v
+}
+
+func getCurrentBinaryPath() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(exe)
+}
+
+func isPMManaged(binPath string) bool {
+	return strings.Contains(binPath, "/opt/homebrew/") ||
+		strings.Contains(binPath, "/usr/local/Cellar/") ||
+		strings.Contains(binPath, "\\scoop\\apps\\") ||
+		strings.Contains(binPath, "WindowsApps")
+}
+
+func detectPackageManager(binPath string) string {
+	p := strings.ToLower(binPath)
+	if strings.Contains(p, "/opt/homebrew/") || strings.Contains(p, "/usr/local/cellar/") {
+		return "homebrew"
+	}
+	if strings.Contains(p, "\\scoop\\apps\\") {
+		return "scoop"
+	}
+	if strings.Contains(p, "windowsapps") {
+		return "winget"
+	}
+	return ""
 }
 
 func shouldSkipUpdateCheck(cmd *cobra.Command) bool {
