@@ -10,18 +10,16 @@ import (
 	"time"
 )
 
-const (
-	baseURL = "https://api.thundercompute.com:8443"
-)
-
 type Client struct {
+	baseURL    string
 	token      string
 	httpClient *http.Client
 }
 
-func NewClient(token string) *Client {
+func NewClient(token, baseURL string) *Client {
 	return &Client{
-		token: token,
+		baseURL: baseURL,
+		token:   token,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -42,7 +40,7 @@ func (c *Client) setHeaders(req *http.Request) {
 }
 
 func (c *Client) ValidateToken(ctx context.Context) error {
-	req, err := http.NewRequest("GET", baseURL+"/v1/auth/validate", nil)
+	req, err := http.NewRequest("GET", c.baseURL+"/v1/auth/validate", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -69,7 +67,7 @@ func (c *Client) ValidateToken(ctx context.Context) error {
 }
 
 func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, error) {
-	req, err := http.NewRequest("GET", baseURL+"/instances/list?update_ips=true", nil)
+	req, err := http.NewRequest("GET", c.baseURL+"/instances/list?update_ips=true", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -145,7 +143,7 @@ func (c *Client) GetLatestBinaryHashCtx(ctx context.Context) (string, error) {
 }
 
 func (c *Client) AddSSHKeyCtx(ctx context.Context, instanceID string) (*AddSSHKeyResponse, error) {
-	url := fmt.Sprintf("%s/instances/%s/add_key", baseURL, instanceID)
+	url := fmt.Sprintf("%s/instances/%s/add_key", c.baseURL, instanceID)
 
 	httpReq, err := http.NewRequest("POST", url, nil)
 	if err != nil {
@@ -182,7 +180,7 @@ func (c *Client) AddSSHKeyCtx(ctx context.Context, instanceID string) (*AddSSHKe
 }
 
 func (c *Client) GetNextDeviceIDCtx(ctx context.Context) (string, error) {
-	req, err := http.NewRequest("GET", baseURL+"/next_id", nil)
+	req, err := http.NewRequest("GET", c.baseURL+"/next_id", nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
@@ -224,7 +222,7 @@ func (c *Client) GetNextDeviceID() (string, error) {
 	return c.GetNextDeviceIDCtx(context.Background())
 }
 func (c *Client) ListInstances() ([]Instance, error) {
-	req, err := http.NewRequest("GET", baseURL+"/instances/list", nil)
+	req, err := http.NewRequest("GET", c.baseURL+"/instances/list", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -266,7 +264,7 @@ func (c *Client) ListInstances() ([]Instance, error) {
 }
 
 func (c *Client) ListTemplates() ([]Template, error) {
-	req, err := http.NewRequest("GET", baseURL+"/thunder-templates", nil)
+	req, err := http.NewRequest("GET", c.baseURL+"/thunder-templates", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -313,7 +311,7 @@ func (c *Client) CreateInstance(req CreateInstanceRequest) (*CreateInstanceRespo
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", baseURL+"/instances/create", bytes.NewBuffer(jsonData))
+	httpReq, err := http.NewRequest("POST", c.baseURL+"/instances/create", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -348,7 +346,7 @@ func (c *Client) CreateInstance(req CreateInstanceRequest) (*CreateInstanceRespo
 }
 
 func (c *Client) DeleteInstance(instanceID string) (*DeleteInstanceResponse, error) {
-	url := fmt.Sprintf("%s/instances/%s/delete", baseURL, instanceID)
+	url := fmt.Sprintf("%s/instances/%s/delete", c.baseURL, instanceID)
 
 	httpReq, err := http.NewRequest("POST", url, nil)
 	if err != nil {

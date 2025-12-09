@@ -46,7 +46,7 @@ func runDelete(args []string) error {
 		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
 	}
 
-	client := api.NewClient(config.Token)
+	client := api.NewClient(config.Token, config.APIURL)
 
 	var instanceID string
 	var selectedInstance *api.Instance

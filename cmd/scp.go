@@ -177,7 +177,7 @@ func runSCP(sources []string, destination string) error {
 
 	time.Sleep(50 * time.Millisecond)
 
-	client := api.NewClient(config.Token)
+	client := api.NewClient(config.Token, config.APIURL)
 
 	p.Send(tui.SCPPhaseMsg{Phase: tui.SCPPhaseConnecting})
 
