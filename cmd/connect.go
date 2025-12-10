@@ -310,14 +310,6 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		port = 22
 	}
 
-	// Acquire per-instance lock to prevent concurrent connect operations
-	instanceLock, err := utils.AcquireInstanceLock(instanceID)
-	if err != nil {
-		shutdownTUI()
-		return err
-	}
-	defer instanceLock.Release()
-
 	phaseTimings["instance_validation"] = time.Since(phase2Start)
 	tui.SendPhaseUpdate(p, 1, tui.PhaseCompleted, fmt.Sprintf("Found: %s (%s)", instance.Name, instance.IP), phaseTimings["instance_validation"])
 
