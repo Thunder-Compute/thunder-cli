@@ -16,15 +16,29 @@ type ThunderConfig struct {
 }
 
 const (
-	thunderBinaryURL  = "https://storage.googleapis.com/client-binary/client_linux_x86_64"
-	thunderConfigDir  = "/home/ubuntu/.thunder"
-	thunderConfigPath = "/home/ubuntu/.thunder/config.json"
-	thunderLibPath    = "/home/ubuntu/.thunder/libthunder.so"
-	thunderSymlink    = "/etc/thunder/libthunder.so"
-	ldPreloadPath     = "/etc/ld.so.preload"
-	tokenPath         = "/home/ubuntu/.thunder/token"
-	tokenSymlink      = "/etc/thunder/token"
+	thunderBinaryURL   = "https://storage.googleapis.com/client-binary/client_linux_x86_64"
+	thunderConfigDir   = "/home/ubuntu/.thunder"
+	thunderConfigPath  = "/home/ubuntu/.thunder/config.json"
+	thunderLibPath     = "/home/ubuntu/.thunder/libthunder.so"
+	ThunderSetupMarker = "/home/ubuntu/.thunder/setup_complete"
+	thunderSymlink     = "/etc/thunder/libthunder.so"
+	ldPreloadPath      = "/etc/ld.so.preload"
+	tokenPath          = "/home/ubuntu/.thunder/token"
+	tokenSymlink       = "/etc/thunder/token"
 )
+
+func IsInstanceSetupComplete(client *SSHClient) bool {
+	output, err := ExecuteSSHCommand(client, fmt.Sprintf("test -f %s && echo yes || echo no", ThunderSetupMarker))
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(output) == "yes"
+}
+
+func MarkInstanceSetupComplete(client *SSHClient) error {
+	_, err := ExecuteSSHCommand(client, fmt.Sprintf("mkdir -p %s && touch %s", thunderConfigDir, ThunderSetupMarker))
+	return err
+}
 
 // GetThunderConfig reads the Thunder configuration from the instance
 func GetThunderConfig(client *SSHClient) (*ThunderConfig, error) {
