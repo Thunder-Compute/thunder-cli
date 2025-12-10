@@ -73,9 +73,9 @@ func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpu
 	configNeedsUpdate := existingConfig.DeviceID == "" || existingConfig.GPUType != gpuType || existingConfig.GPUCount != gpuCount
 
 	binaryNeedsUpdate := false
-	if binaryHash != "" && existingHash != binaryHash {
+	if binaryHash == "" {
 		binaryNeedsUpdate = true
-	} else if existingHash == "" && configNeedsUpdate {
+	} else if existingHash != binaryHash {
 		binaryNeedsUpdate = true
 	}
 
