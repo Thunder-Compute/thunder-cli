@@ -38,9 +38,9 @@ type sshClient interface {
 	Close() error
 }
 
-func defaultConnectOptions(token string) *connectOptions {
+func defaultConnectOptions(token, baseURL string) *connectOptions {
 	return &connectOptions{
-		client:       api.NewClient(token),
+		client:       api.NewClient(token, baseURL),
 		skipTTYCheck: false,
 		skipTUI:      false,
 		sshConnector: func(ctx context.Context, ip, keyFile string, port, maxWait int) (sshClient, error) {
@@ -112,7 +112,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	if opts != nil && opts.client != nil {
 		client = opts.client
 	} else {
-		client = api.NewClient(config.Token)
+		client = api.NewClient(config.Token, config.APIURL)
 	}
 
 	busy := tui.NewBusyModel("Fetching instances...")

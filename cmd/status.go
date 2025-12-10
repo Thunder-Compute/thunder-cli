@@ -45,7 +45,7 @@ func RunStatus() error {
 		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
 	}
 
-	client := api.NewClient(config.Token)
+	client := api.NewClient(config.Token, config.APIURL)
 	monitoring := !noWait
 
 	if monitoring {

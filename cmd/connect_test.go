@@ -799,7 +799,7 @@ func TestTemplatePortMapping(t *testing.T) {
 }
 
 func TestConnectOptions_Defaults(t *testing.T) {
-	opts := defaultConnectOptions("test-token")
+	opts := defaultConnectOptions("test-token", "https://api.thundercompute.com:8443")
 
 	assert.NotNil(t, opts.client)
 	assert.False(t, opts.skipTTYCheck)
