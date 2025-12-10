@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -23,6 +24,7 @@ import (
 var (
 	tunnelPorts []string
 	debugMode   bool
+	fastMode    bool
 )
 
 // mocks for testing
@@ -37,6 +39,27 @@ type connectOptions struct {
 
 type sshClient interface {
 	Close() error
+}
+
+func resolveConnectClient(opts *connectOptions, token, baseURL string) api.ConnectClient {
+	if opts != nil && opts.client != nil {
+		return opts.client
+	}
+	return api.NewClient(token, baseURL)
+}
+
+func resolveExecCommand(opts *connectOptions) func(name string, args ...string) *exec.Cmd {
+	if opts != nil && opts.execCommand != nil {
+		return opts.execCommand
+	}
+	return exec.Command
+}
+
+func resolveConfigLoader(opts *connectOptions) func() (*Config, error) {
+	if opts != nil && opts.configLoader != nil {
+		return opts.configLoader
+	}
+	return LoadConfig
 }
 
 func defaultConnectOptions(token, baseURL string) *connectOptions {
@@ -62,7 +85,7 @@ var connectCmd = &cobra.Command{
 			instanceID = args[0]
 		}
 
-		if err := runConnect(instanceID, tunnelPorts, debugMode); err != nil {
+		if err := runConnect(instanceID, tunnelPorts, debugMode, fastMode); err != nil {
 			PrintError(err)
 			os.Exit(1)
 		}
@@ -77,25 +100,19 @@ func init() {
 	rootCmd.AddCommand(connectCmd)
 	connectCmd.Flags().StringSliceVarP(&tunnelPorts, "tunnel", "t", []string{}, "Port forwarding (can specify multiple times: -t 8080 -t 3000)")
 	connectCmd.Flags().BoolVar(&debugMode, "debug", false, "Show detailed timing breakdown")
+	connectCmd.Flags().BoolVar(&fastMode, "fast", false, "Skip synchronous instance setup for faster shell access")
 	_ = connectCmd.Flags().MarkHidden("debug") //nolint:errcheck // flag hiding failure is non-fatal
 }
 
-func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
-	return runConnectWithOptions(instanceID, tunnelPortsStr, debug, nil)
+func runConnect(instanceID string, tunnelPortsStr []string, debug bool, fast bool) error {
+	return runConnectWithOptions(instanceID, tunnelPortsStr, debug, fast, nil)
 }
 
 // runConnectWithOptions is the internal implementation that accepts options for testing.
 // If opts is nil, default options are used.
-func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug bool, opts *connectOptions) error {
-	var config *Config
-	var err error
-
-	configLoader := LoadConfig
-	if opts != nil && opts.configLoader != nil {
-		configLoader = opts.configLoader
-	}
-
-	config, err = configLoader()
+func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug bool, fast bool, opts *connectOptions) error {
+	configLoader := resolveConfigLoader(opts)
+	config, err := configLoader()
 	if err != nil {
 		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
 	}
@@ -109,12 +126,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		return fmt.Errorf("error running connect TUI: not a TTY")
 	}
 
-	var client api.ConnectClient
-	if opts != nil && opts.client != nil {
-		client = opts.client
-	} else {
-		client = api.NewClient(config.Token, config.APIURL)
-	}
+	client := resolveConnectClient(opts, config.Token, config.APIURL)
 
 	busy := tui.NewBusyModel("Fetching instances...")
 	bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
@@ -401,13 +413,31 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		if checkCancelled() {
 			return nil
 		}
-		sshClient, err = utils.RobustSSHConnectWithProgress(cancelCtx, instance.IP, keyFile, port, 120, progressCallback)
+
+		// Use different connection strategies for new keys vs reconnections
+		if newKeyCreated {
+			// New key: expect auth failures while key propagates, use longer timeout, no early exit
+			sshClient, err = utils.RobustSSHConnectWithProgress(cancelCtx, instance.IP, keyFile, port, 120, progressCallback)
+		} else {
+			// Reconnecting: enable persistent auth failure detection for faster recovery
+			// If remote ~/.ssh is deleted, this will detect it quickly and return ErrPersistentAuthFailure
+			sshConnectOpts := &utils.SSHConnectOptions{
+				DetectPersistentAuthFailure: true,
+			}
+			sshClient, err = utils.RobustSSHConnectWithOptions(cancelCtx, instance.IP, keyFile, port, 60, progressCallback, sshConnectOpts)
+		}
 		if checkCancelled() {
 			return nil
 		}
 
-		if err != nil && (utils.IsAuthError(err) || utils.IsKeyParseError(err)) && !newKeyCreated {
-			tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH key not found on instance. This typically occurs when your node crashes due to OOM, low disk space, or other reasons.", 0)
+		// Handle persistent auth failure (likely deleted ~/.ssh on instance) or other auth errors
+		needsKeyRegeneration := err != nil && !newKeyCreated && (errors.Is(err, utils.ErrPersistentAuthFailure) || utils.IsAuthError(err) || utils.IsKeyParseError(err))
+		if needsKeyRegeneration {
+			if errors.Is(err, utils.ErrPersistentAuthFailure) {
+				tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH keys on instance appear to be missing. Reconfiguring access...", 0)
+			} else {
+				tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH key not found on instance. This typically occurs when your node crashes due to OOM, low disk space, or other reasons.", 0)
+			}
 
 			keyResp, keyErr := client.AddSSHKeyCtx(cancelCtx, instanceID)
 			if checkCancelled() {
@@ -422,6 +452,8 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 				shutdownTUI()
 				return fmt.Errorf("failed to save new private key: %w", saveErr)
 			}
+
+			keyFile = utils.GetKeyFile(instance.UUID)
 
 			tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Retrying connection with new key to %s:%d...", instance.IP, port), 0)
 
@@ -466,33 +498,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			tokenCmd := fmt.Sprintf("sed -i '/export TNR_API_TOKEN/d' /home/ubuntu/.bashrc && echo 'export TNR_API_TOKEN=%s' >> /home/ubuntu/.bashrc", config.Token)
 			_, _ = utils.ExecuteSSHCommand(sshClient, tokenCmd)
 
-			// Check if there are multiple active sessions (skip setup if others are connected)
-			activeSessions, err := utils.CheckActiveSessions(sshClient)
-			if err != nil {
-				activeSessions = 0
-			}
-
-			// Get binary hash with timeout (may have been fetched in background)
-			var binaryHash string
-			select {
-			case hash := <-hashChan:
-				binaryHash = hash
-			case <-hashErrChan:
-				binaryHash = ""
-			case <-cancelCtx.Done():
-				if checkCancelled() {
-					return nil
-				}
-			case <-time.After(10 * time.Second):
-				binaryHash = ""
-			}
-
-			if checkCancelled() {
-				return nil
-			}
-
-			// Only configure virtualization if we're the only/first session
-			if activeSessions <= 1 {
+			if fast {
 				gpuCount := 1
 				if instance.NumGPUs != "" {
 					if count, err := strconv.Atoi(instance.NumGPUs); err == nil {
@@ -500,28 +506,80 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 					}
 				}
 
-				switch instance.Mode {
-				case "prototyping":
-					var deviceID string
-					existingConfig, _ := utils.GetThunderConfig(sshClient)
-					if existingConfig != nil && existingConfig.DeviceID != "" {
-						deviceID = existingConfig.DeviceID
-					} else if newID, err := client.GetNextDeviceID(); err == nil {
-						deviceID = newID
-					}
-
-					if deviceID != "" {
-						_ = utils.ConfigureThunderVirtualization(sshClient, instanceID, deviceID, instance.GPUType, gpuCount, config.Token, binaryHash)
-					}
-				case "production":
-					_ = utils.RemoveThunderVirtualization(sshClient, config.Token)
+				var deviceID string
+				existingConfig, _ := utils.GetThunderConfig(sshClient)
+				if existingConfig != nil && existingConfig.DeviceID != "" {
+					deviceID = existingConfig.DeviceID
+				} else if newID, err := client.GetNextDeviceID(); err == nil {
+					deviceID = newID
 				}
+
+				if instance.Mode == "prototyping" && deviceID != "" {
+					_ = utils.TriggerBackgroundSetup(sshClient, instanceID, deviceID, instance.GPUType, gpuCount, config.Token)
+				} else if instance.Mode == "production" {
+					_ = utils.TriggerBackgroundTokenSetup(sshClient, config.Token)
+				}
+
+				phaseTimings["instance_setup"] = time.Since(phase5Start)
+				tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Background setup triggered", phaseTimings["instance_setup"])
+			} else {
+				// Check if there are multiple active sessions (skip setup if others are connected)
+				activeSessions, err := utils.CheckActiveSessions(sshClient)
+				if err != nil {
+					activeSessions = 0
+				}
+
+				// Get binary hash with short timeout (may have been fetched in background during phase 2)
+				var binaryHash string
+				select {
+				case hash := <-hashChan:
+					binaryHash = hash
+				case <-hashErrChan:
+					binaryHash = ""
+				case <-cancelCtx.Done():
+					if checkCancelled() {
+						return nil
+					}
+				case <-time.After(2 * time.Second):
+					binaryHash = ""
+				}
+
+				if checkCancelled() {
+					return nil
+				}
+
+				// Only configure virtualization if we're the only/first session
+				if activeSessions <= 1 {
+					gpuCount := 1
+					if instance.NumGPUs != "" {
+						if count, err := strconv.Atoi(instance.NumGPUs); err == nil {
+							gpuCount = count
+						}
+					}
+
+					switch instance.Mode {
+					case "prototyping":
+						var deviceID string
+						existingConfig, _ := utils.GetThunderConfig(sshClient)
+						if existingConfig != nil && existingConfig.DeviceID != "" {
+							deviceID = existingConfig.DeviceID
+						} else if newID, err := client.GetNextDeviceID(); err == nil {
+							deviceID = newID
+						}
+
+						if deviceID != "" {
+							_ = utils.ConfigureThunderVirtualization(sshClient, instanceID, deviceID, instance.GPUType, gpuCount, config.Token, binaryHash)
+						}
+					case "production":
+						_ = utils.RemoveThunderVirtualization(sshClient, config.Token)
+					}
+				}
+
+				_ = utils.MarkInstanceSetupComplete(sshClient)
+
+				phaseTimings["instance_setup"] = time.Since(phase5Start)
+				tui.SendPhaseComplete(p, 4, phaseTimings["instance_setup"])
 			}
-
-			_ = utils.MarkInstanceSetupComplete(sshClient)
-
-			phaseTimings["instance_setup"] = time.Since(phase5Start)
-			tui.SendPhaseComplete(p, 4, phaseTimings["instance_setup"])
 		} else {
 			tui.SendPhaseSkipped(p, 4, "Instance already configured")
 		}
@@ -599,11 +657,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	sshArgs = append(sshArgs, fmt.Sprintf("ubuntu@%s", instance.IP))
 
-	execCmd := exec.Command
-	if opts != nil && opts.execCommand != nil {
-		execCmd = opts.execCommand
-	}
-
+	execCmd := resolveExecCommand(opts)
 	sshCmd := execCmd("ssh", sshArgs...)
 	sshCmd.Stdin = os.Stdin
 	sshCmd.Stdout = os.Stdout

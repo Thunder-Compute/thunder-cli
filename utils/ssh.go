@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -12,6 +13,8 @@ import (
 
 	"golang.org/x/crypto/ssh"
 )
+
+var ErrPersistentAuthFailure = errors.New("persistent SSH authentication failure: remote SSH keys may be missing")
 
 type SSHRetryStatus string
 
@@ -24,6 +27,11 @@ const (
 	SSHStatusSuccess    SSHRetryStatus = "success"
 )
 
+const (
+	PersistentAuthMaxAttempts = 3
+	PersistentAuthTimeout     = 10 * time.Second
+)
+
 type SSHRetryInfo struct {
 	Status      SSHRetryStatus
 	Attempt     int
@@ -33,6 +41,10 @@ type SSHRetryInfo struct {
 }
 
 type SSHProgressCallback func(info SSHRetryInfo)
+
+type SSHConnectOptions struct {
+	DetectPersistentAuthFailure bool
+}
 
 type SSHClient struct {
 	client *ssh.Client
@@ -81,6 +93,10 @@ func RobustSSHConnectCtx(ctx context.Context, ip, keyFile string, port int, maxW
 // RobustSSHConnectWithProgress establishes an SSH connection with retry logic and progress callbacks.
 // The callback is invoked on each retry attempt with structured status information.
 func RobustSSHConnectWithProgress(ctx context.Context, ip, keyFile string, port int, maxWait int, callback SSHProgressCallback) (*SSHClient, error) {
+	return RobustSSHConnectWithOptions(ctx, ip, keyFile, port, maxWait, callback, nil)
+}
+
+func RobustSSHConnectWithOptions(ctx context.Context, ip, keyFile string, port int, maxWait int, callback SSHProgressCallback, opts *SSHConnectOptions) (*SSHClient, error) {
 	config, err := newSSHConfig("ubuntu", keyFile)
 	if err != nil {
 		if callback != nil {
@@ -101,16 +117,17 @@ func RobustSSHConnectWithProgress(ctx context.Context, ip, keyFile string, port 
 	attempt := 0
 	var lastErr error
 
+	detectPersistentAuth := opts != nil && opts.DetectPersistentAuthFailure
+	consecutiveAuthFailures := 0
+	var firstAuthFailureTime time.Time
+
 	for {
 		attempt++
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("SSH connection cancelled")
 		}
 		if time.Now().After(deadline) {
-			if lastErr != nil {
-				return nil, fmt.Errorf("SSH connection timeout after %d seconds: %w", maxWait, lastErr)
-			}
-			return nil, fmt.Errorf("SSH connection timeout after %d seconds", maxWait)
+			return nil, timeoutError(maxWait, lastErr)
 		}
 
 		remaining := time.Until(deadline)
@@ -119,10 +136,7 @@ func RobustSSHConnectWithProgress(ctx context.Context, ip, keyFile string, port 
 			dialTimeout = 10 * time.Second
 		}
 		if dialTimeout <= 0 {
-			if lastErr != nil {
-				return nil, fmt.Errorf("SSH connection timeout after %d seconds: %w", maxWait, lastErr)
-			}
-			return nil, fmt.Errorf("SSH connection timeout after %d seconds", maxWait)
+			return nil, timeoutError(maxWait, lastErr)
 		}
 
 		dialer := &net.Dialer{
@@ -133,6 +147,9 @@ func RobustSSHConnectWithProgress(ctx context.Context, ip, keyFile string, port 
 		conn, dialErr := dialer.DialContext(ctx, "tcp", address)
 		if dialErr != nil {
 			lastErr = dialErr
+			consecutiveAuthFailures = 0
+			firstAuthFailureTime = time.Time{}
+
 			if shouldRetryDial(dialErr) {
 				if callback != nil {
 					callback(SSHRetryInfo{
@@ -168,6 +185,31 @@ func RobustSSHConnectWithProgress(ctx context.Context, ip, keyFile string, port 
 		conn.Close()
 		lastErr = err
 		errStatus := ClassifySSHError(err)
+
+		if errStatus == SSHStatusAuth {
+			consecutiveAuthFailures++
+			if firstAuthFailureTime.IsZero() {
+				firstAuthFailureTime = time.Now()
+			}
+
+			if detectPersistentAuth {
+				authFailureDuration := time.Since(firstAuthFailureTime)
+				if consecutiveAuthFailures >= PersistentAuthMaxAttempts || authFailureDuration >= PersistentAuthTimeout {
+					if callback != nil {
+						callback(SSHRetryInfo{
+							Status:  SSHStatusAuth,
+							Attempt: attempt,
+							Error:   ErrPersistentAuthFailure,
+							Message: "Persistent authentication failure detected",
+						})
+					}
+					return nil, ErrPersistentAuthFailure
+				}
+			}
+		} else {
+			consecutiveAuthFailures = 0
+			firstAuthFailureTime = time.Time{}
+		}
 
 		if shouldRetrySSH(err) {
 			if callback != nil {
@@ -223,10 +265,12 @@ func shouldRetryDial(err error) bool {
 		}
 	}
 	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "connection refused") ||
-		strings.Contains(msg, "no route to host") ||
-		strings.Contains(msg, "operation timed out") ||
-		strings.Contains(msg, "i/o timeout")
+	return messageContainsAny(msg,
+		"connection refused",
+		"no route to host",
+		"operation timed out",
+		"i/o timeout",
+	)
 }
 
 func shouldRetrySSH(err error) bool {
@@ -236,21 +280,25 @@ func shouldRetrySSH(err error) bool {
 	msg := strings.ToLower(err.Error())
 
 	// Network and connection errors
-	if strings.Contains(msg, "connection refused") ||
-		strings.Contains(msg, "no route to host") ||
-		strings.Contains(msg, "operation timed out") ||
-		strings.Contains(msg, "i/o timeout") ||
-		strings.Contains(msg, "connection reset") ||
-		strings.Contains(msg, "kex_exchange_identification") ||
-		strings.Contains(msg, "connection closed") ||
-		strings.Contains(msg, "handshake failed") ||
-		strings.Contains(msg, "kex") {
+	if messageContainsAny(msg,
+		"connection refused",
+		"no route to host",
+		"operation timed out",
+		"i/o timeout",
+		"connection reset",
+		"kex_exchange_identification",
+		"connection closed",
+		"handshake failed",
+		"kex",
+	) {
 		return true
 	}
 
 	// Auth errors are retried because keys may still be propagating to the instance
-	if strings.Contains(msg, "unable to authenticate") ||
-		strings.Contains(msg, "no supported methods remain") {
+	if messageContainsAny(msg,
+		"unable to authenticate",
+		"no supported methods remain",
+	) {
 		return true
 	}
 	return false
@@ -420,10 +468,12 @@ func IsAuthError(err error) bool {
 	if err == nil {
 		return false
 	}
-	errMsg := err.Error()
-	return strings.Contains(errMsg, "unable to authenticate") ||
-		strings.Contains(errMsg, "no supported methods remain") ||
-		strings.Contains(errMsg, "ssh: handshake failed")
+	errMsg := strings.ToLower(err.Error())
+	return messageContainsAny(errMsg,
+		"unable to authenticate",
+		"no supported methods remain",
+		"ssh: handshake failed",
+	)
 }
 
 // IsKeyParseError checks if the error is due to a corrupt or invalid private key file
@@ -432,11 +482,13 @@ func IsKeyParseError(err error) bool {
 		return false
 	}
 	errMsg := strings.ToLower(err.Error())
-	return strings.Contains(errMsg, "failed to parse private key") ||
-		strings.Contains(errMsg, "no key found") ||
-		strings.Contains(errMsg, "ssh: no key found") ||
-		strings.Contains(errMsg, "asn1:") ||
-		strings.Contains(errMsg, "illegal base64")
+	return messageContainsAny(errMsg,
+		"failed to parse private key",
+		"no key found",
+		"ssh: no key found",
+		"asn1:",
+		"illegal base64",
+	)
 }
 
 // IsNetworkError checks if the error is a network connectivity issue
@@ -450,11 +502,13 @@ func IsNetworkError(err error) bool {
 		}
 	}
 	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "connection refused") ||
-		strings.Contains(msg, "no route to host") ||
-		strings.Contains(msg, "operation timed out") ||
-		strings.Contains(msg, "i/o timeout") ||
-		strings.Contains(msg, "network is unreachable")
+	return messageContainsAny(msg,
+		"connection refused",
+		"no route to host",
+		"operation timed out",
+		"i/o timeout",
+		"network is unreachable",
+	)
 }
 
 // ClassifySSHError determines the type of SSH error for reporting
@@ -472,10 +526,24 @@ func ClassifySSHError(err error) SSHRetryStatus {
 		return SSHStatusDialing
 	}
 	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "handshake") ||
-		strings.Contains(msg, "kex") ||
-		strings.Contains(msg, "connection reset") {
+	if messageContainsAny(msg, "handshake", "kex", "connection reset") {
 		return SSHStatusHandshake
 	}
 	return SSHStatusUnexpected
+}
+
+func messageContainsAny(msg string, substrings ...string) bool {
+	for _, sub := range substrings {
+		if strings.Contains(msg, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+func timeoutError(maxWait int, lastErr error) error {
+	if lastErr != nil {
+		return fmt.Errorf("SSH connection timeout after %d seconds: %w", maxWait, lastErr)
+	}
+	return fmt.Errorf("SSH connection timeout after %d seconds", maxWait)
 }
