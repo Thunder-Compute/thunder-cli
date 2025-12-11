@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -156,7 +157,7 @@ func (s *testSSHServer) handleConn(conn net.Conn) {
 
 	for newChannel := range chans {
 		if newChannel.ChannelType() != "session" {
-			newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
+			_ = newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
 			continue
 		}
 
@@ -167,13 +168,13 @@ func (s *testSSHServer) handleConn(conn net.Conn) {
 
 		for req := range requests {
 			if req.Type == "exec" {
-				req.Reply(true, nil)
+				_ = req.Reply(true, nil)
 				exitStatus := []byte{0, 0, 0, 0}
-				channel.SendRequest("exit-status", false, exitStatus)
+				_, _ = channel.SendRequest("exit-status", false, exitStatus)
 				channel.Close()
 				break
 			}
-			req.Reply(false, nil)
+			_ = req.Reply(false, nil)
 		}
 		channel.Close()
 	}
@@ -203,13 +204,6 @@ func createKnownHostsEntry(t *testing.T, knownHostsPath string, host string, key
 	require.NoError(t, err)
 }
 
-// createMismatchedKnownHostsEntry creates a known_hosts entry with a different key
-// than the server's actual host key, used for testing key mismatch scenarios.
-func createMismatchedKnownHostsEntry(t *testing.T, knownHostsPath string, host string) {
-	_, _, wrongKey := generateRSAKeyPair(t)
-	createKnownHostsEntry(t, knownHostsPath, host, wrongKey)
-}
-
 func TestSSHKnownHosts(t *testing.T) {
 	// Test that connections succeed to unknown hosts without modifying known_hosts.
 	// With known hosts verification disabled, the known_hosts file should remain empty.
@@ -225,7 +219,7 @@ func TestSSHKnownHosts(t *testing.T) {
 		defer serverCleanup()
 
 		knownHostsPath := filepath.Join(tmpDir, ".ssh", "known_hosts")
-		os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
+		_ = os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -253,7 +247,7 @@ func TestSSHKnownHosts(t *testing.T) {
 		defer serverCleanup()
 
 		knownHostsPath := filepath.Join(tmpDir, ".ssh", "known_hosts")
-		os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
+		_ = os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
 		createKnownHostsEntry(t, knownHostsPath, "127.0.0.1", server.hostKey.PublicKey())
 
 		initialContent := readKnownHosts(t, knownHostsPath)
@@ -287,7 +281,7 @@ func TestSSHKnownHosts(t *testing.T) {
 		defer serverCleanup()
 
 		knownHostsPath := filepath.Join(tmpDir, ".ssh", "known_hosts")
-		os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
+		_ = os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
 
 		_, _, wrongKey := generateRSAKeyPair(t)
 		hostnameWithPort := fmt.Sprintf("127.0.0.1:%d", server.port)
@@ -322,7 +316,7 @@ func TestSSHKnownHosts(t *testing.T) {
 		defer serverCleanup()
 
 		knownHostsPath := filepath.Join(tmpDir, ".ssh", "known_hosts")
-		os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
+		_ = os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -530,8 +524,7 @@ func TestShouldRetryDial(t *testing.T) {
 	})
 
 	t.Run("temporary net error", func(t *testing.T) {
-		err := &customNetError{msg: "temporary", temporary: true}
-		assert.True(t, shouldRetryDial(err))
+		assert.True(t, shouldRetryDial(fmt.Errorf("dial tcp 1.2.3.4:22: connection reset by peer")))
 	})
 
 	t.Run("connection refused", func(t *testing.T) {
@@ -577,4 +570,80 @@ func TestShouldRetrySSH(t *testing.T) {
 		// Some errors should not be retried
 		assert.False(t, shouldRetrySSH(fmt.Errorf("some random unrelated error")))
 	})
+}
+
+func TestErrPersistentAuthFailure(t *testing.T) {
+	t.Run("errors.Is works with ErrPersistentAuthFailure", func(t *testing.T) {
+		assert.True(t, errors.Is(ErrPersistentAuthFailure, ErrPersistentAuthFailure))
+	})
+
+	t.Run("errors.Is works with wrapped ErrPersistentAuthFailure", func(t *testing.T) {
+		wrapped := fmt.Errorf("connection failed: %w", ErrPersistentAuthFailure)
+		assert.True(t, errors.Is(wrapped, ErrPersistentAuthFailure))
+	})
+
+	t.Run("errors.Is returns false for other errors", func(t *testing.T) {
+		assert.False(t, errors.Is(fmt.Errorf("some other error"), ErrPersistentAuthFailure))
+		assert.False(t, errors.Is(fmt.Errorf("ssh: unable to authenticate"), ErrPersistentAuthFailure))
+		assert.False(t, errors.Is(nil, ErrPersistentAuthFailure))
+	})
+}
+
+func TestRobustSSHConnectWithOptionsPersistentAuthDetection(t *testing.T) {
+	// Test that persistent auth failure is detected when DetectPersistentAuthFailure is enabled
+	tmpDir, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	// Use accepted key for server, but connect with rejected key to trigger auth failures
+	acceptedKey, _, acceptedPublic := generateRSAKeyPair(t)
+	rejectedKey, _, _ := generateRSAKeyPair(t)
+	_ = acceptedKey // keep reference
+
+	rejectedKeyPath := filepath.Join(tmpDir, "rejected")
+	savePrivateKeyToFile(t, rejectedKey, rejectedKeyPath)
+
+	server, serverCleanup := setupSSHTestServer(t, acceptedPublic)
+	defer serverCleanup()
+
+	t.Run("persistent auth failure detected when enabled", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		opts := &SSHConnectOptions{
+			DetectPersistentAuthFailure: true,
+		}
+
+		callbackCalled := false
+		callback := func(info SSHRetryInfo) {
+			callbackCalled = true
+		}
+
+		_, err := RobustSSHConnectWithOptions(ctx, "127.0.0.1", rejectedKeyPath, server.port, 60, callback, opts)
+
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, ErrPersistentAuthFailure), "should return ErrPersistentAuthFailure, got: %v", err)
+		assert.True(t, callbackCalled, "callback should have been called")
+	})
+
+	t.Run("auth failures retry until timeout when detection disabled", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		// No options means DetectPersistentAuthFailure is false
+		_, err := RobustSSHConnectWithOptions(ctx, "127.0.0.1", rejectedKeyPath, server.port, 3, nil, nil)
+
+		require.Error(t, err)
+		assert.False(t, errors.Is(err, ErrPersistentAuthFailure), "should NOT return ErrPersistentAuthFailure")
+		// Should timeout or be cancelled instead
+		assert.True(t, strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "cancelled"),
+			"expected timeout or cancelled, got: %v", err)
+	})
+}
+
+func TestPersistentAuthThresholds(t *testing.T) {
+	// Verify the constants are sensible
+	assert.GreaterOrEqual(t, PersistentAuthMaxAttempts, 3, "should require at least 3 attempts")
+	assert.LessOrEqual(t, PersistentAuthMaxAttempts, 10, "should not require too many attempts")
+	assert.GreaterOrEqual(t, PersistentAuthTimeout, 10*time.Second, "should wait at least 10 seconds")
+	assert.LessOrEqual(t, PersistentAuthTimeout, 60*time.Second, "should not wait more than 60 seconds")
 }

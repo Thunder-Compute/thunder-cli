@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -65,7 +64,6 @@ type connectFlowStyles struct {
 	phase      lipgloss.Style
 	inProgress lipgloss.Style
 	pending    lipgloss.Style
-	skipped    lipgloss.Style
 	duration   lipgloss.Style
 }
 
@@ -78,7 +76,6 @@ func NewConnectFlowModel(instanceID string) ConnectFlowModel {
 		{Name: "SSH key management", Status: PhasePending},
 		{Name: "Establishing SSH connection", Status: PhasePending},
 		{Name: "Setting up instance", Status: PhasePending},
-		{Name: "Verifying SSH connection", Status: PhasePending},
 	}
 
 	styles := connectFlowStyles{
@@ -86,7 +83,6 @@ func NewConnectFlowModel(instanceID string) ConnectFlowModel {
 		phase:      lipgloss.NewStyle().PaddingLeft(2),
 		inProgress: PrimaryStyle(),
 		pending:    SubtleTextStyle(),
-		skipped:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.NeutralColor)),
 		duration:   DurationStyle(),
 	}
 
@@ -192,6 +188,10 @@ func (m ConnectFlowModel) View() string {
 	b.WriteString("\n")
 
 	for i, phase := range m.phases {
+		if phase.Status == PhaseSkipped {
+			continue
+		}
+
 		var icon string
 		var style lipgloss.Style
 		var line string
@@ -208,9 +208,6 @@ func (m ConnectFlowModel) View() string {
 		case PhaseInProgress:
 			icon = m.spinner.View()
 			style = m.styles.inProgress
-		case PhaseSkipped:
-			icon = "○"
-			style = m.styles.skipped
 		case PhaseWarning:
 			icon = "⚠"
 			style = warningStyleTUI
@@ -272,6 +269,16 @@ func SendPhaseComplete(p *tea.Program, phaseIndex int, duration time.Duration) {
 		p.Send(PhaseCompleteMsg{
 			PhaseIndex: phaseIndex,
 			Duration:   duration,
+		})
+	}
+}
+
+func SendPhaseSkipped(p *tea.Program, phaseIndex int, message string) {
+	if p != nil {
+		p.Send(PhaseUpdateMsg{
+			PhaseIndex: phaseIndex,
+			Status:     PhaseSkipped,
+			Message:    message,
 		})
 	}
 }

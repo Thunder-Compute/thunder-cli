@@ -211,9 +211,19 @@ type AuthResponse struct {
 }
 
 type Config struct {
+	APIURL       string    `json:"api_url,omitempty"`
 	Token        string    `json:"token"`
 	RefreshToken string    `json:"refresh_token,omitempty"`
 	ExpiresAt    time.Time `json:"expires_at,omitempty"`
+}
+
+const DefaultAPIURL = "https://api.thundercompute.com:8443"
+
+func getAPIURL() string {
+	if envURL := os.Getenv("TNR_API_URL"); envURL != "" {
+		return envURL
+	}
+	return DefaultAPIURL
 }
 
 var loginToken string
@@ -249,7 +259,7 @@ func runLogin() error {
 	// Check environment variable as fallback if no token in config file
 	if err != nil || config == nil || config.Token == "" {
 		if envToken := os.Getenv("TNR_API_TOKEN"); envToken != "" {
-			client := api.NewClient(envToken)
+			client := api.NewClient(envToken, getAPIURL())
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
@@ -269,7 +279,7 @@ func runLogin() error {
 	}
 
 	if loginToken != "" {
-		client := api.NewClient(loginToken)
+		client := api.NewClient(loginToken, getAPIURL())
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
@@ -309,7 +319,7 @@ func runInteractiveLogin() error {
 	authURLWithParams := buildAuthURL(state, returnURI)
 
 	model := tui.NewLoginModel(authURLWithParams)
-	p := tea.NewProgram(model)
+	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	go func() {
 		select {
@@ -339,7 +349,7 @@ func runInteractiveLogin() error {
 
 	if model.State() == tui.LoginStateSuccess {
 		token := model.Token()
-		client := api.NewClient(token)
+		client := api.NewClient(token, getAPIURL())
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
@@ -492,11 +502,39 @@ func saveConfig(authResp AuthResponse) error {
 	return os.WriteFile(configPath, data, 0600)
 }
 
+// .thunder.json config
+type ProjectConfig struct {
+	APIURL string `json:"api_url,omitempty"`
+}
+
+// load .thunder.json config
+func loadProjectConfig() *ProjectConfig {
+	data, err := os.ReadFile(".thunder.json")
+	if err != nil {
+		return nil
+	}
+
+	var config ProjectConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil
+	}
+
+	return &config
+}
+
 func LoadConfig() (*Config, error) {
 	if envToken := os.Getenv("TNR_API_TOKEN"); envToken != "" {
-		return &Config{
-			Token: envToken,
-		}, nil
+		config := &Config{
+			APIURL: DefaultAPIURL,
+			Token:  envToken,
+		}
+		if projectConfig := loadProjectConfig(); projectConfig != nil && projectConfig.APIURL != "" {
+			config.APIURL = projectConfig.APIURL
+		}
+		if envAPIURL := os.Getenv("TNR_API_URL"); envAPIURL != "" {
+			config.APIURL = envAPIURL
+		}
+		return config, nil
 	}
 
 	homeDir, err := os.UserHomeDir()
@@ -513,6 +551,18 @@ func LoadConfig() (*Config, error) {
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, err
+	}
+
+	if config.APIURL == "" {
+		config.APIURL = DefaultAPIURL
+	}
+
+	if projectConfig := loadProjectConfig(); projectConfig != nil && projectConfig.APIURL != "" {
+		config.APIURL = projectConfig.APIURL
+	}
+
+	if envAPIURL := os.Getenv("TNR_API_URL"); envAPIURL != "" {
+		config.APIURL = envAPIURL
 	}
 
 	return &config, nil

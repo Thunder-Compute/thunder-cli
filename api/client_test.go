@@ -10,11 +10,12 @@ import (
 
 func TestNewClient(t *testing.T) {
 	token := "test_token_12345"
-	client := NewClient(token)
+	baseURL := "https://api.thundercompute.com:8443"
+	client := NewClient(token, baseURL)
 
 	assert.NotNil(t, client)
-	// Note: client.token and client.httpClient are unexported, so we can't test them directly in external tests
-	// We verify the client was created successfully instead
+	assert.Equal(t, baseURL, client.baseURL)
+	assert.Equal(t, token, client.token)
 }
 
 func TestCreateInstanceRequest(t *testing.T) {
@@ -198,6 +199,12 @@ func TestDeviceIDResponse(t *testing.T) {
 	assert.Equal(t, resp.ID, unmarshaled.ID)
 }
 
-func TestBaseURL(t *testing.T) {
-	assert.Equal(t, "https://api.thundercompute.com:8443", baseURL)
+func TestNewClientWithCustomURL(t *testing.T) {
+	token := "test_token_12345"
+	customURL := "https://staging-api.thundercompute.com:8443"
+	client := NewClient(token, customURL)
+
+	assert.NotNil(t, client)
+	assert.Equal(t, customURL, client.baseURL)
+	assert.Equal(t, token, client.token)
 }

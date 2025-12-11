@@ -530,7 +530,7 @@ func TestMockAPIClient_ListInstances(t *testing.T) {
 	assert.Equal(t, 1, client.listInstancesCalled)
 
 	// Call again
-	result, err = client.ListInstances()
+	_, err = client.ListInstances()
 	require.NoError(t, err)
 	assert.Equal(t, 2, client.listInstancesCalled)
 }
@@ -799,7 +799,7 @@ func TestTemplatePortMapping(t *testing.T) {
 }
 
 func TestConnectOptions_Defaults(t *testing.T) {
-	opts := defaultConnectOptions("test-token")
+	opts := defaultConnectOptions("test-token", "https://api.thundercompute.com:8443")
 
 	assert.NotNil(t, opts.client)
 	assert.False(t, opts.skipTTYCheck)

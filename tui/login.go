@@ -29,6 +29,7 @@ type LoginModel struct {
 	token      string
 	err        error
 	quitting   bool
+	width      int
 
 	styles loginStyles
 }
@@ -86,6 +87,7 @@ func NewLoginModel(authURL string) *LoginModel {
 		authURL:    authURL,
 		spinner:    s,
 		tokenInput: ti,
+		width:      80,
 		styles:     styles,
 	}
 }
@@ -154,6 +156,10 @@ func (m *LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, func() tea.Msg {
 			return LoginSuccessMsg(msg)
 		}
+
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		return m, nil
 	}
 
 	return m, cmd
@@ -175,13 +181,17 @@ func (m LoginModel) View() string {
 
 	switch m.state {
 	case LoginStateWaiting:
-		b.WriteString(m.styles.prompt.Render("Authenticate with your browser. If this doesn't open automatically, visit:"))
+		promptStyle := m.styles.prompt.Width(m.width)
+		b.WriteString(promptStyle.Render("Authenticate with your browser. If this doesn't open automatically, copy and paste this link in your browser:"))
 		b.WriteString("\n")
-		b.WriteString(m.styles.prompt.Render(m.authURL))
+		urlStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.PrimaryColor)).Width(m.width)
+		b.WriteString(urlStyle.Render(m.authURL))
+		b.WriteString("\n\n")
+		spinnerStyle := lipgloss.NewStyle().Width(m.width)
+		b.WriteString(spinnerStyle.Render(fmt.Sprintf("%s Waiting for browser callback...", m.spinner.View())))
 		b.WriteString("\n")
-		b.WriteString(fmt.Sprintf("%s Waiting for browser callback...", m.spinner.View()))
-		b.WriteString("\n")
-		b.WriteString(m.styles.help.Render("Or, press 'T' to enter a token manually. Press 'Q' to cancel"))
+		helpStyle := m.styles.help.Width(m.width)
+		b.WriteString(helpStyle.Render("Or, press 'T' to enter a token manually. Press 'Q' to cancel"))
 
 	case LoginStateTokenInput:
 		b.WriteString(m.styles.prompt.Render("Enter your Thunder Compute token:"))
