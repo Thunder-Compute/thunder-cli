@@ -24,7 +24,6 @@ import (
 var (
 	tunnelPorts []string
 	debugMode   bool
-	fastMode    bool
 )
 
 // mocks for testing
@@ -85,7 +84,7 @@ var connectCmd = &cobra.Command{
 			instanceID = args[0]
 		}
 
-		if err := runConnect(instanceID, tunnelPorts, debugMode, fastMode); err != nil {
+		if err := runConnect(instanceID, tunnelPorts, debugMode); err != nil {
 			PrintError(err)
 			os.Exit(1)
 		}
@@ -100,17 +99,16 @@ func init() {
 	rootCmd.AddCommand(connectCmd)
 	connectCmd.Flags().StringSliceVarP(&tunnelPorts, "tunnel", "t", []string{}, "Port forwarding (can specify multiple times: -t 8080 -t 3000)")
 	connectCmd.Flags().BoolVar(&debugMode, "debug", false, "Show detailed timing breakdown")
-	connectCmd.Flags().BoolVar(&fastMode, "fast", false, "Skip synchronous instance setup for faster shell access")
 	_ = connectCmd.Flags().MarkHidden("debug") //nolint:errcheck // flag hiding failure is non-fatal
 }
 
-func runConnect(instanceID string, tunnelPortsStr []string, debug bool, fast bool) error {
-	return runConnectWithOptions(instanceID, tunnelPortsStr, debug, fast, nil)
+func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
+	return runConnectWithOptions(instanceID, tunnelPortsStr, debug, nil)
 }
 
 // runConnectWithOptions is the internal implementation that accepts options for testing.
 // If opts is nil, default options are used.
-func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug bool, fast bool, opts *connectOptions) error {
+func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug bool, opts *connectOptions) error {
 	configLoader := resolveConfigLoader(opts)
 	config, err := configLoader()
 	if err != nil {
@@ -210,14 +208,14 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	go func() {
 		finalModel, err := p.Run()
-		if err != nil {
-			tuiDone <- err
-		}
-		close(tuiDone)
 		if fm, ok := finalModel.(tui.ConnectFlowModel); ok && fm.Cancelled() {
 			wasCancelled = true
 			cancel()
 		}
+		if err != nil {
+			tuiDone <- err
+		}
+		close(tuiDone)
 	}()
 
 	time.Sleep(50 * time.Millisecond)
@@ -378,16 +376,6 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		}
 	}
 
-	if !needProvisioning {
-		go func() {
-			select {
-			case <-hashChan:
-			case <-hashErrChan:
-			case <-cancelCtx.Done():
-			}
-		}()
-	}
-
 	if needProvisioning {
 		progressCallback := func(info utils.SSHRetryInfo) {
 			switch info.Status {
@@ -498,7 +486,33 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			tokenCmd := fmt.Sprintf("sed -i '/export TNR_API_TOKEN/d' /home/ubuntu/.bashrc && echo 'export TNR_API_TOKEN=%s' >> /home/ubuntu/.bashrc", config.Token)
 			_, _ = utils.ExecuteSSHCommand(sshClient, tokenCmd)
 
-			if fast {
+			activeSessions, err := utils.CheckActiveSessions(sshClient)
+			if err != nil {
+				activeSessions = 0
+			}
+
+			// Get binary hash with short timeout (may have been fetched in background during phase 2)
+			var binaryHash string
+			select {
+			case hash := <-hashChan:
+				binaryHash = hash
+			case <-hashErrChan:
+				binaryHash = ""
+			case <-cancelCtx.Done():
+				if checkCancelled() {
+					return nil
+				}
+			case <-time.After(2 * time.Second):
+				binaryHash = ""
+			}
+			binaryHash = utils.NormalizeHash(binaryHash)
+
+			if checkCancelled() {
+				return nil
+			}
+
+			// Only configure virtualization if we're the only/first session
+			if activeSessions <= 1 {
 				gpuCount := 1
 				if instance.NumGPUs != "" {
 					if count, err := strconv.Atoi(instance.NumGPUs); err == nil {
@@ -506,30 +520,97 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 					}
 				}
 
-				var deviceID string
-				existingConfig, _ := utils.GetThunderConfig(sshClient)
-				if existingConfig != nil && existingConfig.DeviceID != "" {
-					deviceID = existingConfig.DeviceID
-				} else if newID, err := client.GetNextDeviceID(); err == nil {
-					deviceID = newID
-				}
+				switch instance.Mode {
+				case "prototyping":
+					var deviceID string
+					existingConfig, _ := utils.GetThunderConfig(sshClient)
+					if existingConfig != nil && existingConfig.DeviceID != "" {
+						deviceID = existingConfig.DeviceID
+					} else if newID, err := client.GetNextDeviceID(); err == nil {
+						deviceID = newID
+					}
 
-				if instance.Mode == "prototyping" && deviceID != "" {
-					_ = utils.TriggerBackgroundSetup(sshClient, instanceID, deviceID, instance.GPUType, gpuCount, config.Token)
-				} else if instance.Mode == "production" {
-					_ = utils.TriggerBackgroundTokenSetup(sshClient, config.Token)
+					if deviceID != "" {
+						_ = utils.ConfigureThunderVirtualization(sshClient, instanceID, deviceID, instance.GPUType, gpuCount, config.Token, binaryHash)
+					}
+				case "production":
+					_ = utils.RemoveThunderVirtualization(sshClient, config.Token)
 				}
+			}
 
-				phaseTimings["instance_setup"] = time.Since(phase5Start)
-				tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Background setup triggered", phaseTimings["instance_setup"])
-			} else {
-				// Check if there are multiple active sessions (skip setup if others are connected)
-				activeSessions, err := utils.CheckActiveSessions(sshClient)
-				if err != nil {
-					activeSessions = 0
+			_ = utils.MarkInstanceSetupComplete(sshClient)
+
+			phaseTimings["instance_setup"] = time.Since(phase5Start)
+			tui.SendPhaseComplete(p, 4, phaseTimings["instance_setup"])
+		} else {
+			tui.SendPhaseSkipped(p, 4, "Instance already configured")
+
+			// Still check if binary needs updating (in case server-side binary changed)
+			if instance.Mode == "prototyping" && sshClient != nil {
+				tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Checking binary version...", 0)
+				var binaryHash string
+				select {
+				case hash := <-hashChan:
+					binaryHash = hash
+				case <-hashErrChan:
+					binaryHash = ""
+				case <-time.After(1 * time.Second):
+					binaryHash = ""
 				}
+				binaryHash = utils.NormalizeHash(binaryHash)
 
-				// Get binary hash with short timeout (may have been fetched in background during phase 2)
+				if binaryHash != "" {
+					hashAlgo := utils.DetectHashAlgorithm(binaryHash)
+					if hashAlgo == utils.HashAlgoUnknown {
+						hashAlgo = utils.HashAlgoSHA256
+					}
+
+					existingHash, err := utils.GetInstanceBinaryHash(sshClient, hashAlgo)
+					if err != nil {
+						existingHash = ""
+					}
+
+					if existingHash != "" && existingHash != binaryHash {
+						// Binary exists but hash differs - trigger background update
+						tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Binary outdated, updating in background...", 0)
+						gpuCount := 1
+						if instance.NumGPUs != "" {
+							if count, err := strconv.Atoi(instance.NumGPUs); err == nil {
+								gpuCount = count
+							}
+						}
+						var deviceID string
+						existingConfig, _ := utils.GetThunderConfig(sshClient)
+						if existingConfig != nil && existingConfig.DeviceID != "" {
+							deviceID = existingConfig.DeviceID
+						}
+						if deviceID != "" {
+							_ = utils.TriggerBackgroundSetup(sshClient, instanceID, deviceID, instance.GPUType, gpuCount, config.Token)
+							tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Binary update triggered", 0)
+						}
+					} else {
+						tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Binary up to date", 0)
+					}
+				} else {
+					tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Could not verify binary version", 0)
+				}
+			}
+		}
+	} else {
+		// No provisioning needed (instance already configured via ControlMaster),
+		// but for prototyping instances we still want to check the Thunder binary
+		// on every connect.
+		tui.SendPhaseSkipped(p, 4, "")
+
+		if instance.Mode == "prototyping" {
+			tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Checking binary version...", 0)
+
+			// Establish a short-lived SSH connection for the binary check
+			checkClient, err := utils.RobustSSHConnectCtx(cancelCtx, instance.IP, keyFile, port, 30)
+			if err == nil && checkClient != nil {
+				defer checkClient.Close()
+
+				// Get binary hash with a short timeout (may have been fetched in background)
 				var binaryHash string
 				select {
 				case hash := <-hashChan:
@@ -543,48 +624,49 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 				case <-time.After(2 * time.Second):
 					binaryHash = ""
 				}
+				binaryHash = utils.NormalizeHash(binaryHash)
 
-				if checkCancelled() {
-					return nil
-				}
-
-				// Only configure virtualization if we're the only/first session
-				if activeSessions <= 1 {
-					gpuCount := 1
-					if instance.NumGPUs != "" {
-						if count, err := strconv.Atoi(instance.NumGPUs); err == nil {
-							gpuCount = count
-						}
+				if binaryHash != "" {
+					hashAlgo := utils.DetectHashAlgorithm(binaryHash)
+					if hashAlgo == utils.HashAlgoUnknown {
+						hashAlgo = utils.HashAlgoSHA256
 					}
 
-					switch instance.Mode {
-					case "prototyping":
+					existingHash, err := utils.GetInstanceBinaryHash(checkClient, hashAlgo)
+					if err != nil {
+						existingHash = ""
+					}
+
+					if existingHash != "" && existingHash != binaryHash {
+						// Binary exists but hash differs - trigger background update
+						tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Binary outdated, updating in background...", 0)
+						gpuCount := 1
+						if instance.NumGPUs != "" {
+							if count, err := strconv.Atoi(instance.NumGPUs); err == nil {
+								gpuCount = count
+							}
+						}
 						var deviceID string
-						existingConfig, _ := utils.GetThunderConfig(sshClient)
+						existingConfig, _ := utils.GetThunderConfig(checkClient)
 						if existingConfig != nil && existingConfig.DeviceID != "" {
 							deviceID = existingConfig.DeviceID
-						} else if newID, err := client.GetNextDeviceID(); err == nil {
-							deviceID = newID
 						}
-
 						if deviceID != "" {
-							_ = utils.ConfigureThunderVirtualization(sshClient, instanceID, deviceID, instance.GPUType, gpuCount, config.Token, binaryHash)
+							_ = utils.TriggerBackgroundSetup(checkClient, instanceID, deviceID, instance.GPUType, gpuCount, config.Token)
+							tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Binary update triggered", 0)
+						} else {
+							tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Could not determine device ID for binary update", 0)
 						}
-					case "production":
-						_ = utils.RemoveThunderVirtualization(sshClient, config.Token)
+					} else {
+						tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Binary up to date", 0)
 					}
+				} else {
+					tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Could not verify binary version", 0)
 				}
-
-				_ = utils.MarkInstanceSetupComplete(sshClient)
-
-				phaseTimings["instance_setup"] = time.Since(phase5Start)
-				tui.SendPhaseComplete(p, 4, phaseTimings["instance_setup"])
+			} else {
+				tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Could not verify binary version", 0)
 			}
-		} else {
-			tui.SendPhaseSkipped(p, 4, "Instance already configured")
 		}
-	} else {
-		tui.SendPhaseSkipped(p, 4, "")
 	}
 
 	// Update SSH config for easy reconnection via `ssh tnr-{instance_id}`

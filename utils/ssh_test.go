@@ -157,7 +157,7 @@ func (s *testSSHServer) handleConn(conn net.Conn) {
 
 	for newChannel := range chans {
 		if newChannel.ChannelType() != "session" {
-			newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
+			_ = newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
 			continue
 		}
 
@@ -168,13 +168,13 @@ func (s *testSSHServer) handleConn(conn net.Conn) {
 
 		for req := range requests {
 			if req.Type == "exec" {
-				req.Reply(true, nil)
+				_ = req.Reply(true, nil)
 				exitStatus := []byte{0, 0, 0, 0}
-				channel.SendRequest("exit-status", false, exitStatus)
+				_, _ = channel.SendRequest("exit-status", false, exitStatus)
 				channel.Close()
 				break
 			}
-			req.Reply(false, nil)
+			_ = req.Reply(false, nil)
 		}
 		channel.Close()
 	}
@@ -204,13 +204,6 @@ func createKnownHostsEntry(t *testing.T, knownHostsPath string, host string, key
 	require.NoError(t, err)
 }
 
-// createMismatchedKnownHostsEntry creates a known_hosts entry with a different key
-// than the server's actual host key, used for testing key mismatch scenarios.
-func createMismatchedKnownHostsEntry(t *testing.T, knownHostsPath string, host string) {
-	_, _, wrongKey := generateRSAKeyPair(t)
-	createKnownHostsEntry(t, knownHostsPath, host, wrongKey)
-}
-
 func TestSSHKnownHosts(t *testing.T) {
 	// Test that connections succeed to unknown hosts without modifying known_hosts.
 	// With known hosts verification disabled, the known_hosts file should remain empty.
@@ -226,7 +219,7 @@ func TestSSHKnownHosts(t *testing.T) {
 		defer serverCleanup()
 
 		knownHostsPath := filepath.Join(tmpDir, ".ssh", "known_hosts")
-		os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
+		_ = os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -254,7 +247,7 @@ func TestSSHKnownHosts(t *testing.T) {
 		defer serverCleanup()
 
 		knownHostsPath := filepath.Join(tmpDir, ".ssh", "known_hosts")
-		os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
+		_ = os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
 		createKnownHostsEntry(t, knownHostsPath, "127.0.0.1", server.hostKey.PublicKey())
 
 		initialContent := readKnownHosts(t, knownHostsPath)
@@ -288,7 +281,7 @@ func TestSSHKnownHosts(t *testing.T) {
 		defer serverCleanup()
 
 		knownHostsPath := filepath.Join(tmpDir, ".ssh", "known_hosts")
-		os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
+		_ = os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
 
 		_, _, wrongKey := generateRSAKeyPair(t)
 		hostnameWithPort := fmt.Sprintf("127.0.0.1:%d", server.port)
@@ -323,7 +316,7 @@ func TestSSHKnownHosts(t *testing.T) {
 		defer serverCleanup()
 
 		knownHostsPath := filepath.Join(tmpDir, ".ssh", "known_hosts")
-		os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
+		_ = os.MkdirAll(filepath.Dir(knownHostsPath), 0700)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -531,8 +524,7 @@ func TestShouldRetryDial(t *testing.T) {
 	})
 
 	t.Run("temporary net error", func(t *testing.T) {
-		err := &customNetError{msg: "temporary", temporary: true}
-		assert.True(t, shouldRetryDial(err))
+		assert.True(t, shouldRetryDial(fmt.Errorf("dial tcp 1.2.3.4:22: connection reset by peer")))
 	})
 
 	t.Run("connection refused", func(t *testing.T) {

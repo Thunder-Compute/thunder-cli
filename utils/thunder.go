@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -14,6 +15,14 @@ type ThunderConfig struct {
 	GPUType    string `json:"gpuType"`
 	GPUCount   int    `json:"gpuCount"`
 }
+
+type HashAlgorithm string
+
+const (
+	HashAlgoUnknown HashAlgorithm = ""
+	HashAlgoSHA256  HashAlgorithm = "sha256"
+	HashAlgoMD5     HashAlgorithm = "md5"
+)
 
 const (
 	thunderBinaryURL   = "https://storage.googleapis.com/client-binary/client_linux_x86_64"
@@ -57,27 +66,27 @@ func GetThunderConfig(client *SSHClient) (*ThunderConfig, error) {
 
 // ConfigureThunderVirtualization sets up GPU virtualization for prototyping mode
 func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpuType string, gpuCount int, token, binaryHash string) error {
-	checkCmd := fmt.Sprintf(`cat %s 2>/dev/null || echo '{}'; echo '---SEPARATOR---'; sha256sum %s 2>/dev/null | awk '{print $1}' || echo ''`, thunderConfigPath, thunderLibPath)
-	checkOutput, _ := ExecuteSSHCommand(client, checkCmd)
+	configOutput, _ := ExecuteSSHCommand(client, fmt.Sprintf("cat %s 2>/dev/null || echo '{}'", thunderConfigPath))
 
 	var existingConfig ThunderConfig
-	var existingHash string
-	parts := strings.SplitN(checkOutput, "---SEPARATOR---", 2)
-	if len(parts) >= 1 {
-		_ = json.Unmarshal([]byte(strings.TrimSpace(parts[0])), &existingConfig)
-	}
-	if len(parts) >= 2 {
-		existingHash = strings.TrimSpace(parts[1])
-	}
+	_ = json.Unmarshal([]byte(strings.TrimSpace(configOutput)), &existingConfig)
 
 	configNeedsUpdate := existingConfig.DeviceID == "" || existingConfig.GPUType != gpuType || existingConfig.GPUCount != gpuCount
 
-	binaryNeedsUpdate := false
-	if binaryHash == "" {
-		binaryNeedsUpdate = true
-	} else if existingHash != binaryHash {
-		binaryNeedsUpdate = true
+	expectedHash := NormalizeHash(binaryHash)
+	hashAlgorithm := DetectHashAlgorithm(expectedHash)
+	if hashAlgorithm == HashAlgoUnknown {
+		hashAlgorithm = HashAlgoSHA256
 	}
+
+	existingHash := ""
+	if expectedHash != "" {
+		if h, err := GetInstanceBinaryHash(client, hashAlgorithm); err == nil {
+			existingHash = h
+		}
+	}
+
+	binaryNeedsUpdate := expectedHash == "" || existingHash == "" || existingHash != expectedHash
 
 	if !configNeedsUpdate && !binaryNeedsUpdate {
 		return nil
@@ -120,6 +129,86 @@ func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpu
 	return nil
 }
 
+func NormalizeHash(hash string) string {
+	trimmed := strings.TrimSpace(hash)
+	if trimmed == "" {
+		return ""
+	}
+
+	lowered := strings.ToLower(trimmed)
+	if isHexString(lowered) {
+		return lowered
+	}
+
+	if converted := decodeBase64Hash(trimmed); converted != "" {
+		return converted
+	}
+	if converted := decodeBase64Hash(lowered); converted != "" {
+		return converted
+	}
+
+	return lowered
+}
+
+func isHexString(value string) bool {
+	if value == "" || len(value)%2 != 0 {
+		return false
+	}
+	for _, c := range value {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func decodeBase64Hash(value string) string {
+	decoders := []*base64.Encoding{
+		base64.StdEncoding,
+		base64.RawStdEncoding,
+		base64.URLEncoding,
+		base64.RawURLEncoding,
+	}
+
+	for _, enc := range decoders {
+		if decoded, err := enc.DecodeString(value); err == nil {
+			return hex.EncodeToString(decoded)
+		}
+	}
+
+	return ""
+}
+
+func DetectHashAlgorithm(hash string) HashAlgorithm {
+	switch len(hash) {
+	case 64:
+		if isHexString(hash) {
+			return HashAlgoSHA256
+		}
+	case 32:
+		if isHexString(hash) {
+			return HashAlgoMD5
+		}
+	}
+	return HashAlgoUnknown
+}
+
+func GetInstanceBinaryHash(client *SSHClient, algorithm HashAlgorithm) (string, error) {
+	var cmd string
+	switch algorithm {
+	case HashAlgoMD5:
+		cmd = fmt.Sprintf("md5sum %s 2>/dev/null | awk '{print $1}' || echo ''", thunderLibPath)
+	default:
+		cmd = fmt.Sprintf("sha256sum %s 2>/dev/null | awk '{print $1}' || echo ''", thunderLibPath)
+	}
+
+	output, err := ExecuteSSHCommand(client, cmd)
+	if err != nil {
+		return "", err
+	}
+	return NormalizeHash(output), nil
+}
+
 // RemoveThunderVirtualization cleans up Thunder virtualization for production mode
 func RemoveThunderVirtualization(client *SSHClient, token string) error {
 	tokenB64 := base64.StdEncoding.EncodeToString([]byte(token))
@@ -158,9 +247,7 @@ func TriggerBackgroundSetup(client *SSHClient, instanceID, deviceID, gpuType str
 	bgScript := fmt.Sprintf(`nohup bash -c '
 mkdir -p %s
 sudo mkdir -p /etc/thunder
-if [ ! -f %s ]; then
-  curl -sL %s -o /tmp/libthunder.tmp && mv /tmp/libthunder.tmp %s
-fi
+curl -sL %s -o /tmp/libthunder.tmp && mv /tmp/libthunder.tmp %s
 sudo ln -sf %s %s
 echo "%s" | sudo tee %s > /dev/null
 echo "%s" | base64 -d > %s
@@ -170,7 +257,6 @@ sudo ln -sf %s %s
 touch %s
 ' > /dev/null 2>&1 &`,
 		thunderConfigDir,
-		thunderLibPath,
 		thunderBinaryURL, thunderLibPath,
 		thunderLibPath, thunderSymlink,
 		thunderSymlink, ldPreloadPath,

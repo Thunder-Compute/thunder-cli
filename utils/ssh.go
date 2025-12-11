@@ -260,7 +260,7 @@ func shouldRetryDial(err error) bool {
 		return false
 	}
 	if netErr, ok := err.(net.Error); ok {
-		if netErr.Timeout() || netErr.Temporary() {
+		if netErr.Timeout() {
 			return true
 		}
 	}
@@ -270,6 +270,9 @@ func shouldRetryDial(err error) bool {
 		"no route to host",
 		"operation timed out",
 		"i/o timeout",
+		"connection reset",
+		"broken pipe",
+		"network is unreachable",
 	)
 }
 
@@ -497,7 +500,7 @@ func IsNetworkError(err error) bool {
 		return false
 	}
 	if netErr, ok := err.(net.Error); ok {
-		if netErr.Timeout() || netErr.Temporary() {
+		if netErr.Timeout() {
 			return true
 		}
 	}
