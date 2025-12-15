@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -74,7 +75,6 @@ func defaultConnectOptions(token, baseURL string) *connectOptions {
 	}
 }
 
-// connectCmd represents the connect command
 var connectCmd = &cobra.Command{
 	Use:   "connect [instance_id]",
 	Short: "Establish an SSH connection to a Thunder Compute instance",
@@ -106,8 +106,7 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 	return runConnectWithOptions(instanceID, tunnelPortsStr, debug, nil)
 }
 
-// runConnectWithOptions is the internal implementation that accepts options for testing.
-// If opts is nil, default options are used.
+// runConnectWithOptions accepts options for testing. If opts is nil, default options are used.
 func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug bool, opts *connectOptions) error {
 	configLoader := resolveConfigLoader(opts)
 	config, err := configLoader()
@@ -268,7 +267,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		return nil
 	}
 
-	// Fetch binary hash in background for potential virtualization setup
+	// Fetch binary hash in background
 	go func() {
 		hash, err := client.GetLatestBinaryHashCtx(cancelCtx)
 		if err != nil {
@@ -321,6 +320,13 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		port = 22
 	}
 
+	gpuCount := 1
+	if instance.NumGPUs != "" {
+		if count, err := strconv.Atoi(instance.NumGPUs); err == nil {
+			gpuCount = count
+		}
+	}
+
 	phaseTimings["instance_validation"] = time.Since(phase2Start)
 	tui.SendPhaseUpdate(p, 1, tui.PhaseCompleted, fmt.Sprintf("Found: %s (%s)", instance.Name, instance.IP), phaseTimings["instance_validation"])
 
@@ -353,46 +359,100 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	phaseTimings["ssh_key_management"] = time.Since(phase3Start)
 	tui.SendPhaseComplete(p, 2, phaseTimings["ssh_key_management"])
 
-	controlPath := ""
-	if runtime.GOOS != "windows" {
-		if homeDir, err := os.UserHomeDir(); err == nil {
-			controlPath = fmt.Sprintf("%s/.thunder/thunder-control-%%h-%%p-%%r", homeDir)
+	phase4Start := time.Now()
+	tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Waiting for SSH service on %s:%d...", instance.IP, port), 0)
+
+	if checkCancelled() {
+		return nil
+	}
+	if err := utils.WaitForTCPPort(cancelCtx, instance.IP, port, 120*time.Second); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil
 		}
+		shutdownTUI()
+		return fmt.Errorf("SSH service not available: %w", err)
 	}
 
-	phase4Start := time.Now()
+	if checkCancelled() {
+		return nil
+	}
+
 	tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Connecting to %s:%d...", instance.IP, port), 0)
 
-	needProvisioning := true
 	var sshClient *utils.SSHClient
-
-	if controlPath != "" && !newKeyCreated {
-		setupComplete, checkErr := checkSetupCompleteViaSSH(cancelCtx, instance.IP, keyFile, port, controlPath)
-		if checkErr == nil && setupComplete {
-			needProvisioning = false
-			tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Instance already configured, using ControlMaster connection", 0)
-		} else if checkErr == nil && !setupComplete {
-			_ = shutdownControlMaster(instance.IP, keyFile, port, controlPath)
+	progressCallback := func(info utils.SSHRetryInfo) {
+		switch info.Status {
+		case utils.SSHStatusDialing:
+			tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Establishing SSH connection...", 0)
+		case utils.SSHStatusHandshake:
+			if newKeyCreated {
+				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Setting up SSH, this can take a minute...", 0)
+			} else {
+				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Retrying SSH connection...", 0)
+			}
+		case utils.SSHStatusAuth:
+			if newKeyCreated {
+				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Waiting for key to propagate...", 0)
+			} else {
+				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Authentication failed, retrying...", 0)
+			}
+		case utils.SSHStatusSuccess:
+			tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "SSH connection established", 0)
 		}
 	}
 
-	if needProvisioning {
-		progressCallback := func(info utils.SSHRetryInfo) {
+	if checkCancelled() {
+		return nil
+	}
+
+	// Use different connection strategies for new keys vs reconnections
+	if newKeyCreated {
+		// New key: expect auth failures while key propagates, use longer timeout
+		sshClient, err = utils.RobustSSHConnectWithProgress(cancelCtx, instance.IP, keyFile, port, 120, progressCallback)
+	} else {
+		// Reconnecting: enable persistent auth failure detection (detects deleted ~/.ssh quickly)
+		sshConnectOpts := &utils.SSHConnectOptions{
+			DetectPersistentAuthFailure: true,
+		}
+		sshClient, err = utils.RobustSSHConnectWithOptions(cancelCtx, instance.IP, keyFile, port, 60, progressCallback, sshConnectOpts)
+	}
+	if checkCancelled() {
+		return nil
+	}
+
+	// Handle persistent auth failure (likely deleted ~/.ssh on instance) or other auth errors
+	needsKeyRegeneration := err != nil && !newKeyCreated && (errors.Is(err, utils.ErrPersistentAuthFailure) || utils.IsAuthError(err) || utils.IsKeyParseError(err))
+	if needsKeyRegeneration {
+		if errors.Is(err, utils.ErrPersistentAuthFailure) {
+			tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH keys on instance appear to be missing. Reconfiguring access...", 0)
+		} else {
+			tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH key not found on instance. This typically occurs when your node crashes due to OOM, low disk space, or other reasons.", 0)
+		}
+
+		keyResp, keyErr := client.AddSSHKeyCtx(cancelCtx, instanceID)
+		if checkCancelled() {
+			return nil
+		}
+		if keyErr != nil {
+			shutdownTUI()
+			return fmt.Errorf("failed to generate new SSH key: %w", keyErr)
+		}
+
+		if saveErr := utils.SavePrivateKey(instance.UUID, keyResp.Key); saveErr != nil {
+			shutdownTUI()
+			return fmt.Errorf("failed to save new private key: %w", saveErr)
+		}
+
+		keyFile = utils.GetKeyFile(instance.UUID)
+
+		tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Retrying connection with new key to %s:%d...", instance.IP, port), 0)
+
+		retryCallback := func(info utils.SSHRetryInfo) {
 			switch info.Status {
 			case utils.SSHStatusDialing:
-				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Waiting for instance to be ready...", 0)
-			case utils.SSHStatusHandshake:
-				if newKeyCreated {
-					tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Setting up SSH, this can take a minute...", 0)
-				} else {
-					tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Retrying SSH connection...", 0)
-				}
-			case utils.SSHStatusAuth:
-				if newKeyCreated {
-					tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Waiting for key to propagate...", 0)
-				} else {
-					tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Authentication failed, retrying...", 0)
-				}
+				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Establishing SSH connection...", 0)
+			case utils.SSHStatusHandshake, utils.SSHStatusAuth:
+				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Waiting for new key to propagate, this can take a minute...", 0)
 			case utils.SSHStatusSuccess:
 				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "SSH connection established", 0)
 			}
@@ -401,273 +461,243 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		if checkCancelled() {
 			return nil
 		}
-
-		// Use different connection strategies for new keys vs reconnections
-		if newKeyCreated {
-			// New key: expect auth failures while key propagates, use longer timeout, no early exit
-			sshClient, err = utils.RobustSSHConnectWithProgress(cancelCtx, instance.IP, keyFile, port, 120, progressCallback)
-		} else {
-			// Reconnecting: enable persistent auth failure detection for faster recovery
-			// If remote ~/.ssh is deleted, this will detect it quickly and return ErrPersistentAuthFailure
-			sshConnectOpts := &utils.SSHConnectOptions{
-				DetectPersistentAuthFailure: true,
-			}
-			sshClient, err = utils.RobustSSHConnectWithOptions(cancelCtx, instance.IP, keyFile, port, 60, progressCallback, sshConnectOpts)
-		}
+		sshClient, err = utils.RobustSSHConnectWithProgress(cancelCtx, instance.IP, keyFile, port, 120, retryCallback)
 		if checkCancelled() {
 			return nil
 		}
-
-		// Handle persistent auth failure (likely deleted ~/.ssh on instance) or other auth errors
-		needsKeyRegeneration := err != nil && !newKeyCreated && (errors.Is(err, utils.ErrPersistentAuthFailure) || utils.IsAuthError(err) || utils.IsKeyParseError(err))
-		if needsKeyRegeneration {
-			if errors.Is(err, utils.ErrPersistentAuthFailure) {
-				tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH keys on instance appear to be missing. Reconfiguring access...", 0)
-			} else {
-				tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH key not found on instance. This typically occurs when your node crashes due to OOM, low disk space, or other reasons.", 0)
-			}
-
-			keyResp, keyErr := client.AddSSHKeyCtx(cancelCtx, instanceID)
-			if checkCancelled() {
-				return nil
-			}
-			if keyErr != nil {
-				shutdownTUI()
-				return fmt.Errorf("failed to generate new SSH key: %w", keyErr)
-			}
-
-			if saveErr := utils.SavePrivateKey(instance.UUID, keyResp.Key); saveErr != nil {
-				shutdownTUI()
-				return fmt.Errorf("failed to save new private key: %w", saveErr)
-			}
-
-			keyFile = utils.GetKeyFile(instance.UUID)
-
-			tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Retrying connection with new key to %s:%d...", instance.IP, port), 0)
-
-			retryCallback := func(info utils.SSHRetryInfo) {
-				switch info.Status {
-				case utils.SSHStatusDialing:
-					tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Waiting for instance to be ready...", 0)
-				case utils.SSHStatusHandshake, utils.SSHStatusAuth:
-					tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Waiting for new key to propagate, this can take a minute...", 0)
-				case utils.SSHStatusSuccess:
-					tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "SSH connection established", 0)
-				}
-			}
-
-			if checkCancelled() {
-				return nil
-			}
-			sshClient, err = utils.RobustSSHConnectWithProgress(cancelCtx, instance.IP, keyFile, port, 120, retryCallback)
-			if checkCancelled() {
-				return nil
-			}
-			if err != nil {
-				shutdownTUI()
-				return fmt.Errorf("failed to establish SSH connection after key regeneration: %w", err)
-			}
-		} else if err != nil {
+		if err != nil {
 			shutdownTUI()
-			return fmt.Errorf("failed to establish SSH connection: %w", err)
+			return fmt.Errorf("failed to establish SSH connection after key regeneration: %w", err)
 		}
+	} else if err != nil {
+		shutdownTUI()
+		return fmt.Errorf("failed to establish SSH connection: %w", err)
 	}
 
 	phaseTimings["ssh_connection"] = time.Since(phase4Start)
 	tui.SendPhaseComplete(p, 3, phaseTimings["ssh_connection"])
 
-	if needProvisioning {
-		phase5Start := time.Now()
-		tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Setting up instance...", 0)
+	phase5Start := time.Now()
+	tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Setting up instance...", 0)
 
-		setupComplete := utils.IsInstanceSetupComplete(sshClient)
-		if !setupComplete {
-			// Inject API token into instance environment
-			tokenCmd := fmt.Sprintf("sed -i '/export TNR_API_TOKEN/d' /home/ubuntu/.bashrc && echo 'export TNR_API_TOKEN=%s' >> /home/ubuntu/.bashrc", config.Token)
-			_, _ = utils.ExecuteSSHCommand(sshClient, tokenCmd)
+	if checkCancelled() {
+		return nil
+	}
 
-			activeSessions, err := utils.CheckActiveSessions(sshClient)
-			if err != nil {
-				activeSessions = 0
-			}
+	// Get binary hash (already fetched in background)
+	var binaryHash string
+	select {
+	case hash := <-hashChan:
+		binaryHash = hash
+	case <-hashErrChan:
+		binaryHash = ""
+	case <-cancelCtx.Done():
+		if checkCancelled() {
+			return nil
+		}
+	case <-time.After(2 * time.Second):
+		binaryHash = ""
+	}
 
-			// Get binary hash with short timeout (may have been fetched in background during phase 2)
-			var binaryHash string
-			select {
-			case hash := <-hashChan:
-				binaryHash = hash
-			case <-hashErrChan:
-				binaryHash = ""
-			case <-cancelCtx.Done():
-				if checkCancelled() {
-					return nil
-				}
-			case <-time.After(2 * time.Second):
-				binaryHash = ""
-			}
-			binaryHash = utils.NormalizeHash(binaryHash)
+	// For production mode, check active sessions first (like VSCode extension) to skip operations if needed
+	var activeSessions int
+	var existingConfig *utils.ThunderConfig
+	var existingHash string
+	var canEarlyReturn bool
 
-			if checkCancelled() {
-				return nil
-			}
+	if instance.Mode == "production" {
+		var checkErr error
+		activeSessions, checkErr = utils.CheckActiveSessions(sshClient)
+		if checkErr != nil {
+			activeSessions = 0
+		}
 
-			// Only configure virtualization if we're the only/first session
-			if activeSessions <= 1 {
-				gpuCount := 1
-				if instance.NumGPUs != "" {
-					if count, err := strconv.Atoi(instance.NumGPUs); err == nil {
-						gpuCount = count
-					}
-				}
-
-				switch instance.Mode {
-				case "prototyping":
-					var deviceID string
-					existingConfig, _ := utils.GetThunderConfig(sshClient)
-					if existingConfig != nil && existingConfig.DeviceID != "" {
-						deviceID = existingConfig.DeviceID
-					} else if newID, err := client.GetNextDeviceID(); err == nil {
-						deviceID = newID
-					}
-
-					if deviceID != "" {
-						_ = utils.ConfigureThunderVirtualization(sshClient, instanceID, deviceID, instance.GPUType, gpuCount, config.Token, binaryHash)
-					}
-				case "production":
-					_ = utils.RemoveThunderVirtualization(sshClient, config.Token)
-				}
-			}
-
-			_ = utils.MarkInstanceSetupComplete(sshClient)
-
+		if activeSessions > 1 {
+			tokenB64 := base64.StdEncoding.EncodeToString([]byte(config.Token))
+			combinedTokenCmd := fmt.Sprintf("sudo install -d -m 755 /home/ubuntu/.thunder && echo '%s' | base64 -d | sudo tee /home/ubuntu/.thunder/token > /dev/null && sudo chown ubuntu:ubuntu /home/ubuntu/.thunder/token && sudo chmod 600 /home/ubuntu/.thunder/token && sudo sed -i '/export TNR_API_TOKEN/d' /home/ubuntu/.bashrc || true && echo 'export TNR_API_TOKEN=\"$(cat /home/ubuntu/.thunder/token)\"' | sudo tee -a /home/ubuntu/.bashrc > /dev/null", tokenB64)
+			_, _ = utils.ExecuteSSHCommand(sshClient, combinedTokenCmd)
 			phaseTimings["instance_setup"] = time.Since(phase5Start)
 			tui.SendPhaseComplete(p, 4, phaseTimings["instance_setup"])
+			canEarlyReturn = true
 		} else {
-			tui.SendPhaseSkipped(p, 4, "Instance already configured")
-
-			// Still check if binary needs updating (in case server-side binary changed)
-			if instance.Mode == "prototyping" && sshClient != nil {
-				tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Checking binary version...", 0)
-				var binaryHash string
-				select {
-				case hash := <-hashChan:
-					binaryHash = hash
-				case <-hashErrChan:
-					binaryHash = ""
-				case <-time.After(1 * time.Second):
-					binaryHash = ""
-				}
-				binaryHash = utils.NormalizeHash(binaryHash)
-
-				if binaryHash != "" {
-					hashAlgo := utils.DetectHashAlgorithm(binaryHash)
-					if hashAlgo == utils.HashAlgoUnknown {
-						hashAlgo = utils.HashAlgoSHA256
-					}
-
-					existingHash, err := utils.GetInstanceBinaryHash(sshClient, hashAlgo)
-					if err != nil {
-						existingHash = ""
-					}
-
-					if existingHash != "" && existingHash != binaryHash {
-						// Binary exists but hash differs - trigger background update
-						tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Binary outdated, updating in background...", 0)
-						gpuCount := 1
-						if instance.NumGPUs != "" {
-							if count, err := strconv.Atoi(instance.NumGPUs); err == nil {
-								gpuCount = count
-							}
-						}
-						var deviceID string
-						existingConfig, _ := utils.GetThunderConfig(sshClient)
-						if existingConfig != nil && existingConfig.DeviceID != "" {
-							deviceID = existingConfig.DeviceID
-						}
-						if deviceID != "" {
-							_ = utils.TriggerBackgroundSetup(sshClient, instanceID, deviceID, instance.GPUType, gpuCount, config.Token)
-							tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Binary update triggered", 0)
-						}
-					} else {
-						tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Binary up to date", 0)
-					}
-				} else {
-					tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Could not verify binary version", 0)
-				}
+			// No active sessions - match VSCode extension: skip config/hash check, run cleanup (idempotent)
+			if err := utils.RemoveThunderVirtualization(sshClient, config.Token); err != nil {
+				shutdownTUI()
+				return fmt.Errorf("failed to remove Thunder virtualization: %w", err)
 			}
+			phaseTimings["instance_setup"] = time.Since(phase5Start)
+			tui.SendPhaseComplete(p, 4, phaseTimings["instance_setup"])
+			canEarlyReturn = true
+
 		}
-	} else {
-		// No provisioning needed (instance already configured via ControlMaster),
-		// but for prototyping instances we still want to check the Thunder binary
-		// on every connect.
-		tui.SendPhaseSkipped(p, 4, "")
+	}
 
-		if instance.Mode == "prototyping" {
-			tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Checking binary version...", 0)
+	// For prototyping mode, do full config/hash read in parallel
+	if instance.Mode != "production" || !canEarlyReturn {
+		// Clean up ld.so.preload early if binary is missing to prevent stderr pollution
+		_ = utils.CleanupLdSoPreloadIfBinaryMissing(sshClient)
 
-			// Establish a short-lived SSH connection for the binary check
-			checkClient, err := utils.RobustSSHConnectCtx(cancelCtx, instance.IP, keyFile, port, 30)
-			if err == nil && checkClient != nil {
-				defer checkClient.Close()
+		type configResult struct {
+			config *utils.ThunderConfig
+			err    error
+		}
+		type instanceHashResult struct {
+			hash string
+			err  error
+		}
 
-				// Get binary hash with a short timeout (may have been fetched in background)
-				var binaryHash string
-				select {
-				case hash := <-hashChan:
-					binaryHash = hash
-				case <-hashErrChan:
-					binaryHash = ""
-				case <-cancelCtx.Done():
-					if checkCancelled() {
-						return nil
-					}
-				case <-time.After(2 * time.Second):
-					binaryHash = ""
-				}
-				binaryHash = utils.NormalizeHash(binaryHash)
+		configChan := make(chan configResult, 1)
+		instanceHashChan := make(chan instanceHashResult, 1)
 
-				if binaryHash != "" {
-					hashAlgo := utils.DetectHashAlgorithm(binaryHash)
-					if hashAlgo == utils.HashAlgoUnknown {
-						hashAlgo = utils.HashAlgoSHA256
-					}
+		go func() {
+			config, err := utils.GetThunderConfig(sshClient)
+			configChan <- configResult{config: config, err: err}
+		}()
 
-					existingHash, err := utils.GetInstanceBinaryHash(checkClient, hashAlgo)
-					if err != nil {
-						existingHash = ""
-					}
+		expectedHash := utils.NormalizeHash(binaryHash)
+		isValidHash := expectedHash != "" && len(expectedHash) == 32 && utils.IsHexString(expectedHash)
+		hashAlgorithm := utils.DetectHashAlgorithm(expectedHash)
 
-					if existingHash != "" && existingHash != binaryHash {
-						// Binary exists but hash differs - trigger background update
-						tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Binary outdated, updating in background...", 0)
-						gpuCount := 1
-						if instance.NumGPUs != "" {
-							if count, err := strconv.Atoi(instance.NumGPUs); err == nil {
-								gpuCount = count
-							}
-						}
-						var deviceID string
-						existingConfig, _ := utils.GetThunderConfig(checkClient)
-						if existingConfig != nil && existingConfig.DeviceID != "" {
-							deviceID = existingConfig.DeviceID
-						}
-						if deviceID != "" {
-							_ = utils.TriggerBackgroundSetup(checkClient, instanceID, deviceID, instance.GPUType, gpuCount, config.Token)
-							tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Binary update triggered", 0)
-						} else {
-							tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Could not determine device ID for binary update", 0)
-						}
-					} else {
-						tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Binary up to date", 0)
-					}
-				} else {
-					tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Could not verify binary version", 0)
-				}
-			} else {
-				tui.SendPhaseUpdate(p, 4, tui.PhaseCompleted, "Could not verify binary version", 0)
+		if isValidHash {
+			go func() {
+				hash, err := utils.GetInstanceBinaryHash(sshClient, hashAlgorithm)
+				instanceHashChan <- instanceHashResult{hash: hash, err: err}
+			}()
+		} else {
+			instanceHashChan <- instanceHashResult{hash: "", err: nil}
+		}
+
+		configRes := <-configChan
+		hashRes := <-instanceHashChan
+
+		if configRes.err == nil {
+			existingConfig = configRes.config
+		}
+
+		if hashRes.err == nil {
+			existingHash = hashRes.hash
+		}
+
+	}
+
+	ranConfigurator := false
+
+	// Early return if GPU config and hash match
+	if !canEarlyReturn {
+		if instance.Mode == "prototyping" && existingConfig != nil && existingConfig.DeviceID != "" {
+			expectedHash := utils.NormalizeHash(binaryHash)
+			isValidHash := expectedHash != "" && len(expectedHash) == 32 && utils.IsHexString(expectedHash)
+			gpuTypeMatches := strings.EqualFold(existingConfig.GPUType, instance.GPUType)
+			gpuCountMatches := existingConfig.GPUCount == gpuCount
+			hashMatches := isValidHash && existingHash != "" && existingHash == expectedHash
+
+			if gpuTypeMatches && gpuCountMatches && hashMatches {
+				phaseTimings["instance_setup"] = time.Since(phase5Start)
+				tui.SendPhaseComplete(p, 4, phaseTimings["instance_setup"])
+				canEarlyReturn = true
+				ranConfigurator = true
 			}
 		}
 	}
+
+	// Skip token/bootstrap operations if GPU config matches (ConfigureThunderVirtualization handles token update)
+	skipTokenBootstrap := canEarlyReturn
+	skipActiveSessionsCheck := canEarlyReturn
+	if !canEarlyReturn && instance.Mode == "prototyping" && existingConfig != nil && existingConfig.DeviceID != "" {
+		gpuTypeMatches := strings.EqualFold(existingConfig.GPUType, instance.GPUType)
+		gpuCountMatches := existingConfig.GPUCount == gpuCount
+		if gpuTypeMatches && gpuCountMatches {
+			skipTokenBootstrap = true
+			skipActiveSessionsCheck = true
+		}
+	}
+
+	// For prototyping mode, handle token/bootstrap and active sessions check
+	if instance.Mode == "prototyping" && !canEarlyReturn {
+		if !skipTokenBootstrap {
+			// Combine token bootstrap and bashrc update into a single SSH command
+			tokenB64 := base64.StdEncoding.EncodeToString([]byte(config.Token))
+			combinedTokenCmd := fmt.Sprintf("sudo install -d -m 755 /home/ubuntu/.thunder && echo '%s' | base64 -d | sudo tee /home/ubuntu/.thunder/token > /dev/null && sudo chown ubuntu:ubuntu /home/ubuntu/.thunder/token && sudo chmod 600 /home/ubuntu/.thunder/token && sudo sed -i '/export TNR_API_TOKEN/d' /home/ubuntu/.bashrc || true && echo 'export TNR_API_TOKEN=\"$(cat /home/ubuntu/.thunder/token)\"' | sudo tee -a /home/ubuntu/.bashrc > /dev/null", tokenB64)
+			_, _ = utils.ExecuteSSHCommand(sshClient, combinedTokenCmd)
+		}
+
+		if !skipActiveSessionsCheck {
+			var checkErr error
+			activeSessions, checkErr = utils.CheckActiveSessions(sshClient)
+			if checkErr != nil {
+				activeSessions = 0
+			}
+		} else {
+			activeSessions = 0
+		}
+	} else if instance.Mode == "prototyping" {
+		activeSessions = 0
+	}
+
+	if !canEarlyReturn {
+		switch instance.Mode {
+		case "production":
+			tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Production mode detected, disabling Thunder virtualization...", 0)
+			if err := utils.RemoveThunderVirtualization(sshClient, config.Token); err != nil {
+				shutdownTUI()
+				return fmt.Errorf("failed to remove Thunder virtualization: %w", err)
+			}
+		default:
+			var deviceID string
+			if existingConfig != nil && existingConfig.DeviceID != "" {
+				deviceID = existingConfig.DeviceID
+			} else {
+				if newID, err := client.GetNextDeviceID(); err == nil {
+					deviceID = newID
+				}
+			}
+
+			switch {
+			case activeSessions > 1:
+				tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, fmt.Sprintf("Detected %d active SSH sessions, skipping binary update", activeSessions), 0)
+			case deviceID == "":
+				tui.SendPhaseUpdate(p, 4, tui.PhaseWarning, "Unable to determine device ID, skipping environment setup", 0)
+			default:
+				tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Updating Thunder binary and config if needed...", 0)
+				if err := utils.ConfigureThunderVirtualization(sshClient, instanceID, deviceID, instance.GPUType, gpuCount, config.Token, binaryHash, existingConfig); err != nil {
+					shutdownTUI()
+					return fmt.Errorf("failed to configure Thunder virtualization: %w", err)
+				}
+				ranConfigurator = true
+			}
+		}
+	}
+
+	if checkCancelled() {
+		return nil
+	}
+
+	if instance.Mode == "prototyping" && !ranConfigurator && binaryHash != "" {
+		tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Checking Thunder binary version...", 0)
+		expectedHash := utils.NormalizeHash(binaryHash)
+		hashAlgo := utils.DetectHashAlgorithm(expectedHash)
+
+		existingHash, hashErr := utils.GetInstanceBinaryHash(sshClient, hashAlgo)
+		existingHashNormalized := utils.NormalizeHash(existingHash)
+
+		if hashErr == nil && existingHashNormalized != "" && existingHashNormalized != expectedHash {
+			tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Binary outdated, updating in background...", 0)
+			deviceID := ""
+			if existingConfig != nil && existingConfig.DeviceID != "" {
+				deviceID = existingConfig.DeviceID
+			}
+			if deviceID != "" {
+				_ = utils.TriggerBackgroundSetup(sshClient, instanceID, deviceID, instance.GPUType, gpuCount, config.Token)
+			}
+		}
+	}
+
+	if checkCancelled() {
+		return nil
+	}
+
+	phaseTimings["instance_setup"] = time.Since(phase5Start)
+	tui.SendPhaseComplete(p, 4, phaseTimings["instance_setup"])
 
 	// Update SSH config for easy reconnection via `ssh tnr-{instance_id}`
 	templatePorts := utils.GetTemplateOpenPorts(instance.Template)
@@ -704,7 +734,6 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		sshClient.Close()
 	}
 
-	// Build SSH command with port forwarding and connection multiplexing
 	sshArgs := []string{
 		"-q",
 		"-o", "StrictHostKeyChecking=accept-new",
@@ -715,16 +744,6 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		"-t",
 	}
 
-	// Use ControlMaster for connection multiplexing (not supported on Windows)
-	if controlPath != "" {
-		sshArgs = append(sshArgs,
-			"-o", "ControlMaster=auto",
-			"-o", fmt.Sprintf("ControlPath=%s", controlPath),
-			"-o", "ControlPersist=5m",
-		)
-	}
-
-	// Merge user-specified tunnel ports with template open ports
 	allPorts := make(map[int]bool)
 	for _, p := range tunnelPorts {
 		allPorts[p] = true
@@ -810,53 +829,4 @@ Option 3: Install via winget:
 After installation, restart your terminal and try again.
 
 %s`, errDetails)
-}
-
-func checkSetupCompleteViaSSH(ctx context.Context, ip, keyFile string, port int, controlPath string) (bool, error) {
-	if controlPath == "" {
-		return false, fmt.Errorf("control path not configured")
-	}
-
-	args := []string{
-		"-q",
-		"-o", "StrictHostKeyChecking=accept-new",
-		"-o", "IdentitiesOnly=yes",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "BatchMode=yes",
-		"-o", "ControlMaster=auto",
-		"-o", fmt.Sprintf("ControlPath=%s", controlPath),
-		"-o", "ControlPersist=5m",
-		"-i", keyFile,
-		"-p", fmt.Sprintf("%d", port),
-		fmt.Sprintf("ubuntu@%s", ip),
-		fmt.Sprintf("test -f %s && echo yes || echo no", utils.ThunderSetupMarker),
-	}
-
-	cmd := exec.CommandContext(ctx, "ssh", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return false, err
-	}
-
-	return strings.TrimSpace(string(output)) == "yes", nil
-}
-
-func shutdownControlMaster(ip, keyFile string, port int, controlPath string) error {
-	if controlPath == "" {
-		return nil
-	}
-
-	args := []string{
-		"-S", controlPath,
-		"-O", "exit",
-		"-o", "StrictHostKeyChecking=accept-new",
-		"-o", "IdentitiesOnly=yes",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-i", keyFile,
-		"-p", fmt.Sprintf("%d", port),
-		fmt.Sprintf("ubuntu@%s", ip),
-	}
-
-	cmd := exec.Command("ssh", args...)
-	return cmd.Run()
 }
