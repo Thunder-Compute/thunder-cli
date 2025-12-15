@@ -179,6 +179,7 @@ func (c *Client) AddSSHKeyCtx(ctx context.Context, instanceID string) (*AddSSHKe
 	return &keyResp, nil
 }
 
+// TODO: Most likely just going to remove this
 func (c *Client) GetNextDeviceIDCtx(ctx context.Context) (string, error) {
 	req, err := http.NewRequest("GET", c.baseURL+"/next_id", nil)
 	if err != nil {
@@ -206,12 +207,26 @@ func (c *Client) GetNextDeviceIDCtx(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var deviceResp DeviceIDResponse
+	type deviceIDResponse struct {
+		ID json.Number `json:"id"`
+	}
+
+	var deviceResp deviceIDResponse
 	if err := json.Unmarshal(body, &deviceResp); err != nil {
 		return "", fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	return deviceResp.ID, nil
+	if deviceResp.ID == "" {
+		return "", fmt.Errorf("response missing 'id' field")
+	}
+
+	idInt, err := deviceResp.ID.Int64()
+	if err != nil {
+		return "", fmt.Errorf("device ID must be an integer number, got: %q", string(deviceResp.ID))
+	}
+
+	deviceID := fmt.Sprintf("%d", idInt)
+	return deviceID, nil
 }
 
 func (c *Client) ListInstancesWithIPUpdate() ([]Instance, error) {

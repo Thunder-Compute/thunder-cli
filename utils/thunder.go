@@ -2,13 +2,11 @@ package utils
 
 import (
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
 )
 
-// ThunderConfig represents the Thunder virtualization configuration
 type ThunderConfig struct {
 	InstanceID string `json:"instanceId"`
 	DeviceID   string `json:"deviceId"`
@@ -25,36 +23,24 @@ const (
 )
 
 const (
-	thunderBinaryURL   = "https://storage.googleapis.com/client-binary/client_linux_x86_64"
-	thunderConfigDir   = "/home/ubuntu/.thunder"
-	thunderConfigPath  = "/home/ubuntu/.thunder/config.json"
-	thunderLibPath     = "/home/ubuntu/.thunder/libthunder.so"
-	ThunderSetupMarker = "/home/ubuntu/.thunder/setup_complete"
-	thunderSymlink     = "/etc/thunder/libthunder.so"
-	ldPreloadPath      = "/etc/ld.so.preload"
-	tokenPath          = "/home/ubuntu/.thunder/token"
-	tokenSymlink       = "/etc/thunder/token"
+	thunderBinaryURL  = "https://storage.googleapis.com/client-binary/client_linux_x86_64"
+	thunderConfigDir  = "/home/ubuntu/.thunder"
+	thunderConfigPath = "/home/ubuntu/.thunder/config.json"
+	thunderLibPath    = "/home/ubuntu/.thunder/libthunder.so"
+	thunderSymlink    = "/etc/thunder/libthunder.so"
+	ldPreloadPath     = "/etc/ld.so.preload"
+	tokenPath         = "/home/ubuntu/.thunder/token"
+	tokenSymlink      = "/etc/thunder/token"
 )
 
-func IsInstanceSetupComplete(client *SSHClient) bool {
-	output, err := ExecuteSSHCommand(client, fmt.Sprintf("test -f %s && echo yes || echo no", ThunderSetupMarker))
-	if err != nil {
-		return false
-	}
-	return strings.TrimSpace(output) == "yes"
-}
-
-func MarkInstanceSetupComplete(client *SSHClient) error {
-	_, err := ExecuteSSHCommand(client, fmt.Sprintf("mkdir -p %s && touch %s", thunderConfigDir, ThunderSetupMarker))
-	return err
-}
-
-// GetThunderConfig reads the Thunder configuration from the instance
 func GetThunderConfig(client *SSHClient) (*ThunderConfig, error) {
-	output, err := ExecuteSSHCommand(client, fmt.Sprintf("cat %s 2>/dev/null || echo '{}'", thunderConfigPath))
+	// Use stdout-only to avoid stderr pollution from ld.so.preload errors
+	output, err := ExecuteSSHCommandStdoutOnly(client, fmt.Sprintf("cat %s 2>/dev/null || echo '{}'", thunderConfigPath))
 	if err != nil {
 		return nil, err
 	}
+
+	output = filterLdSoErrors(output)
 
 	var config ThunderConfig
 	if err := json.Unmarshal([]byte(output), &config); err != nil {
@@ -64,33 +50,67 @@ func GetThunderConfig(client *SSHClient) (*ThunderConfig, error) {
 	return &config, nil
 }
 
-// ConfigureThunderVirtualization sets up GPU virtualization for prototyping mode
-func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpuType string, gpuCount int, token, binaryHash string) error {
-	configOutput, _ := ExecuteSSHCommand(client, fmt.Sprintf("cat %s 2>/dev/null || echo '{}'", thunderConfigPath))
+// filterLdSoErrors prevents stderr pollution from breaking output parsing when /etc/ld.so.preload references a missing binary
+func filterLdSoErrors(output string) string {
+	lines := strings.Split(output, "\n")
+	var filtered []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		isLdSoError := strings.Contains(line, "ld.so: object") ||
+			strings.Contains(line, "cannot be preloaded") ||
+			strings.Contains(line, "ignored") ||
+			strings.HasPrefix(line, "error: ld.so:")
+		if !isLdSoError {
+			filtered = append(filtered, line)
+		}
+	}
+	return strings.Join(filtered, "\n")
+}
 
-	var existingConfig ThunderConfig
-	_ = json.Unmarshal([]byte(strings.TrimSpace(configOutput)), &existingConfig)
+// CleanupLdSoPreloadIfBinaryMissing prevents stderr pollution from breaking command output parsing
+func CleanupLdSoPreloadIfBinaryMissing(client *SSHClient) error {
+	checkCmd := fmt.Sprintf("test -f %s && echo 'exists' || echo 'missing'", thunderLibPath)
+	output, err := ExecuteSSHCommandStdoutOnly(client, checkCmd)
+	if err != nil {
+		return err
+	}
+	output = filterLdSoErrors(output)
 
-	configNeedsUpdate := existingConfig.DeviceID == "" || existingConfig.GPUType != gpuType || existingConfig.GPUCount != gpuCount
+	if strings.TrimSpace(output) == "missing" {
+		cleanupCmd := fmt.Sprintf("sudo sed -i '/%s/d' %s 2>/dev/null || sudo rm -f %s 2>/dev/null || true", thunderSymlink, ldPreloadPath, ldPreloadPath)
+		_, err := ExecuteSSHCommand(client, cleanupCmd)
+		return err
+	}
+	return nil
+}
 
-	expectedHash := NormalizeHash(binaryHash)
-	hashAlgorithm := DetectHashAlgorithm(expectedHash)
-	if hashAlgorithm == HashAlgoUnknown {
-		hashAlgorithm = HashAlgoSHA256
+func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpuType string, gpuCount int, token, binaryHash string, existingConfig *ThunderConfig) error {
+	gpuTypeMatches := false
+	gpuCountMatches := false
+	if existingConfig != nil {
+		gpuTypeMatches = strings.EqualFold(existingConfig.GPUType, gpuType)
+		gpuCountMatches = existingConfig.GPUCount == gpuCount
 	}
 
+	expectedHash := NormalizeHash(binaryHash)
+	isValidHash := expectedHash != "" && len(expectedHash) == 32 && IsHexString(expectedHash)
+	hashAlgorithm := DetectHashAlgorithm(expectedHash)
 	existingHash := ""
-	if expectedHash != "" {
+	if isValidHash {
 		if h, err := GetInstanceBinaryHash(client, hashAlgorithm); err == nil {
 			existingHash = h
 		}
 	}
 
-	binaryNeedsUpdate := expectedHash == "" || existingHash == "" || existingHash != expectedHash
-
-	if !configNeedsUpdate && !binaryNeedsUpdate {
+	if gpuTypeMatches && gpuCountMatches && existingConfig != nil && existingConfig.DeviceID != "" && isValidHash && existingHash != "" && existingHash == expectedHash {
 		return nil
 	}
+
+	configNeedsUpdate := existingConfig == nil || existingConfig.DeviceID == "" || !gpuTypeMatches || !gpuCountMatches
+	binaryNeedsUpdate := !isValidHash || existingHash == "" || existingHash != expectedHash
 
 	config := ThunderConfig{
 		InstanceID: instanceID,
@@ -106,7 +126,6 @@ func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpu
 	tokenB64 := base64.StdEncoding.EncodeToString([]byte(token))
 
 	var scriptParts []string
-
 	scriptParts = append(scriptParts, fmt.Sprintf("mkdir -p %s", thunderConfigDir))
 	scriptParts = append(scriptParts, "sudo mkdir -p /etc/thunder")
 
@@ -114,16 +133,25 @@ func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpu
 		scriptParts = append(scriptParts, fmt.Sprintf("curl -sL %s -o /tmp/libthunder.tmp && mv /tmp/libthunder.tmp %s", thunderBinaryURL, thunderLibPath))
 	}
 
-	scriptParts = append(scriptParts, fmt.Sprintf("sudo ln -sf %s %s", thunderLibPath, thunderSymlink))
-	scriptParts = append(scriptParts, fmt.Sprintf("echo '%s' | sudo tee %s > /dev/null", thunderSymlink, ldPreloadPath))
-	scriptParts = append(scriptParts, fmt.Sprintf("echo '%s' | base64 -d > %s", configB64, thunderConfigPath))
-	scriptParts = append(scriptParts, fmt.Sprintf("sudo ln -sf %s /etc/thunder/config.json", thunderConfigPath))
+	if binaryNeedsUpdate || configNeedsUpdate {
+		scriptParts = append(scriptParts, fmt.Sprintf("sudo ln -sf %s %s", thunderLibPath, thunderSymlink))
+		scriptParts = append(scriptParts, fmt.Sprintf("echo '%s' | sudo tee %s > /dev/null", thunderSymlink, ldPreloadPath))
+	}
+
+	if configNeedsUpdate {
+		scriptParts = append(scriptParts, fmt.Sprintf("echo '%s' | base64 -d > %s", configB64, thunderConfigPath))
+		scriptParts = append(scriptParts, fmt.Sprintf("sudo ln -sf %s /etc/thunder/config.json", thunderConfigPath))
+	}
+
+	// Always ensure token is set (in case it changed)
 	scriptParts = append(scriptParts, fmt.Sprintf("echo '%s' | base64 -d > %s", tokenB64, tokenPath))
 	scriptParts = append(scriptParts, fmt.Sprintf("sudo ln -sf %s %s", tokenPath, tokenSymlink))
 
-	setupScript := strings.Join(scriptParts, " && ")
-	if _, err := ExecuteSSHCommand(client, setupScript); err != nil {
-		return fmt.Errorf("failed to configure Thunder virtualization: %w", err)
+	if len(scriptParts) > 0 {
+		setupScript := strings.Join(scriptParts, " && ")
+		if _, err := ExecuteSSHCommand(client, setupScript); err != nil {
+			return fmt.Errorf("failed to configure Thunder virtualization: %w", err)
+		}
 	}
 
 	return nil
@@ -134,23 +162,10 @@ func NormalizeHash(hash string) string {
 	if trimmed == "" {
 		return ""
 	}
-
-	lowered := strings.ToLower(trimmed)
-	if isHexString(lowered) {
-		return lowered
-	}
-
-	if converted := decodeBase64Hash(trimmed); converted != "" {
-		return converted
-	}
-	if converted := decodeBase64Hash(lowered); converted != "" {
-		return converted
-	}
-
-	return lowered
+	return strings.ToLower(trimmed)
 }
 
-func isHexString(value string) bool {
+func IsHexString(value string) bool {
 	if value == "" || len(value)%2 != 0 {
 		return false
 	}
@@ -162,35 +177,21 @@ func isHexString(value string) bool {
 	return true
 }
 
-func decodeBase64Hash(value string) string {
-	decoders := []*base64.Encoding{
-		base64.StdEncoding,
-		base64.RawStdEncoding,
-		base64.URLEncoding,
-		base64.RawURLEncoding,
-	}
-
-	for _, enc := range decoders {
-		if decoded, err := enc.DecodeString(value); err == nil {
-			return hex.EncodeToString(decoded)
-		}
-	}
-
-	return ""
-}
-
 func DetectHashAlgorithm(hash string) HashAlgorithm {
+	if hash == "" {
+		return HashAlgoUnknown
+	}
 	switch len(hash) {
 	case 64:
-		if isHexString(hash) {
+		if IsHexString(hash) {
 			return HashAlgoSHA256
 		}
 	case 32:
-		if isHexString(hash) {
+		if IsHexString(hash) {
 			return HashAlgoMD5
 		}
 	}
-	return HashAlgoUnknown
+	return HashAlgoMD5
 }
 
 func GetInstanceBinaryHash(client *SSHClient, algorithm HashAlgorithm) (string, error) {
@@ -202,26 +203,35 @@ func GetInstanceBinaryHash(client *SSHClient, algorithm HashAlgorithm) (string, 
 		cmd = fmt.Sprintf("sha256sum %s 2>/dev/null | awk '{print $1}' || echo ''", thunderLibPath)
 	}
 
-	output, err := ExecuteSSHCommand(client, cmd)
+	output, err := ExecuteSSHCommandStdoutOnly(client, cmd)
 	if err != nil {
 		return "", err
 	}
-	return NormalizeHash(output), nil
+
+	output = filterLdSoErrors(output)
+	normalized := NormalizeHash(output)
+	return normalized, nil
 }
 
-// RemoveThunderVirtualization cleans up Thunder virtualization for production mode
+// RemoveThunderVirtualization production: removes binary/config, keeps token
 func RemoveThunderVirtualization(client *SSHClient, token string) error {
-	tokenB64 := base64.StdEncoding.EncodeToString([]byte(token))
+	productionCommands := []string{
+		fmt.Sprintf("sudo rm -f %s || true", ldPreloadPath),
+		"sudo touch /etc/ld.so.preload || true",
+		"sudo chown root:root /etc/ld.so.preload || true",
+		"sudo chmod 644 /etc/ld.so.preload || true",
+		fmt.Sprintf("sudo rm -f %s || true", thunderLibPath),
+		fmt.Sprintf("sudo rm -f %s || true", thunderConfigPath),
+		"sudo rm -rf /etc/thunder || true",
+		fmt.Sprintf("echo '%s' | base64 -d > /tmp/token.tmp", base64.StdEncoding.EncodeToString([]byte(token))),
+		"sudo install -d -m 755 /home/ubuntu/.thunder || true",
+		"sudo install -m 600 -o ubuntu -g ubuntu /tmp/token.tmp /home/ubuntu/.thunder/token || true",
+		"rm -f /tmp/token.tmp || true",
+		"sudo sed -i '/export TNR_API_TOKEN/d' /home/ubuntu/.bashrc || true",
+		"echo 'export TNR_API_TOKEN=\"$(cat /home/ubuntu/.thunder/token)\"' | sudo tee -a /home/ubuntu/.bashrc > /dev/null || true",
+	}
 
-	cleanupScript := fmt.Sprintf(`
-sudo rm -f %s && \
-rm -f %s && \
-sudo rm -f %s /etc/thunder/config.json && \
-mkdir -p %s && \
-sudo mkdir -p /etc/thunder && \
-echo '%s' | base64 -d > %s && \
-sudo ln -sf %s %s
-`, ldPreloadPath, thunderLibPath, thunderSymlink, thunderConfigDir, tokenB64, tokenPath, tokenPath, tokenSymlink)
+	cleanupScript := strings.Join(productionCommands, " ; ")
 
 	if _, err := ExecuteSSHCommand(client, cleanupScript); err != nil {
 		return fmt.Errorf("failed to remove Thunder virtualization: %w", err)
@@ -254,7 +264,6 @@ echo "%s" | base64 -d > %s
 sudo ln -sf %s /etc/thunder/config.json
 echo "%s" | base64 -d > %s
 sudo ln -sf %s %s
-touch %s
 ' > /dev/null 2>&1 &`,
 		thunderConfigDir,
 		thunderBinaryURL, thunderLibPath,
@@ -263,8 +272,7 @@ touch %s
 		configB64, thunderConfigPath,
 		thunderConfigPath,
 		tokenB64, tokenPath,
-		tokenPath, tokenSymlink,
-		ThunderSetupMarker)
+		tokenPath, tokenSymlink)
 
 	_, err = ExecuteSSHCommand(client, bgScript)
 	return err
@@ -278,12 +286,10 @@ mkdir -p %s
 sudo mkdir -p /etc/thunder
 echo "%s" | base64 -d > %s
 sudo ln -sf %s %s
-touch %s
 ' > /dev/null 2>&1 &`,
 		thunderConfigDir,
 		tokenB64, tokenPath,
-		tokenPath, tokenSymlink,
-		ThunderSetupMarker)
+		tokenPath, tokenSymlink)
 
 	_, err := ExecuteSSHCommand(client, bgScript)
 	return err
