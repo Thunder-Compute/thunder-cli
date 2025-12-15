@@ -4,7 +4,7 @@ go 1.25.3
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/bramvdbogaerde/go-scp v1.5.0
+	github.com/bramvdbogaerde/go-scp v1.6.0
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
