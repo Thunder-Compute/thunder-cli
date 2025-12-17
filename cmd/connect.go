@@ -203,14 +203,12 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	)
 
 	tuiDone := make(chan error, 1)
-	cancelCtx, cancel := context.WithCancel(context.Background())
 	var wasCancelled bool
 
 	go func() {
 		finalModel, err := p.Run()
 		if fm, ok := finalModel.(tui.ConnectFlowModel); ok && fm.Cancelled() {
 			wasCancelled = true
-			cancel()
 		}
 		if err != nil {
 			tuiDone <- err
@@ -221,17 +219,20 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	time.Sleep(50 * time.Millisecond)
 
 	shutdownTUI := func() {
-		cancel()
 		stop()
-		<-tuiDone
+		// Don't block on tuiDone if context is already cancelled
+		select {
+		case <-tuiDone:
+		case <-ctx.Done():
+			// Context cancelled, don't wait for TUI
+		case <-time.After(100 * time.Millisecond):
+			// Short timeout to avoid hanging
+		}
 	}
 
 	checkCancelled := func() bool {
 		select {
-		case <-cancelCtx.Done():
-			return true
 		case <-ctx.Done():
-			cancel()
 			return true
 		default:
 			return false
@@ -270,7 +271,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	// Fetch binary hash in background for potential virtualization setup
 	go func() {
-		hash, err := client.GetLatestBinaryHashCtx(cancelCtx)
+		hash, err := client.GetLatestBinaryHashCtx(ctx)
 		if err != nil {
 			hashErrChan <- err
 			return
@@ -281,7 +282,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	if checkCancelled() {
 		return nil
 	}
-	instances, err = client.ListInstancesWithIPUpdateCtx(cancelCtx)
+	instances, err = client.ListInstancesWithIPUpdateCtx(ctx)
 	if checkCancelled() {
 		return nil
 	}
@@ -334,7 +335,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	}
 	if !utils.KeyExists(instance.UUID) {
 		tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Generating new SSH key...", 0)
-		keyResp, err := client.AddSSHKeyCtx(cancelCtx, instanceID)
+		keyResp, err := client.AddSSHKeyCtx(ctx, instanceID)
 		if checkCancelled() {
 			return nil
 		}
@@ -367,7 +368,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	var sshClient *utils.SSHClient
 
 	if controlPath != "" && !newKeyCreated {
-		setupComplete, checkErr := checkSetupCompleteViaSSH(cancelCtx, instance.IP, keyFile, port, controlPath)
+		setupComplete, checkErr := checkSetupCompleteViaSSH(ctx, instance.IP, keyFile, port, controlPath)
 		if checkErr == nil && setupComplete {
 			needProvisioning = false
 			tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Instance already configured, using ControlMaster connection", 0)
@@ -404,15 +405,19 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 		// Use different connection strategies for new keys vs reconnections
 		if newKeyCreated {
-			// New key: expect auth failures while key propagates, use longer timeout, no early exit
-			sshClient, err = utils.RobustSSHConnectWithProgress(cancelCtx, instance.IP, keyFile, port, 120, progressCallback)
+			// New key: expect auth failures while key propagates, use longer timeout
+			// Enable persistent auth failure detection for faster recovery if something is wrong
+			sshConnectOpts := &utils.SSHConnectOptions{
+				DetectPersistentAuthFailure: true,
+			}
+			sshClient, err = utils.RobustSSHConnectWithOptions(ctx, instance.IP, keyFile, port, 120, progressCallback, sshConnectOpts)
 		} else {
 			// Reconnecting: enable persistent auth failure detection for faster recovery
 			// If remote ~/.ssh is deleted, this will detect it quickly and return ErrPersistentAuthFailure
 			sshConnectOpts := &utils.SSHConnectOptions{
 				DetectPersistentAuthFailure: true,
 			}
-			sshClient, err = utils.RobustSSHConnectWithOptions(cancelCtx, instance.IP, keyFile, port, 60, progressCallback, sshConnectOpts)
+			sshClient, err = utils.RobustSSHConnectWithOptions(ctx, instance.IP, keyFile, port, 60, progressCallback, sshConnectOpts)
 		}
 		if checkCancelled() {
 			return nil
@@ -427,7 +432,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 				tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH key not found on instance. This typically occurs when your node crashes due to OOM, low disk space, or other reasons.", 0)
 			}
 
-			keyResp, keyErr := client.AddSSHKeyCtx(cancelCtx, instanceID)
+			keyResp, keyErr := client.AddSSHKeyCtx(ctx, instanceID)
 			if checkCancelled() {
 				return nil
 			}
@@ -459,7 +464,11 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			if checkCancelled() {
 				return nil
 			}
-			sshClient, err = utils.RobustSSHConnectWithProgress(cancelCtx, instance.IP, keyFile, port, 120, retryCallback)
+			// Use persistent auth detection even for regenerated keys
+			sshConnectOpts := &utils.SSHConnectOptions{
+				DetectPersistentAuthFailure: true,
+			}
+			sshClient, err = utils.RobustSSHConnectWithOptions(ctx, instance.IP, keyFile, port, 120, retryCallback, sshConnectOpts)
 			if checkCancelled() {
 				return nil
 			}
@@ -498,7 +507,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 				binaryHash = hash
 			case <-hashErrChan:
 				binaryHash = ""
-			case <-cancelCtx.Done():
+			case <-ctx.Done():
 				if checkCancelled() {
 					return nil
 				}
@@ -606,7 +615,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Checking binary version...", 0)
 
 			// Establish a short-lived SSH connection for the binary check
-			checkClient, err := utils.RobustSSHConnectCtx(cancelCtx, instance.IP, keyFile, port, 30)
+			checkClient, err := utils.RobustSSHConnectCtx(ctx, instance.IP, keyFile, port, 30)
 			if err == nil && checkClient != nil {
 				defer checkClient.Close()
 
@@ -617,7 +626,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 					binaryHash = hash
 				case <-hashErrChan:
 					binaryHash = ""
-				case <-cancelCtx.Done():
+				case <-ctx.Done():
 					if checkCancelled() {
 						return nil
 					}

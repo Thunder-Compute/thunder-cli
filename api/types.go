@@ -71,6 +71,17 @@ type DeviceIDResponse struct {
 	ID string `json:"id"`
 }
 
+// CreateSnapshotRequest represents the request to create a snapshot
+type CreateSnapshotRequest struct {
+	InstanceId string `json:"instanceId"`
+	Name       string `json:"name"`
+}
+
+// CreateSnapshotResponse represents the response from creating a snapshot
+type CreateSnapshotResponse struct {
+	Message string `json:"message"`
+}
+
 // ConnectClient defines the interface for API operations used by the connect command.
 // This interface allows for mocking in tests.
 type ConnectClient interface {
