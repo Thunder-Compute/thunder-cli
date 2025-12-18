@@ -7,7 +7,7 @@ import (
 // snapshotCmd represents the snapshot parent command
 var snapshotCmd = &cobra.Command{
 	Use:     "snapshot",
-	Aliases: []string{"snapshots"},
+	Aliases: []string{"snapshots", "snap"},
 	Short:   "Manage Thunder Compute snapshots",
 	Long:    "Create snapshots of your Thunder Compute instances.",
 	Run: func(cmd *cobra.Command, args []string) {

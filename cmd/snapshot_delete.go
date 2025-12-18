@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
@@ -68,6 +69,11 @@ func runSnapshotDelete(args []string) error {
 			PrintWarningSimple("No snapshots found.")
 			return nil
 		}
+
+		// Sort by creation time (oldest first) to match list command
+		sort.Slice(snapshots, func(i, j int) bool {
+			return snapshots[i].CreatedAt < snapshots[j].CreatedAt
+		})
 
 		selectedSnapshot, err = tui.RunSnapshotDeleteInteractive(client, snapshots)
 		if err != nil {
