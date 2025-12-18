@@ -49,7 +49,9 @@ type createModel struct {
 	cursor          int
 	config          CreateConfig
 	templates       []api.Template
+	snapshots       []api.Snapshot
 	templatesLoaded bool
+	snapshotsLoaded bool
 	diskInput       textinput.Model
 	err             error
 	quitting        bool
@@ -118,6 +120,11 @@ type createTemplatesMsg struct {
 	err       error
 }
 
+type createSnapshotsMsg struct {
+	snapshots []api.Snapshot
+	err       error
+}
+
 func sortTemplates(templates []api.Template) []api.Template {
 	sorted := make([]api.Template, 0, len(templates))
 
@@ -147,8 +154,25 @@ func fetchCreateTemplatesCmd(client *api.Client) tea.Cmd {
 	}
 }
 
+func fetchCreateSnapshotsCmd(client *api.Client) tea.Cmd {
+	return func() tea.Msg {
+		snapshots, err := client.ListSnapshots()
+		// Filter for READY snapshots only
+		if err == nil {
+			readySnapshots := make([]api.Snapshot, 0)
+			for _, s := range snapshots {
+				if s.Status == "READY" {
+					readySnapshots = append(readySnapshots, s)
+				}
+			}
+			snapshots = readySnapshots
+		}
+		return createSnapshotsMsg{snapshots: snapshots, err: err}
+	}
+}
+
 func (m createModel) Init() tea.Cmd {
-	return tea.Batch(fetchCreateTemplatesCmd(m.client), m.spinner.Tick)
+	return tea.Batch(fetchCreateTemplatesCmd(m.client), fetchCreateSnapshotsCmd(m.client), m.spinner.Tick)
 }
 
 func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -164,14 +188,21 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = fmt.Errorf("no templates available")
 			return m, tea.Quit
 		}
-		// Start spinner for loading indicator
+		return m, m.spinner.Tick
+
+	case createSnapshotsMsg:
+		// Snapshots are optional, so ignore errors
+		if msg.err == nil {
+			m.snapshots = msg.snapshots
+		}
+		m.snapshotsLoaded = true
 		return m, m.spinner.Tick
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		// Keep spinning if templates haven't loaded yet
-		if !m.templatesLoaded {
+		// Keep spinning if templates or snapshots haven't loaded yet
+		if !m.templatesLoaded || !m.snapshotsLoaded {
 			return m, tea.Batch(cmd, m.spinner.Tick)
 		}
 		return m, cmd
@@ -247,11 +278,23 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 		m.cursor = 0
 
 	case stepTemplate:
-		if m.cursor < len(m.templates) {
-			m.config.Template = m.templates[m.cursor].Key
+		totalOptions := len(m.templates) + len(m.snapshots)
+		if m.cursor < totalOptions {
+			// Check if cursor is on a template or snapshot
+			if m.cursor < len(m.templates) {
+				// Selected a template
+				m.config.Template = m.templates[m.cursor].Key
+				m.diskInput.SetValue("100")
+			} else {
+				// Selected a snapshot
+				snapshotIndex := m.cursor - len(m.templates)
+				snapshot := m.snapshots[snapshotIndex]
+				m.config.Template = snapshot.Name
+				// Set minimum disk size from snapshot
+				m.diskInput.SetValue(fmt.Sprintf("%d", snapshot.MinimumDiskSizeGB))
+			}
 			m.step = stepDiskSize
 			m.diskInput.Focus()
-			m.diskInput.SetValue("100")
 		}
 
 	case stepDiskSize:
@@ -299,7 +342,7 @@ func (m createModel) getMaxCursor() int {
 		}
 		return 2
 	case stepTemplate:
-		return len(m.templates) - 1
+		return len(m.templates) + len(m.snapshots) - 1
 	case stepConfirmation:
 		return 1
 	}
@@ -425,10 +468,12 @@ func (m createModel) View() string {
 		}
 
 	case stepTemplate:
-		s.WriteString("Select OS template:\n\n")
-		if !m.templatesLoaded {
-			s.WriteString(fmt.Sprintf("%s Loading templates...\n", m.spinner.View()))
+		s.WriteString("Select OS template or custom snapshot:\n\n")
+		if !m.templatesLoaded || !m.snapshotsLoaded {
+			s.WriteString(fmt.Sprintf("%s Loading options...\n", m.spinner.View()))
 		} else {
+			// Display templates first
+			s.WriteString(m.styles.label.Render("Templates:") + "\n")
 			for i, template := range m.templates {
 				cursor := "  "
 				if m.cursor == i {
@@ -442,6 +487,24 @@ func (m createModel) View() string {
 					name = m.styles.selected.Render(name)
 				}
 				s.WriteString(fmt.Sprintf("%s%s\n", cursor, name))
+			}
+
+			// Display snapshots if any
+			if len(m.snapshots) > 0 {
+				s.WriteString("\n")
+				s.WriteString(m.styles.label.Render("Custom Snapshots:") + "\n")
+				for i, snapshot := range m.snapshots {
+					cursorIndex := len(m.templates) + i
+					cursor := "  "
+					if m.cursor == cursorIndex {
+						cursor = m.styles.cursor.Render("▶ ")
+					}
+					name := fmt.Sprintf("%s (%d GB)", snapshot.Name, snapshot.MinimumDiskSizeGB)
+					if m.cursor == cursorIndex {
+						name = m.styles.selected.Render(name)
+					}
+					s.WriteString(fmt.Sprintf("%s%s\n", cursor, name))
+				}
 			}
 		}
 

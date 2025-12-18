@@ -82,6 +82,18 @@ type CreateSnapshotResponse struct {
 	Message string `json:"message"`
 }
 
+// Snapshot represents a snapshot of an instance
+type Snapshot struct {
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	MinimumDiskSizeGB int    `json:"minimumDiskSizeGb"`
+	Status            string `json:"status"`
+	CreatedAt         int64  `json:"createdAt"`
+}
+
+// ListSnapshotsResponse represents the list of snapshots
+type ListSnapshotsResponse []Snapshot
+
 // ConnectClient defines the interface for API operations used by the connect command.
 // This interface allows for mocking in tests.
 type ConnectClient interface {
