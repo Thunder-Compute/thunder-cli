@@ -20,6 +20,7 @@ var (
 	headerStyle    lipgloss.Style
 	runningStyle   lipgloss.Style
 	startingStyle  lipgloss.Style
+	restoringStyle lipgloss.Style
 	deletingStyle  lipgloss.Style
 	cellStyle      lipgloss.Style
 	timestampStyle lipgloss.Style
@@ -170,6 +171,18 @@ func (m StatusModel) View() string {
 		b.WriteString(successStyle.Render("✓ Done\n"))
 	}
 
+	// Check if any instance is restoring and show informational message
+	hasRestoring := false
+	for _, instance := range m.instances {
+		if instance.Status == "RESTORING" {
+			hasRestoring = true
+			break
+		}
+	}
+	if hasRestoring {
+		b.WriteString(helpStyleTUI.Render("ℹ Booting from a snapshot may take about 10 minutes for every 100GB of data\n"))
+	}
+
 	b.WriteString("\n")
 	if m.quitting {
 		b.WriteString(helpStyleTUI.Render("Closing...\n"))
@@ -263,8 +276,10 @@ func (m StatusModel) formatStatus(status string, width int) string {
 	switch status {
 	case "RUNNING":
 		style = runningStyle
-	case "STARTING", "SNAPPING", "HYDRATING":
+	case "STARTING", "SNAPPING":
 		style = startingStyle
+	case "RESTORING":
+		style = restoringStyle
 	case "DELETING":
 		style = deletingStyle
 	default:
@@ -294,6 +309,8 @@ func RunStatus(client *api.Client, monitoring bool, instances []api.Instance) er
 	runningStyle = SuccessStyle()
 
 	startingStyle = WarningStyle()
+
+	restoringStyle = PrimaryStyle().Bold(true)
 
 	deletingStyle = ErrorStyle()
 
