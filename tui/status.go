@@ -263,7 +263,7 @@ func (m StatusModel) formatStatus(status string, width int) string {
 	switch status {
 	case "RUNNING":
 		style = runningStyle
-	case "STARTING", "SNAPPING":
+	case "STARTING", "SNAPPING", "HYDRATING":
 		style = startingStyle
 	case "DELETING":
 		style = deletingStyle

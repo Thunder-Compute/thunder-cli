@@ -346,7 +346,7 @@ func (c *Client) CreateInstance(req CreateInstanceRequest) (*CreateInstanceRespo
 }
 
 func (c *Client) DeleteInstance(instanceID string) (*DeleteInstanceResponse, error) {
-	url := fmt.Sprintf("%s/instances/%s", c.baseURL, instanceID)
+	url := fmt.Sprintf("%s/v1/instances/%s/delete", c.baseURL, instanceID)
 
 	httpReq, err := http.NewRequest("POST", url, nil)
 	if err != nil {
