@@ -153,6 +153,30 @@ func (m snapshotCreateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyMsg:
+		// If we're on the name input step and the input is focused, don't handle q/Q as quit
+		if m.step == snapshotCreateStepEnterName && m.nameInput.Focused() {
+			// Let the text input handle all keys except ctrl+c and esc
+			if msg.String() == "ctrl+c" {
+				m.quitting = true
+				return m, tea.Quit
+			}
+			if msg.String() == "esc" {
+				// Blur and go back
+				m.nameInput.Blur()
+				m.step--
+				m.cursor = 0
+				m.validationErr = nil
+				return m, nil
+			}
+			// Pass all other keys to the text input
+			var cmd tea.Cmd
+			m.nameInput, cmd = m.nameInput.Update(msg)
+			if m.validationErr != nil && m.nameInput.Value() != "" {
+				m.validationErr = nil
+			}
+			return m, cmd
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			m.quitting = true
@@ -186,16 +210,6 @@ func (m snapshotCreateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 		}
-	}
-
-	if m.step == snapshotCreateStepEnterName {
-		var cmd tea.Cmd
-		m.nameInput, cmd = m.nameInput.Update(msg)
-		// Clear validation error when user starts typing
-		if m.validationErr != nil && m.nameInput.Value() != "" {
-			m.validationErr = nil
-		}
-		return m, cmd
 	}
 
 	return m, nil
