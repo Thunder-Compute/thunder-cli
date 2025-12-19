@@ -180,7 +180,7 @@ func (m StatusModel) View() string {
 		}
 	}
 	if hasRestoring {
-		b.WriteString(helpStyleTUI.Render("ℹ Booting from a snapshot may take about 10 minutes for every 100GB of data\n"))
+		b.WriteString(primaryStyle.Render("ℹ Restoring from a snapshot may take about 10 minutes for every 100GB of data\n"))
 	}
 
 	b.WriteString("\n")
