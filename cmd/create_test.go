@@ -122,7 +122,11 @@ func TestValidateCreateConfig(t *testing.T) {
 				Mode:       "prototyping",
 				GPUType:    "t4",
 				VCPUs:      8,
+				Template:   "ubuntu-22.04",
 				DiskSizeGB: 50,
+			},
+			templates: []api.Template{
+				{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
 			},
 			expectError:   true,
 			errorContains: "disk size must be between 100 and 1000 GB",
@@ -157,7 +161,7 @@ func TestValidateCreateConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateCreateConfig(tt.config, tt.templates)
+			err := validateCreateConfig(tt.config, tt.templates, []api.Snapshot{}, false)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -185,7 +189,7 @@ func TestCreateInstanceRequest(t *testing.T) {
 		{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
 	}
 
-	require.NoError(t, validateCreateConfig(config, templates))
+	require.NoError(t, validateCreateConfig(config, templates, []api.Snapshot{}, false))
 
 	req := api.CreateInstanceRequest{
 		Mode:       config.Mode,
@@ -217,7 +221,7 @@ func TestCreateInstanceRequestA100Alias(t *testing.T) {
 		{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
 	}
 
-	require.NoError(t, validateCreateConfig(config, templates))
+	require.NoError(t, validateCreateConfig(config, templates, []api.Snapshot{}, false))
 
 	req := api.CreateInstanceRequest{
 		Mode:       config.Mode,
@@ -249,7 +253,7 @@ func TestCreateConfigVCPUsAutoSet(t *testing.T) {
 		{Key: "pytorch", DisplayName: "PyTorch"},
 	}
 
-	err := validateCreateConfig(config, templates)
+	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, 36, config.VCPUs)
@@ -270,7 +274,7 @@ func TestCreateConfigGPUTypeCaseInsensitive(t *testing.T) {
 		{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
 	}
 
-	err := validateCreateConfig(config, templates)
+	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, "t4", config.GPUType)
@@ -289,7 +293,7 @@ func TestCreateConfigA100Alias(t *testing.T) {
 		{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
 	}
 
-	err := validateCreateConfig(config, templates)
+	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, "a100xl", config.GPUType)
@@ -310,7 +314,7 @@ func TestCreateConfigTemplateCaseInsensitive(t *testing.T) {
 		{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
 	}
 
-	err := validateCreateConfig(config, templates)
+	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, "ubuntu-22.04", config.Template)
@@ -331,7 +335,7 @@ func TestCreateConfigTemplateByDisplayName(t *testing.T) {
 		{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
 	}
 
-	err := validateCreateConfig(config, templates)
+	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, "ubuntu-22.04", config.Template)
@@ -381,7 +385,7 @@ func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 				{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
 			}
 
-			err := validateCreateConfig(config, templates)
+			err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
 
 			if tt.expectError {
 				assert.Error(t, err)
