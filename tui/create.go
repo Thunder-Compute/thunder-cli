@@ -47,16 +47,18 @@ type CreateConfig struct {
 type createModel struct {
 	step            createStep
 	cursor          int
-	config          CreateConfig
-	templates       []api.Template
-	snapshots       []api.Snapshot
-	templatesLoaded bool
-	snapshotsLoaded bool
-	diskInput       textinput.Model
-	err             error
-	quitting        bool
-	client          *api.Client
-	spinner         spinner.Model
+	config           CreateConfig
+	templates        []api.Template
+	snapshots        []api.Snapshot
+	templatesLoaded  bool
+	snapshotsLoaded  bool
+	diskInput        textinput.Model
+	err              error
+	validationErr    error
+	quitting         bool
+	client           *api.Client
+	spinner          spinner.Model
+	selectedSnapshot *api.Snapshot
 
 	styles createStyles
 }
@@ -238,13 +240,16 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.step != stepDiskSize && m.cursor < maxCursor {
 				m.cursor++
 			}
+		default:
+			// Only update text input for non-handled keys
+			if m.step == stepDiskSize {
+				var cmd tea.Cmd
+				m.diskInput, cmd = m.diskInput.Update(msg)
+				// Clear validation error when user modifies input (but not on enter)
+				m.validationErr = nil
+				return m, cmd
+			}
 		}
-	}
-
-	if m.step == stepDiskSize {
-		var cmd tea.Cmd
-		m.diskInput, cmd = m.diskInput.Update(msg)
-		return m, cmd
 	}
 
 	return m, nil
@@ -284,12 +289,14 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 			if m.cursor < len(m.templates) {
 				// Selected a template
 				m.config.Template = m.templates[m.cursor].Key
+				m.selectedSnapshot = nil
 				m.diskInput.SetValue("100")
 			} else {
 				// Selected a snapshot
 				snapshotIndex := m.cursor - len(m.templates)
 				snapshot := m.snapshots[snapshotIndex]
 				m.config.Template = snapshot.Name
+				m.selectedSnapshot = &snapshot
 				// Set minimum disk size from snapshot
 				m.diskInput.SetValue(fmt.Sprintf("%d", snapshot.MinimumDiskSizeGB))
 			}
@@ -300,11 +307,16 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 	case stepDiskSize:
 		diskSize, err := strconv.Atoi(m.diskInput.Value())
 		if err != nil || diskSize < 100 || diskSize > 1000 {
-			m.err = fmt.Errorf("disk size must be between 100 and 1000 GB")
+			m.validationErr = fmt.Errorf("disk size must be between 100 and 1000 GB")
+			return m, nil
+		}
+		// Check against snapshot minimum if a snapshot was selected
+		if m.selectedSnapshot != nil && diskSize < m.selectedSnapshot.MinimumDiskSizeGB {
+			m.validationErr = fmt.Errorf("disk size must be at least %d GB for snapshot '%s'", m.selectedSnapshot.MinimumDiskSizeGB, m.selectedSnapshot.Name)
 			return m, nil
 		}
 		m.config.DiskSizeGB = diskSize
-		m.err = nil
+		m.validationErr = nil
 		m.step = stepConfirmation
 		m.cursor = 0
 		m.diskInput.Blur()
@@ -513,8 +525,8 @@ func (m createModel) View() string {
 		s.WriteString("Range: 100-1000 GB\n\n")
 		s.WriteString(m.diskInput.View())
 		s.WriteString("\n\n")
-		if m.err != nil {
-			s.WriteString(errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v", m.err)))
+		if m.validationErr != nil {
+			s.WriteString(errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v", m.validationErr)))
 			s.WriteString("\n")
 		}
 		s.WriteString(m.styles.help.Render("Press Enter to continue\n"))
