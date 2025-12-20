@@ -93,53 +93,5 @@ func RenderConnectHelp(cmd *cobra.Command) {
 	output.WriteString(DescStyle.Render("Show detailed timing breakdown"))
 	output.WriteString("\n\n")
 
-	// What happens section
-	output.WriteString(SectionStyle.Render("● WHAT HAPPENS"))
-	output.WriteString("\n\n")
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("1. Setup"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("SSH keys generated and configured"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("2. Config"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("SSH config updated with instance details"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("3. Connect"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("SSH connection established"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("4. Ready"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Instance ready for development"))
-	output.WriteString("\n\n")
-
-	// Tips Section
-	output.WriteString(SectionStyle.Render("● TIPS"))
-	output.WriteString("\n\n")
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Reconnect"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Use 'ssh tnr-{instance_id}' after initial setup. Example: ssh tnr-0"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Port Forward"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Use --tunnel for local port forwarding"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Debug"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Use --debug for verbose connection logs"))
-	output.WriteString("\n\n")
-
 	fmt.Fprint(os.Stdout, output.String())
 }

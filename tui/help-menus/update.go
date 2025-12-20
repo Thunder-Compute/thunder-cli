@@ -69,20 +69,5 @@ func RenderUpdateHelp(cmd *cobra.Command) {
 	output.WriteString(CommandTextStyle.Render("winget upgrade Thunder.tnr"))
 	output.WriteString("\n\n")
 
-	// Tips Section
-	output.WriteString(SectionStyle.Render("● TIPS"))
-	output.WriteString("\n\n")
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Version"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Check current version with 'tnr --version'"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Releases"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("https://github.com/Thunder-Compute/thunder-cli/releases"))
-	output.WriteString("\n\n")
-
 	fmt.Fprint(os.Stdout, output.String())
 }

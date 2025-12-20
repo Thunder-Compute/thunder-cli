@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
+
 	"github.com/spf13/cobra"
 )
 
@@ -17,5 +19,8 @@ var snapshotCmd = &cobra.Command{
 }
 
 func init() {
+	snapshotCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		helpmenus.RenderSnapshotHelp(cmd)
+	})
 	rootCmd.AddCommand(snapshotCmd)
 }
