@@ -235,6 +235,11 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		case <-ctx.Done():
 			return true
 		default:
+			// Also check if TUI was cancelled
+			if wasCancelled {
+				stop() // Cancel context when TUI is cancelled
+				return true
+			}
 			return false
 		}
 	}
