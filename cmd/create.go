@@ -206,7 +206,7 @@ func runCreate(cmd *cobra.Command) error {
 			return err
 		}
 	} else {
-		busy := tui.NewBusyModel("Fetching templates...")
+		busy := tui.NewBusyModel("Fetching templates and snapshots...")
 		bp := tea.NewProgram(busy)
 		busyDone := make(chan struct{})
 
@@ -216,17 +216,36 @@ func runCreate(cmd *cobra.Command) error {
 		}()
 
 		templates, err := client.ListTemplates()
+		if err != nil {
+			bp.Send(tui.BusyDoneMsg{})
+			<-busyDone
+			return fmt.Errorf("failed to fetch templates: %w", err)
+		}
+
+		snapshots, err := client.ListSnapshots()
+		// Snapshots are optional, so we continue even if there's an error
+		if err != nil {
+			snapshots = []api.Snapshot{}
+		} else {
+			// Filter for READY snapshots only
+			readySnapshots := make([]api.Snapshot, 0)
+			for _, s := range snapshots {
+				if s.Status == "READY" {
+					readySnapshots = append(readySnapshots, s)
+				}
+			}
+			snapshots = readySnapshots
+		}
 
 		bp.Send(tui.BusyDoneMsg{})
 		<-busyDone
 
-		if err != nil {
-			return fmt.Errorf("failed to fetch templates: %w", err)
-		}
-
 		if len(templates) == 0 {
 			return fmt.Errorf("no templates available")
 		}
+
+		// Check if disk size was explicitly set by the user
+		diskSizeWasSet := cmd.Flags().Changed("disk-size-gb")
 
 		createConfig = &tui.CreateConfig{
 			Mode:       mode,
@@ -237,7 +256,7 @@ func runCreate(cmd *cobra.Command) error {
 			DiskSizeGB: diskSizeGB,
 		}
 
-		if err := validateCreateConfig(createConfig, templates); err != nil {
+		if err := validateCreateConfig(createConfig, templates, snapshots, diskSizeWasSet); err != nil {
 			return err
 		}
 
@@ -283,7 +302,7 @@ func runCreate(cmd *cobra.Command) error {
 	return nil
 }
 
-func validateCreateConfig(config *tui.CreateConfig, templates []api.Template) error {
+func validateCreateConfig(config *tui.CreateConfig, templates []api.Template, snapshots []api.Snapshot, diskSizeWasSet bool) error {
 	config.Mode = strings.ToLower(config.Mode)
 	config.GPUType = strings.ToLower(config.GPUType)
 
@@ -340,15 +359,15 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.Template) er
 		config.VCPUs = 18 * config.NumGPUs
 	}
 
-	if config.DiskSizeGB < 100 || config.DiskSizeGB > 1000 {
-		return fmt.Errorf("disk size must be between 100 and 1000 GB")
-	}
-
 	if config.Template == "" {
 		return fmt.Errorf("template is required (use --template flag)")
 	}
 
+	// Check if template is actually a snapshot
+	var selectedSnapshot *api.Snapshot
 	templateFound := false
+
+	// First check templates
 	for _, t := range templates {
 		if t.Key == config.Template || strings.EqualFold(t.DisplayName, config.Template) {
 			config.Template = t.Key
@@ -356,8 +375,38 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.Template) er
 			break
 		}
 	}
+
+	// If not found in templates, check snapshots
+	if !templateFound {
+		for _, s := range snapshots {
+			if s.Name == config.Template {
+				selectedSnapshot = &s
+				templateFound = true
+				break
+			}
+		}
+	}
+
 	if !templateFound {
 		return fmt.Errorf("template '%s' not found. Run 'tnr templates' to list available templates", config.Template)
+	}
+
+	// If a snapshot was selected, set default disk size or validate minimum
+	if selectedSnapshot != nil {
+		if !diskSizeWasSet {
+			// User didn't specify disk size, use snapshot's minimum
+			config.DiskSizeGB = selectedSnapshot.MinimumDiskSizeGB
+		} else {
+			// User specified disk size, validate it's at least the minimum
+			if config.DiskSizeGB < selectedSnapshot.MinimumDiskSizeGB {
+				return fmt.Errorf("disk size must be at least %d GB for snapshot '%s'", selectedSnapshot.MinimumDiskSizeGB, selectedSnapshot.Name)
+			}
+		}
+	}
+
+	// Validate disk size is within bounds
+	if config.DiskSizeGB < 100 || config.DiskSizeGB > 1000 {
+		return fmt.Errorf("disk size must be between 100 and 1000 GB")
 	}
 
 	return nil

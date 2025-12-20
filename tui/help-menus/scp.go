@@ -121,59 +121,5 @@ func RenderSCPHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("Examples: ./myfile.py or /tmp/file.txt"))
 	output.WriteString("\n\n")
 
-	// What happens section
-	output.WriteString(SectionStyle.Render("● WHAT HAPPENS"))
-	output.WriteString("\n\n")
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("1. Parse"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Analyze source and destination paths"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("2. Connect"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Establish secure connection to instance"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("3. Transfer"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Copy files with progress tracking"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("4. Verify"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Confirm successful transfer"))
-	output.WriteString("\n\n")
-
-	// Tips Section
-	output.WriteString(SectionStyle.Render("● TIPS"))
-	output.WriteString("\n\n")
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Progress"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Shows real-time transfer progress"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Multiple Files"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Upload multiple files in one command"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Directories"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Use -r flag for recursive directory copying"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Instance ID"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Use instance ID from 'tnr status' command"))
-	output.WriteString("\n\n")
-
 	fmt.Fprint(os.Stdout, output.String())
 }

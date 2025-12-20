@@ -13,13 +13,14 @@ import (
 	"strings"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+	termx "github.com/charmbracelet/x/term"
+	"github.com/spf13/cobra"
+
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/utils"
-	tea "github.com/charmbracelet/bubbletea"
-	termx "github.com/charmbracelet/x/term"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -202,14 +203,12 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	)
 
 	tuiDone := make(chan error, 1)
-	cancelCtx, cancel := context.WithCancel(context.Background())
 	var wasCancelled bool
 
 	go func() {
 		finalModel, err := p.Run()
 		if fm, ok := finalModel.(tui.ConnectFlowModel); ok && fm.Cancelled() {
 			wasCancelled = true
-			cancel()
 		}
 		if err != nil {
 			tuiDone <- err
@@ -220,19 +219,27 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	time.Sleep(50 * time.Millisecond)
 
 	shutdownTUI := func() {
-		cancel()
 		stop()
-		<-tuiDone
+		// Don't block on tuiDone if context is already cancelled
+		select {
+		case <-tuiDone:
+		case <-ctx.Done():
+			// Context cancelled, don't wait for TUI
+		case <-time.After(100 * time.Millisecond):
+			// Short timeout to avoid hanging
+		}
 	}
 
 	checkCancelled := func() bool {
 		select {
-		case <-cancelCtx.Done():
-			return true
 		case <-ctx.Done():
-			cancel()
 			return true
 		default:
+			// Also check if TUI was cancelled
+			if wasCancelled {
+				stop() // Cancel context when TUI is cancelled
+				return true
+			}
 			return false
 		}
 	}
@@ -269,7 +276,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	// Fetch binary hash in background
 	go func() {
-		hash, err := client.GetLatestBinaryHashCtx(cancelCtx)
+		hash, err := client.GetLatestBinaryHashCtx(ctx)
 		if err != nil {
 			hashErrChan <- err
 			return
@@ -280,7 +287,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	if checkCancelled() {
 		return nil
 	}
-	instances, err = client.ListInstancesWithIPUpdateCtx(cancelCtx)
+	instances, err = client.ListInstancesWithIPUpdateCtx(ctx)
 	if checkCancelled() {
 		return nil
 	}
@@ -340,7 +347,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	}
 	if !utils.KeyExists(instance.UUID) {
 		tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Generating new SSH key...", 0)
-		keyResp, err := client.AddSSHKeyCtx(cancelCtx, instanceID)
+		keyResp, err := client.AddSSHKeyCtx(ctx, instanceID)
 		if checkCancelled() {
 			return nil
 		}
@@ -365,7 +372,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	if checkCancelled() {
 		return nil
 	}
-	if err := utils.WaitForTCPPort(cancelCtx, instance.IP, port, 120*time.Second); err != nil {
+	if err := utils.WaitForTCPPort(ctx, instance.IP, port, 120*time.Second); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil
 		}
@@ -408,13 +415,13 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	// Use different connection strategies for new keys vs reconnections
 	if newKeyCreated {
 		// New key: expect auth failures while key propagates, use longer timeout
-		sshClient, err = utils.RobustSSHConnectWithProgress(cancelCtx, instance.IP, keyFile, port, 120, progressCallback)
+		sshClient, err = utils.RobustSSHConnectWithProgress(ctx, instance.IP, keyFile, port, 120, progressCallback)
 	} else {
 		// Reconnecting: enable persistent auth failure detection (detects deleted ~/.ssh quickly)
 		sshConnectOpts := &utils.SSHConnectOptions{
 			DetectPersistentAuthFailure: true,
 		}
-		sshClient, err = utils.RobustSSHConnectWithOptions(cancelCtx, instance.IP, keyFile, port, 60, progressCallback, sshConnectOpts)
+		sshClient, err = utils.RobustSSHConnectWithOptions(ctx, instance.IP, keyFile, port, 60, progressCallback, sshConnectOpts)
 	}
 	if checkCancelled() {
 		return nil
@@ -429,7 +436,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH key not found on instance. This typically occurs when your node crashes due to OOM, low disk space, or other reasons.", 0)
 		}
 
-		keyResp, keyErr := client.AddSSHKeyCtx(cancelCtx, instanceID)
+		keyResp, keyErr := client.AddSSHKeyCtx(ctx, instanceID)
 		if checkCancelled() {
 			return nil
 		}
@@ -461,7 +468,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		if checkCancelled() {
 			return nil
 		}
-		sshClient, err = utils.RobustSSHConnectWithProgress(cancelCtx, instance.IP, keyFile, port, 120, retryCallback)
+		sshClient, err = utils.RobustSSHConnectWithProgress(ctx, instance.IP, keyFile, port, 120, retryCallback)
 		if checkCancelled() {
 			return nil
 		}
@@ -491,7 +498,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		binaryHash = hash
 	case <-hashErrChan:
 		binaryHash = ""
-	case <-cancelCtx.Done():
+	case <-ctx.Done():
 		if checkCancelled() {
 			return nil
 		}
@@ -765,7 +772,6 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	sshCmd.Stderr = os.Stderr
 
 	err = sshCmd.Run()
-
 	// Handle SSH exit codes (130 = Ctrl+C, 255 = connection closed)
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {

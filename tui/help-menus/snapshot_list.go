@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func RenderDeleteHelp(cmd *cobra.Command) {
+func RenderSnapshotListHelp(cmd *cobra.Command) {
 	InitHelpStyles(os.Stdout)
 
 	var output strings.Builder
@@ -16,8 +16,8 @@ func RenderDeleteHelp(cmd *cobra.Command) {
 	header := `
 ╭─────────────────────────────────────────────────────────────────────────────╮
 │                                                                             │
-│                               DELETE COMMAND                                │
-│                    Permanently remove Thunder Compute instances             │
+│                          SNAPSHOT LIST COMMAND                              │
+│                        List all your snapshots                              │
 │                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────╯
 	`
@@ -28,39 +28,36 @@ func RenderDeleteHelp(cmd *cobra.Command) {
 	output.WriteString(SectionStyle.Render("● USAGE"))
 	output.WriteString("\n\n")
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Interactive"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr delete"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Direct"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr delete <instance_id>"))
+	output.WriteString(DescStyle.Render("tnr snapshot list"))
 	output.WriteString("\n\n")
 
 	// Examples Section
 	output.WriteString(SectionStyle.Render("● EXAMPLES"))
 	output.WriteString("\n\n")
 	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Interactive mode - select from a list"))
+	output.WriteString(ExampleStyle.Render("# List all snapshots"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr delete"))
+	output.WriteString(CommandTextStyle.Render("tnr snapshot list"))
 	output.WriteString("\n\n")
 
+	// Output Section
+	output.WriteString(SectionStyle.Render("● OUTPUT"))
+	output.WriteString("\n\n")
 	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Direct deletion with instance ID"))
+	output.WriteString(DescStyle.Render("The command displays a table with the following columns:"))
 	output.WriteString("\n")
-	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr delete 0"))
-	output.WriteString("\n\n")
-
-	// Warning section
-	output.WriteString(SectionStyle.Render("● WARNING"))
-	output.WriteString("\n\n")
-	output.WriteString("  ")
-	output.WriteString(DescStyle.Render("This action is irreversible. All data on the instance will be permanently lost."))
+	output.WriteString("    ")
+	output.WriteString(DescStyle.Render("• Name: Snapshot name"))
+	output.WriteString("\n")
+	output.WriteString("    ")
+	output.WriteString(DescStyle.Render("• Status: READY, CREATING, or FAILED"))
+	output.WriteString("\n")
+	output.WriteString("    ")
+	output.WriteString(DescStyle.Render("• Size: Minimum disk size required"))
+	output.WriteString("\n")
+	output.WriteString("    ")
+	output.WriteString(DescStyle.Render("• Created: Snapshot creation date"))
 	output.WriteString("\n\n")
 
 	fmt.Fprint(os.Stdout, output.String())

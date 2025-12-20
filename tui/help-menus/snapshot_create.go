@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func RenderConnectHelp(cmd *cobra.Command) {
+func RenderSnapshotCreateHelp(cmd *cobra.Command) {
 	InitHelpStyles(os.Stdout)
 
 	var output strings.Builder
@@ -16,8 +16,8 @@ func RenderConnectHelp(cmd *cobra.Command) {
 	header := `
 ╭─────────────────────────────────────────────────────────────────────────────╮
 │                                                                             │
-│                                 CONNECT COMMAND                             │
-│                     Establish SSH connection to instances                   │
+│                         SNAPSHOT CREATE COMMAND                             │
+│                     Create snapshots of running instances                   │
 │                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────╯
 	`
@@ -28,53 +28,32 @@ func RenderConnectHelp(cmd *cobra.Command) {
 	output.WriteString(SectionStyle.Render("● USAGE"))
 	output.WriteString("\n\n")
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("Basic"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr connect [instance_id]"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Interactive"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr connect"))
+	output.WriteString("        ")
+	output.WriteString(DescStyle.Render("tnr snapshot create"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("With flags"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr connect <id> --tunnel 8080:80"))
+	output.WriteString(CommandStyle.Render("Non-interactive"))
+	output.WriteString("    ")
+	output.WriteString(DescStyle.Render("tnr snapshot create --instance-id <id> --name <name>"))
 	output.WriteString("\n\n")
 
 	// Examples Section
 	output.WriteString(SectionStyle.Render("● EXAMPLES"))
 	output.WriteString("\n\n")
-
 	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Interactive instance selection"))
+	output.WriteString(ExampleStyle.Render("# Interactive mode with step-by-step wizard"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr connect"))
+	output.WriteString(CommandTextStyle.Render("tnr snapshot create"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Connect to instance with ID '0'"))
+	output.WriteString(ExampleStyle.Render("# Create snapshot with flags"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr connect 0"))
-	output.WriteString("\n\n")
-
-	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Connect with port forwarding"))
-	output.WriteString("\n")
-	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr connect 0 --tunnel 8080 --tunnel 3000"))
-	output.WriteString("\n\n")
-
-	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Connect with debug mode"))
-	output.WriteString("\n")
-	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr connect 0 --debug"))
+	output.WriteString(CommandTextStyle.Render("tnr snapshot create --instance-id 123 --name my-snapshot"))
 	output.WriteString("\n\n")
 
 	// Flags Section
@@ -82,15 +61,28 @@ func RenderConnectHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
-	output.WriteString(FlagStyle.Render("--tunnel, -t"))
+	output.WriteString(FlagStyle.Render("--instance-id"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Port forwarding (can specify multiple times: -t 8080 -t 3000)"))
+	output.WriteString(DescStyle.Render("Instance ID or UUID to create a snapshot from"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
-	output.WriteString(FlagStyle.Render("--debug"))
+	output.WriteString(FlagStyle.Render("--name"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Show detailed timing breakdown"))
+	output.WriteString(DescStyle.Render("Name for the snapshot (required)"))
+	output.WriteString("\n\n")
+
+	// Important Notes Section
+	output.WriteString(SectionStyle.Render("● IMPORTANT"))
+	output.WriteString("\n\n")
+	output.WriteString("  ")
+	output.WriteString(DescStyle.Render("• Instance must be in RUNNING state to create a snapshot"))
+	output.WriteString("\n")
+	output.WriteString("  ")
+	output.WriteString(DescStyle.Render("• The instance must remain running during snapshot creation"))
+	output.WriteString("\n")
+	output.WriteString("  ")
+	output.WriteString(DescStyle.Render("• Snapshot names must be unique"))
 	output.WriteString("\n\n")
 
 	fmt.Fprint(os.Stdout, output.String())

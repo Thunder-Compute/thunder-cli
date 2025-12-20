@@ -361,7 +361,7 @@ func (c *Client) CreateInstance(req CreateInstanceRequest) (*CreateInstanceRespo
 }
 
 func (c *Client) DeleteInstance(instanceID string) (*DeleteInstanceResponse, error) {
-	url := fmt.Sprintf("%s/instances/%s/delete", c.baseURL, instanceID)
+	url := fmt.Sprintf("%s/v1/instances/%s/delete", c.baseURL, instanceID)
 
 	httpReq, err := http.NewRequest("POST", url, nil)
 	if err != nil {
@@ -398,4 +398,111 @@ func (c *Client) DeleteInstance(instanceID string) (*DeleteInstanceResponse, err
 // AddSSHKey generates and adds SSH keypair to instance
 func (c *Client) AddSSHKey(instanceID string) (*AddSSHKeyResponse, error) {
 	return c.AddSSHKeyCtx(context.Background(), instanceID)
+}
+
+// CreateSnapshot creates a snapshot from an instance
+func (c *Client) CreateSnapshot(req CreateSnapshotRequest) (*CreateSnapshotResponse, error) {
+	jsonData, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequest("POST", c.baseURL+"/v1/snapshots/create", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	c.setHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		return nil, fmt.Errorf("authentication failed: invalid token")
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != 200 && resp.StatusCode != 201 && resp.StatusCode != 202 {
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var createResp CreateSnapshotResponse
+	if err := json.Unmarshal(body, &createResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &createResp, nil
+}
+
+// ListSnapshots retrieves all snapshots for the authenticated user
+func (c *Client) ListSnapshots() (ListSnapshotsResponse, error) {
+	req, err := http.NewRequest("GET", c.baseURL+"/v1/snapshots/list", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	c.setHeaders(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		return nil, fmt.Errorf("authentication failed: invalid token")
+	}
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var snapshots ListSnapshotsResponse
+	if err := json.Unmarshal(body, &snapshots); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return snapshots, nil
+}
+
+// DeleteSnapshot deletes a snapshot by ID
+func (c *Client) DeleteSnapshot(snapshotID string) error {
+	url := fmt.Sprintf("%s/v1/snapshots/%s", c.baseURL, snapshotID)
+
+	httpReq, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	c.setHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		return fmt.Errorf("authentication failed: invalid token")
+	}
+
+	if resp.StatusCode != 200 && resp.StatusCode != 204 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
 }
