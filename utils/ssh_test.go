@@ -647,3 +647,81 @@ func TestPersistentAuthThresholds(t *testing.T) {
 	assert.GreaterOrEqual(t, PersistentAuthTimeout, 10*time.Second, "should wait at least 10 seconds")
 	assert.LessOrEqual(t, PersistentAuthTimeout, 60*time.Second, "should not wait more than 60 seconds")
 }
+
+func TestWaitForTCPPortSuccess(t *testing.T) {
+	// Start a simple TCP listener
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer listener.Close()
+
+	addr := listener.Addr().(*net.TCPAddr)
+	port := addr.Port
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = WaitForTCPPort(ctx, "127.0.0.1", port, 5*time.Second)
+	require.NoError(t, err)
+}
+
+func TestWaitForTCPPortTimeout(t *testing.T) {
+	// Use a port that's definitely not listening
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := WaitForTCPPort(ctx, "127.0.0.1", 65500, 1*time.Second)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not available")
+}
+
+func TestWaitForTCPPortCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel immediately
+	cancel()
+
+	err := WaitForTCPPort(ctx, "127.0.0.1", 65501, 10*time.Second)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cancelled")
+}
+
+func TestWaitForTCPPortDelayedSuccess(t *testing.T) {
+	// Reserve a port and release it, then start server after delay
+	tmpListener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := tmpListener.Addr().(*net.TCPAddr).Port
+	tmpListener.Close()
+
+	// Start server after delay
+	serverReady := make(chan struct{})
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+		if err != nil {
+			close(serverReady)
+			return
+		}
+		defer listener.Close()
+		close(serverReady)
+		// Keep listener alive for a bit
+		time.Sleep(500 * time.Millisecond)
+	}()
+
+	<-serverReady
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = WaitForTCPPort(ctx, "127.0.0.1", port, 2*time.Second)
+	require.NoError(t, err)
+}
+
+func TestWaitForTCPPortRespectsContextDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	err := WaitForTCPPort(ctx, "127.0.0.1", 65502, 10*time.Second)
+	require.Error(t, err)
+	// Should fail due to context timeout, not overall timeout
+	assert.Contains(t, err.Error(), "cancelled")
+}

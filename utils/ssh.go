@@ -78,7 +78,7 @@ func newSSHConfig(user, keyFile string) (*ssh.ClientConfig, error) {
 			ssh.PublicKeys(signer),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         30 * time.Second,
+		Timeout:         10 * time.Second,
 	}, nil
 }
 
@@ -114,6 +114,8 @@ func RobustSSHConnectWithOptions(ctx context.Context, ip, keyFile string, port i
 	deadline := time.Now().Add(time.Duration(maxWait) * time.Second)
 	backoff := time.Second
 	maxBackoff := 10 * time.Second
+	authBackoff := 500 * time.Millisecond
+	maxAuthBackoff := 2 * time.Second
 	attempt := 0
 	var lastErr error
 
@@ -132,8 +134,8 @@ func RobustSSHConnectWithOptions(ctx context.Context, ip, keyFile string, port i
 
 		remaining := time.Until(deadline)
 		dialTimeout := remaining
-		if dialTimeout > 10*time.Second {
-			dialTimeout = 10 * time.Second
+		if dialTimeout > 5*time.Second {
+			dialTimeout = 5 * time.Second
 		}
 		if dialTimeout <= 0 {
 			return nil, timeoutError(maxWait, lastErr)
@@ -168,83 +170,111 @@ func RobustSSHConnectWithOptions(ctx context.Context, ip, keyFile string, port i
 			return nil, fmt.Errorf("SSH dial failed: %w", dialErr)
 		}
 
-		_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
-		cc, chans, reqs, err := ssh.NewClientConn(conn, address, config)
-		if err == nil {
-			_ = conn.SetDeadline(time.Time{})
-			if callback != nil {
-				callback(SSHRetryInfo{
-					Status:  SSHStatusSuccess,
-					Attempt: attempt,
-					Message: "SSH connection established",
-				})
-			}
-			return &SSHClient{client: ssh.NewClient(cc, chans, reqs)}, nil
+		_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+
+		type connResult struct {
+			cc    ssh.Conn
+			chans <-chan ssh.NewChannel
+			reqs  <-chan *ssh.Request
+			err   error
 		}
 
-		conn.Close()
-		lastErr = err
-		errStatus := ClassifySSHError(err)
+		connChan := make(chan connResult, 1)
+		go func() {
+			cc, chans, reqs, err := ssh.NewClientConn(conn, address, config)
+			connChan <- connResult{cc: cc, chans: chans, reqs: reqs, err: err}
+		}()
 
-		if errStatus == SSHStatusAuth {
-			consecutiveAuthFailures++
-			if firstAuthFailureTime.IsZero() {
-				firstAuthFailureTime = time.Now()
+		select {
+		case <-ctx.Done():
+			conn.Close()
+			return nil, fmt.Errorf("SSH connection cancelled")
+		case result := <-connChan:
+			if result.err == nil {
+				_ = conn.SetDeadline(time.Time{})
+				if callback != nil {
+					callback(SSHRetryInfo{
+						Status:  SSHStatusSuccess,
+						Attempt: attempt,
+						Message: "SSH connection established",
+					})
+				}
+				return &SSHClient{client: ssh.NewClient(result.cc, result.chans, result.reqs)}, nil
 			}
 
-			if detectPersistentAuth {
-				authFailureDuration := time.Since(firstAuthFailureTime)
-				if consecutiveAuthFailures >= PersistentAuthMaxAttempts || authFailureDuration >= PersistentAuthTimeout {
-					if callback != nil {
-						callback(SSHRetryInfo{
-							Status:  SSHStatusAuth,
-							Attempt: attempt,
-							Error:   ErrPersistentAuthFailure,
-							Message: "Persistent authentication failure detected",
-						})
+			conn.Close()
+			lastErr = result.err
+			errStatus := ClassifySSHError(result.err)
+
+			if errStatus == SSHStatusAuth {
+				consecutiveAuthFailures++
+				if firstAuthFailureTime.IsZero() {
+					firstAuthFailureTime = time.Now()
+				}
+
+				if detectPersistentAuth {
+					authFailureDuration := time.Since(firstAuthFailureTime)
+					if consecutiveAuthFailures >= PersistentAuthMaxAttempts || authFailureDuration >= PersistentAuthTimeout {
+						if callback != nil {
+							callback(SSHRetryInfo{
+								Status:  SSHStatusAuth,
+								Attempt: attempt,
+								Error:   ErrPersistentAuthFailure,
+								Message: "Persistent authentication failure detected",
+							})
+						}
+						return nil, ErrPersistentAuthFailure
 					}
-					return nil, ErrPersistentAuthFailure
 				}
+			} else {
+				consecutiveAuthFailures = 0
+				firstAuthFailureTime = time.Time{}
 			}
-		} else {
-			consecutiveAuthFailures = 0
-			firstAuthFailureTime = time.Time{}
-		}
 
-		if shouldRetrySSH(err) {
-			if callback != nil {
-				msg := "Retrying SSH connection..."
-				switch errStatus {
-				case SSHStatusAuth:
-					msg = "Authentication failed, retrying..."
-				case SSHStatusHandshake:
-					msg = "SSH handshake failed, retrying..."
-				case SSHStatusDialing:
-					msg = "Connection interrupted, retrying..."
+			if shouldRetrySSH(result.err) {
+				if callback != nil {
+					msg := "Retrying SSH connection..."
+					switch errStatus {
+					case SSHStatusAuth:
+						msg = "Authentication failed, retrying..."
+					case SSHStatusHandshake:
+						msg = "SSH handshake failed, retrying..."
+					case SSHStatusDialing:
+						msg = "Connection interrupted, retrying..."
+					}
+					callback(SSHRetryInfo{
+						Status:  errStatus,
+						Attempt: attempt,
+						Error:   result.err,
+						Message: msg,
+					})
 				}
+
+				retryBackoff := backoff
+				if errStatus == SSHStatusAuth {
+					retryBackoff = authBackoff
+				}
+				if err := sleepWithContext(ctx, retryBackoff); err != nil {
+					return nil, fmt.Errorf("SSH connection cancelled")
+				}
+				if errStatus == SSHStatusAuth {
+					authBackoff = minDuration(authBackoff*2, maxAuthBackoff)
+				} else {
+					backoff = minDuration(backoff*2, maxBackoff)
+				}
+				continue
+			}
+
+			if callback != nil {
 				callback(SSHRetryInfo{
 					Status:  errStatus,
 					Attempt: attempt,
-					Error:   err,
-					Message: msg,
+					Error:   result.err,
+					Message: fmt.Sprintf("SSH connection failed: %v", result.err),
 				})
 			}
-			if err := sleepWithContext(ctx, backoff); err != nil {
-				return nil, fmt.Errorf("SSH connection cancelled")
-			}
-			backoff = minDuration(backoff*2, maxBackoff)
-			continue
+			return nil, fmt.Errorf("SSH connection failed: %w", result.err)
 		}
-
-		if callback != nil {
-			callback(SSHRetryInfo{
-				Status:  errStatus,
-				Attempt: attempt,
-				Error:   err,
-				Message: fmt.Sprintf("SSH connection failed: %v", err),
-			})
-		}
-		return nil, fmt.Errorf("SSH connection failed: %w", err)
 	}
 }
 
@@ -377,12 +407,109 @@ func ExecuteSSHCommand(client *SSHClient, command string) (string, error) {
 	return string(output), nil
 }
 
+// ExecuteSSHCommandStdoutOnly executes a command and returns only stdout, filtering out ld.so.preload errors from stderr
+// This prevents stderr pollution from breaking output parsing when /etc/ld.so.preload references a missing binary
+func ExecuteSSHCommandStdoutOnly(client *SSHClient, command string) (string, error) {
+	if client == nil || client.client == nil {
+		return "", fmt.Errorf("SSH client is not connected")
+	}
+
+	session, err := client.client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("failed to create session: %w", err)
+	}
+	defer session.Close()
+
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		return "", fmt.Errorf("failed to get stdout pipe: %w", err)
+	}
+
+	stderr, err := session.StderrPipe()
+	if err != nil {
+		return "", fmt.Errorf("failed to get stderr pipe: %w", err)
+	}
+
+	if err := session.Start(command); err != nil {
+		return "", fmt.Errorf("failed to start command: %w", err)
+	}
+
+	// Read stdout and stderr concurrently
+	var stdoutData, stderrData []byte
+	var stderrErr error
+	done := make(chan bool, 2)
+
+	go func() {
+		var err error
+		stdoutData, err = io.ReadAll(stdout)
+		if err != nil {
+			// Log but don't fail - stderr filtering will handle errors
+		}
+		done <- true
+	}()
+
+	go func() {
+		stderrData, stderrErr = io.ReadAll(stderr)
+		done <- true
+	}()
+
+	// Wait for both reads to complete
+	<-done
+	<-done
+
+	// Wait for command to finish
+	cmdErr := session.Wait()
+
+	// Filter out ld.so.preload errors from stderr (these are benign when binary is missing)
+	stderrStr := string(stderrData)
+	if stderrErr == nil && stderrStr != "" {
+		// Check if stderr contains only ignorable Thunder-specific errors
+		stderrLines := strings.Split(strings.TrimSpace(stderrStr), "\n")
+		hasNonIgnorableErrors := false
+		for _, line := range stderrLines {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			// Ignore ld.so.preload errors and other benign Thunder warnings
+			isIgnorable := strings.Contains(line, "ld.so: object") ||
+				strings.Contains(line, "cannot be preloaded") ||
+				strings.Contains(line, "ignored") ||
+				strings.Contains(line, "install: cannot remove") ||
+				strings.Contains(line, "Device or resource busy") ||
+				strings.Contains(line, "chown: changing ownership") ||
+				strings.Contains(line, "Read-only file system") ||
+				strings.Contains(line, "chown: cannot dereference") ||
+				strings.Contains(line, "No such file or directory")
+			if !isIgnorable {
+				hasNonIgnorableErrors = true
+				break
+			}
+		}
+		// If there are non-ignorable errors, return them
+		if hasNonIgnorableErrors && cmdErr != nil {
+			return "", fmt.Errorf("command failed: %w (stderr: %s)", cmdErr, stderrStr)
+		}
+	}
+
+	if cmdErr != nil && !strings.Contains(cmdErr.Error(), "exit status") {
+		return "", fmt.Errorf("command failed: %w", cmdErr)
+	}
+
+	// Return stdout only (stderr errors are filtered/ignored)
+	return string(stdoutData), nil
+}
+
 // CheckActiveSessions counts active SSH sessions (pts/ terminals)
 func CheckActiveSessions(client *SSHClient) (int, error) {
-	output, err := ExecuteSSHCommand(client, "who | grep 'pts/' | wc -l")
+	// Use stdout-only and redirect stderr to avoid ld.so.preload error pollution
+	output, err := ExecuteSSHCommandStdoutOnly(client, "who | grep 'pts/' | wc -l 2>/dev/null")
 	if err != nil {
 		return 0, err
 	}
+
+	// Filter out any remaining ld.so.preload errors
+	output = filterLdSoErrors(output)
 
 	var count int
 	_, err = fmt.Sscanf(strings.TrimSpace(output), "%d", &count)
@@ -549,4 +676,52 @@ func timeoutError(maxWait int, lastErr error) error {
 		return fmt.Errorf("SSH connection timeout after %d seconds: %w", maxWait, lastErr)
 	}
 	return fmt.Errorf("SSH connection timeout after %d seconds", maxWait)
+}
+
+func WaitForTCPPort(ctx context.Context, host string, port int, overallTimeout time.Duration) error {
+	address := net.JoinHostPort(host, strconv.Itoa(port))
+	deadline := time.Now().Add(overallTimeout)
+	backoff := 1 * time.Second
+	maxBackoff := 10 * time.Second
+	attempt := 0
+
+	for {
+		attempt++
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("TCP port check cancelled: %w", err)
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("TCP port %s not available after %v", address, overallTimeout)
+		}
+
+		remaining := time.Until(deadline)
+		attemptTimeout := remaining
+		if attemptTimeout > 5*time.Second {
+			attemptTimeout = 5 * time.Second
+		}
+		if attemptTimeout <= 0 {
+			return fmt.Errorf("TCP port %s not available after %v", address, overallTimeout)
+		}
+
+		dialer := &net.Dialer{
+			Timeout: attemptTimeout,
+		}
+
+		conn, err := dialer.DialContext(ctx, "tcp", address)
+		if err == nil {
+			conn.Close()
+			return nil
+		}
+
+		// Only retry on connection-related errors
+		if !shouldRetryDial(err) {
+			return fmt.Errorf("TCP port check failed: %w", err)
+		}
+
+		// Exponential backoff with cap
+		if err := sleepWithContext(ctx, backoff); err != nil {
+			return fmt.Errorf("TCP port check cancelled: %w", err)
+		}
+		backoff = minDuration(backoff*2, maxBackoff)
+	}
 }

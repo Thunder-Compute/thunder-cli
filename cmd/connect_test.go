@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -400,17 +399,6 @@ func TestBuildSSHArgs_BaseFlags(t *testing.T) {
 		"-i", keyFile,
 		"-p", fmt.Sprintf("%d", port),
 		"-t",
-	}
-
-	// Add ControlMaster options (non-Windows)
-	if runtime.GOOS != "windows" {
-		homeDir := "/home/test"
-		controlPath := fmt.Sprintf("%s/.thunder/thunder-control-%%h-%%p-%%r", homeDir)
-		sshArgs = append(sshArgs,
-			"-o", "ControlMaster=auto",
-			"-o", fmt.Sprintf("ControlPath=%s", controlPath),
-			"-o", "ControlPersist=5m",
-		)
 	}
 
 	sshArgs = append(sshArgs, fmt.Sprintf("ubuntu@%s", ip))
@@ -807,19 +795,6 @@ func TestConnectOptions_Defaults(t *testing.T) {
 	assert.NotNil(t, opts.sshConnector)
 	assert.NotNil(t, opts.execCommand)
 	assert.NotNil(t, opts.configLoader)
-}
-
-func TestControlMasterArgs_NotOnWindows(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping ControlMaster test on Windows")
-	}
-
-	homeDir := "/home/testuser"
-	controlPath := fmt.Sprintf("%s/.thunder/thunder-control-%%h-%%p-%%r", homeDir)
-
-	// Verify the control path format
-	assert.Contains(t, controlPath, "thunder-control")
-	assert.Contains(t, controlPath, "%h-%p-%r")
 }
 
 func TestConcurrentMockAPIClient(t *testing.T) {
