@@ -143,7 +143,7 @@ func (m snapshotDeleteModel) View() string {
 
 	// Beta notice
 	betaNotice := "ℹ Snapshots are currently in beta. Please share feedback with us on Discord (https://discord.gg/nwuETS9jJK) or by emailing support@thundercompute.com"
-	s.WriteString(WarningStyle().Render(betaNotice))
+	s.WriteString(WarningStyle().Width(80).Render(betaNotice))
 	s.WriteString("\n\n")
 
 	switch m.step {
