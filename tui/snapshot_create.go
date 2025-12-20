@@ -283,6 +283,11 @@ func (m snapshotCreateModel) View() string {
 	s.WriteString(m.styles.title.Render("⚡ Create Snapshot"))
 	s.WriteString("\n")
 
+	// Beta notice
+	betaNotice := "ℹ Snapshots are currently in beta. Please share feedback with us on Discord (https://discord.gg/nwuETS9jJK) or by emailing support@thundercompute.com"
+	s.WriteString(WarningStyle().Render(betaNotice))
+	s.WriteString("\n\n")
+
 	progressSteps := []string{"Instance", "Name", "Confirm"}
 	progress := ""
 	for i, stepName := range progressSteps {

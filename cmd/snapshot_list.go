@@ -76,6 +76,12 @@ func runSnapshotList() error {
 
 	// Render table
 	renderSnapshotTable(snapshots)
+
+	// Show beta notice
+	fmt.Println()
+	betaNotice := "ℹ Snapshots are currently in beta. Please share feedback with us on Discord (https://discord.gg/nwuETS9jJK) or by emailing support@thundercompute.com"
+	fmt.Println(tui.WarningStyle().Render(betaNotice))
+
 	return nil
 }
 

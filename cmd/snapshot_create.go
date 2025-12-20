@@ -145,7 +145,14 @@ func (m snapshotCreateProgressModel) View() string {
 		}
 
 		content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-		return "\n" + boxStyle.Render(content) + "\n\n"
+		result := "\n" + boxStyle.Render(content) + "\n\n"
+
+		// Add beta notice
+		warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.WarningColor))
+		betaNotice := "ℹ Snapshots are currently in beta. Please share feedback with us on Discord (https://discord.gg/nwuETS9jJK) or by emailing support@thundercompute.com"
+		result += warningStyle.Render(betaNotice) + "\n\n"
+
+		return result
 	}
 
 	return fmt.Sprintf("\n %s %s\n", m.spinner.View(), m.message)
