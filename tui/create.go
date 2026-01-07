@@ -45,8 +45,8 @@ type CreateConfig struct {
 }
 
 type createModel struct {
-	step            createStep
-	cursor          int
+	step             createStep
+	cursor           int
 	config           CreateConfig
 	templates        []api.Template
 	snapshots        []api.Snapshot
@@ -275,7 +275,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.config.VCPUs = vcpus[m.cursor]
 			m.config.NumGPUs = 1
 		} else {
-			numGPUs := []int{1, 2, 4}
+			numGPUs := []int{1, 2, 4, 8}
 			m.config.NumGPUs = numGPUs[m.cursor]
 			m.config.VCPUs = 18 * m.config.NumGPUs
 		}
@@ -356,7 +356,7 @@ func (m createModel) getMaxCursor() int {
 		if m.config.Mode == "prototyping" {
 			return 3
 		}
-		return 2
+		return 3
 	case stepTemplate:
 		return len(m.templates) + len(m.snapshots) - 1
 	case stepConfirmation:
@@ -467,8 +467,8 @@ func (m createModel) View() string {
 				s.WriteString(line + "\n")
 			}
 		} else {
-			s.WriteString("Select number of GPUs (18 vCPUs per GPU, 144GB RAM per GPU):\n\n")
-			numGPUs := []int{1, 2, 4}
+			s.WriteString("Select number of GPUs (18 vCPUs per GPU, 90GB RAM per GPU):\n\n")
+			numGPUs := []int{1, 2, 4, 8}
 			for i, num := range numGPUs {
 				cursor := "  "
 				if m.cursor == i {
@@ -543,7 +543,11 @@ func (m createModel) View() string {
 		panel.WriteString(m.styles.label.Render("GPU Type:   ") + strings.ToUpper(m.config.GPUType) + "\n")
 		panel.WriteString(m.styles.label.Render("GPUs:       ") + strconv.Itoa(m.config.NumGPUs) + "\n")
 		panel.WriteString(m.styles.label.Render("vCPUs:      ") + strconv.Itoa(m.config.VCPUs) + "\n")
-		panel.WriteString(m.styles.label.Render("RAM:        ") + strconv.Itoa(m.config.VCPUs*8) + " GB\n")
+		ramPerVCPU := 8
+		if m.config.Mode == "production" {
+			ramPerVCPU = 5
+		}
+		panel.WriteString(m.styles.label.Render("RAM:        ") + strconv.Itoa(m.config.VCPUs*ramPerVCPU) + " GB\n")
 		panel.WriteString(m.styles.label.Render("Template:   ") + utils.Capitalize(m.config.Template) + "\n")
 		panel.WriteString(m.styles.label.Render("Disk Size:  ") + strconv.Itoa(m.config.DiskSizeGB) + " GB")
 

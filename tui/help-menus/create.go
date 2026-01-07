@@ -42,7 +42,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Production"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr create --mode production --num-gpus {1|2|4} --template {base|comfy-ui|comfy-ui-wan|ollama|webui-forge} --disk-size-gb {100-1000}"))
+	output.WriteString(DescStyle.Render("tnr create --mode production --num-gpus {1|2|4|8} --template {base|comfy-ui|comfy-ui-wan|ollama|webui-forge} --disk-size-gb {100-1000}"))
 	output.WriteString("\n\n")
 
 	// Examples Section
@@ -88,13 +88,13 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--num-gpus"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Number of GPUs (production only): 1, 2, or 4"))
+	output.WriteString(DescStyle.Render("Number of GPUs (production only): 1, 2, 4, or 8"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--vcpus"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("CPU cores (prototyping only): 4, 8, 16, or 32, RAM: 8GB per vCPU. Production: 18 per GPU, RAM: 144GB per GPU"))
+	output.WriteString(DescStyle.Render("CPU cores (prototyping only): 4, 8, 16, or 32, RAM: 8GB per vCPU. Production: 18 per GPU, RAM: 90GB per GPU"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

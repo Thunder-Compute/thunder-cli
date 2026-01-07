@@ -114,7 +114,22 @@ func TestValidateCreateConfig(t *testing.T) {
 				NumGPUs: 3,
 			},
 			expectError:   true,
-			errorContains: "num-gpus must be one of: 1, 2, or 4",
+			errorContains: "num-gpus must be one of: 1, 2, 4, or 8",
+		},
+		{
+			name: "valid production config with 8 GPUs",
+			config: &tui.CreateConfig{
+				Mode:       "production",
+				GPUType:    "a100",
+				NumGPUs:    8,
+				VCPUs:      144,
+				Template:   "pytorch",
+				DiskSizeGB: 500,
+			},
+			templates: []api.Template{
+				{Key: "pytorch", DisplayName: "PyTorch"},
+			},
+			expectError: false,
 		},
 		{
 			name: "invalid disk size",

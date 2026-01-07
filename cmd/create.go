@@ -56,7 +56,7 @@ func init() {
 
 	createCmd.Flags().StringVar(&mode, "mode", "", "Instance mode: prototyping or production")
 	createCmd.Flags().StringVar(&gpuType, "gpu", "", "GPU type (prototyping: t4 or a100, production: a100 or h100)")
-	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs (production only): 1, 2, or 4")
+	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs (production only): 1, 2, 4, or 8")
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): 4, 8, 16, or 32")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (100-1000)")
@@ -341,10 +341,10 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.Template, sn
 		config.GPUType = canonical
 
 		if config.NumGPUs == 0 {
-			return fmt.Errorf("production mode requires --num-gpus flag (1, 2, or 4)")
+			return fmt.Errorf("production mode requires --num-gpus flag (1, 2, 4, or 8)")
 		}
 
-		validGPUs := []int{1, 2, 4}
+		validGPUs := []int{1, 2, 4, 8}
 		valid := false
 		for _, v := range validGPUs {
 			if config.NumGPUs == v {
@@ -353,7 +353,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.Template, sn
 			}
 		}
 		if !valid {
-			return fmt.Errorf("num-gpus must be one of: 1, 2, or 4")
+			return fmt.Errorf("num-gpus must be one of: 1, 2, 4, or 8")
 		}
 
 		config.VCPUs = 18 * config.NumGPUs
