@@ -336,10 +336,14 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 }
 
 func (m createModel) getGPUOptions() []string {
-	if m.config.Mode == "prototyping" {
-		return []string{"t4", "a100xl"}
+	switch m.config.Mode {
+	case "prototyping":
+		return []string{"t4", "a100xl", "h100"}
+	case "production":
+		return []string{"a100xl", "h100"}
+	default:
+		panic("Unknown config mode")
 	}
-	return []string{"a100xl", "h100"}
 }
 
 func (m createModel) getMaxCursor() int {
@@ -432,8 +436,8 @@ func (m createModel) View() string {
 					displayName = "A100 80GB (more powerful)"
 				}
 			case "h100":
-				if m.config.Mode == "production" {
-					displayName = "H100"
+				if m.config.Mode == "prototyping" {
+					displayName += " (most powerful)"
 				}
 			case "t4":
 				if m.config.Mode == "prototyping" {
