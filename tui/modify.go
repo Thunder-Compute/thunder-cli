@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
 type modifyStep int
@@ -398,7 +400,7 @@ func (m modifyModel) View() string {
 	var s strings.Builder
 
 	// Title
-	s.WriteString(m.styles.title.Render("⚙ Modify Instance Configuration"))
+	s.WriteString(m.styles.title.Render("Modify Instance Configuration"))
 	s.WriteString("\n\n")
 
 	// Show current instance info
@@ -682,4 +684,134 @@ func RunModifyInteractive(client *api.Client, instance *api.Instance) (*ModifyCo
 	}
 
 	return &finalModifyModel.config, nil
+}
+
+// RunModifyInstanceSelector shows an interactive instance selector for modify
+func RunModifyInstanceSelector(client *api.Client, instances []api.Instance) (*api.Instance, error) {
+	InitCommonStyles(os.Stdout)
+	m := newModifyInstanceSelectorModel(instances)
+	p := tea.NewProgram(m)
+
+	finalModel, err := p.Run()
+	if err != nil {
+		return nil, fmt.Errorf("error running instance selector: %w", err)
+	}
+
+	result := finalModel.(modifyInstanceSelectorModel)
+
+	if result.cancelled {
+		return nil, &CancellationError{}
+	}
+
+	if result.selected == nil {
+		return nil, &CancellationError{}
+	}
+
+	return result.selected, nil
+}
+
+type modifyInstanceSelectorModel struct {
+	cursor    int
+	instances []api.Instance
+	selected  *api.Instance
+	cancelled bool
+	quitting  bool
+	styles    modifyStyles
+}
+
+func newModifyInstanceSelectorModel(instances []api.Instance) modifyInstanceSelectorModel {
+	return modifyInstanceSelectorModel{
+		cursor:    0,
+		instances: instances,
+		styles:    newModifyStyles(),
+	}
+}
+
+func (m modifyInstanceSelectorModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m modifyInstanceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
+			m.cancelled = true
+			m.quitting = true
+			return m, tea.Quit
+
+		case "up":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+
+		case "down":
+			if m.cursor < len(m.instances)-1 {
+				m.cursor++
+			}
+
+		case "enter":
+			m.selected = &m.instances[m.cursor]
+			m.quitting = true
+			return m, tea.Quit
+		}
+	}
+
+	return m, nil
+}
+
+func (m modifyInstanceSelectorModel) View() string {
+	if m.quitting {
+		return ""
+	}
+
+	var s strings.Builder
+
+	s.WriteString(m.styles.title.Render("⚙ Modify Thunder Compute Instance"))
+	s.WriteString("\n")
+	s.WriteString("Select an instance to modify:\n\n")
+
+	for i, instance := range m.instances {
+		cursor := "  "
+		if m.cursor == i {
+			cursor = m.styles.cursor.Render("▶ ")
+		}
+
+		// Determine status style
+		var statusStyle lipgloss.Style
+		statusSuffix := ""
+		switch instance.Status {
+		case "RUNNING":
+			statusStyle = SuccessStyle()
+		case "STARTING":
+			statusStyle = WarningStyle()
+		case "DELETING":
+			statusStyle = ErrorStyle()
+			statusSuffix = " (deleting)"
+		default:
+			statusStyle = lipgloss.NewStyle()
+		}
+
+		idAndName := fmt.Sprintf("(%s) %s", instance.ID, instance.Name)
+		if m.cursor == i {
+			idAndName = m.styles.selected.Render(idAndName)
+		}
+
+		statusText := statusStyle.Render(fmt.Sprintf("(%s)", instance.Status))
+		rest := fmt.Sprintf(" %s%s - %s - %sx%s - %s",
+			statusText,
+			statusSuffix,
+			instance.IP,
+			instance.NumGPUs,
+			instance.GPUType,
+			utils.Capitalize(instance.Mode),
+		)
+
+		s.WriteString(fmt.Sprintf("%s%s%s\n", cursor, idAndName, rest))
+	}
+
+	s.WriteString("\n")
+	s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
+
+	return s.String()
 }

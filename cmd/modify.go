@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -16,9 +17,9 @@ import (
 
 // modifyCmd represents the modify command
 var modifyCmd = &cobra.Command{
-	Use:   "modify [instance_id]",
+	Use:   "modify [instance_index_or_id]",
 	Short: "Modify a Thunder Compute instance configuration",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runModify(cmd, args); err != nil {
 			PrintError(err)
@@ -53,9 +54,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 
 	client := api.NewClient(config.Token, config.APIURL)
 
-	instanceID := args[0]
-
-	// Fetch instances to convert index/ID to instance object
+	// Fetch instances
 	busy := tui.NewBusyModel("Fetching instances...")
 	bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
 	busyDone := make(chan struct{})
@@ -72,17 +71,57 @@ func runModify(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to fetch instances: %w", err)
 	}
 
-	// Find instance by ID or UUID
-	var selectedInstance *api.Instance
-	for i := range instances {
-		if instances[i].ID == instanceID || instances[i].UUID == instanceID {
-			selectedInstance = &instances[i]
-			break
-		}
+	if len(instances) == 0 {
+		PrintWarningSimple("No instances found. Use 'tnr create' to create a Thunder Compute instance.")
+		return nil
 	}
 
-	if selectedInstance == nil {
-		return fmt.Errorf("instance '%s' not found", instanceID)
+	var selectedInstance *api.Instance
+	var selectedIndex int
+
+	// Determine which instance to modify
+	if len(args) == 0 {
+		// No argument - show interactive selector
+		selectedInstance, err = tui.RunModifyInstanceSelector(client, instances)
+		if err != nil {
+			if _, ok := err.(*tui.CancellationError); ok {
+				PrintWarningSimple("User cancelled modification process")
+				return nil
+			}
+			return err
+		}
+		// Find the index of the selected instance
+		for i := range instances {
+			if instances[i].ID == selectedInstance.ID {
+				selectedIndex = i
+				break
+			}
+		}
+	} else {
+		instanceIdentifier := args[0]
+
+		// Try to parse as index first
+		if index, err := strconv.Atoi(instanceIdentifier); err == nil {
+			// It's a number - treat as index
+			if index < 0 || index >= len(instances) {
+				return fmt.Errorf("invalid instance index %d. Valid range: 0-%d", index, len(instances)-1)
+			}
+			selectedInstance = &instances[index]
+			selectedIndex = index
+		} else {
+			// Not a number - treat as ID or UUID
+			for i := range instances {
+				if instances[i].ID == instanceIdentifier || instances[i].UUID == instanceIdentifier {
+					selectedInstance = &instances[i]
+					selectedIndex = i
+					break
+				}
+			}
+
+			if selectedInstance == nil {
+				return fmt.Errorf("instance '%s' not found", instanceIdentifier)
+			}
+		}
 	}
 
 	// Validate instance is RUNNING
@@ -129,7 +168,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	// Make API call with progress spinner
-	p := tea.NewProgram(newModifyProgressModel(client, selectedInstance.UUID, modifyReq))
+	p := tea.NewProgram(newModifyProgressModel(client, selectedIndex, modifyReq))
 	finalModel, err := p.Run()
 	if err != nil {
 		return fmt.Errorf("error during modification: %w", err)
@@ -266,8 +305,8 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 		}
 
 		// Validate GPU compatibility with mode
-		if effectiveMode == "prototyping" && normalizedGPU != "t4" && normalizedGPU != "a100xl" {
-			return req, fmt.Errorf("GPU type '%s' is not available in prototyping mode (use t4 or a100)", gpuType)
+		if effectiveMode == "prototyping" && normalizedGPU != "t4" && normalizedGPU != "a100xl" && normalizedGPU != "h100" {
+			return req, fmt.Errorf("GPU type '%s' is not available in prototyping mode (use t4, a100, or h100)", gpuType)
 		}
 		if effectiveMode == "production" && normalizedGPU == "t4" {
 			return req, fmt.Errorf("GPU type 't4' is not available in production mode (use a100 or h100)")
@@ -334,7 +373,7 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 // Progress model for modify operation
 type modifyProgressModel struct {
 	client    *api.Client
-	uuid      string
+	index     int
 	req       api.InstanceModifyRequest
 	spinner   spinner.Model
 	message   string
@@ -344,7 +383,7 @@ type modifyProgressModel struct {
 	cancelled bool
 }
 
-func newModifyProgressModel(client *api.Client, uuid string, req api.InstanceModifyRequest) modifyProgressModel {
+func newModifyProgressModel(client *api.Client, index int, req api.InstanceModifyRequest) modifyProgressModel {
 	theme.Init(os.Stdout)
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -352,7 +391,7 @@ func newModifyProgressModel(client *api.Client, uuid string, req api.InstanceMod
 
 	return modifyProgressModel{
 		client:  client,
-		uuid:    uuid,
+		index:   index,
 		req:     req,
 		spinner: s,
 		message: "Modifying instance...",
@@ -367,13 +406,13 @@ type modifyInstanceResultMsg struct {
 func (m modifyProgressModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
-		modifyInstanceCmd(m.client, m.uuid, m.req),
+		modifyInstanceCmd(m.client, m.index, m.req),
 	)
 }
 
-func modifyInstanceCmd(client *api.Client, uuid string, req api.InstanceModifyRequest) tea.Cmd {
+func modifyInstanceCmd(client *api.Client, index int, req api.InstanceModifyRequest) tea.Cmd {
 	return func() tea.Msg {
-		resp, err := client.ModifyInstance(uuid, req)
+		resp, err := client.ModifyInstance(index, req)
 		return modifyInstanceResultMsg{
 			resp: resp,
 			err:  err,
