@@ -407,13 +407,13 @@ func (c *Client) DeleteInstance(instanceID string) (*DeleteInstanceResponse, err
 }
 
 // ModifyInstance modifies an existing instance configuration
-func (c *Client) ModifyInstance(instanceIndex int, req InstanceModifyRequest) (*InstanceModifyResponse, error) {
+func (c *Client) ModifyInstance(instanceID string, req InstanceModifyRequest) (*InstanceModifyResponse, error) {
 	jsonData, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/v1/instances/%d/modify", c.baseURL, instanceIndex)
+	url := fmt.Sprintf("%s/v1/instances/%s/modify", c.baseURL, instanceID)
 	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)

@@ -77,7 +77,6 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	var selectedInstance *api.Instance
-	var selectedIndex int
 
 	// Determine which instance to modify
 	if len(args) == 0 {
@@ -90,37 +89,28 @@ func runModify(cmd *cobra.Command, args []string) error {
 			}
 			return err
 		}
-		// Find the index of the selected instance
-		for i := range instances {
-			if instances[i].ID == selectedInstance.ID {
-				selectedIndex = i
-				break
-			}
-		}
 	} else {
 		instanceIdentifier := args[0]
 
-		// Try to parse as index first
-		if index, err := strconv.Atoi(instanceIdentifier); err == nil {
-			// It's a number - treat as index
-			if index < 0 || index >= len(instances) {
-				return fmt.Errorf("invalid instance index %d. Valid range: 0-%d", index, len(instances)-1)
+		// First try to find by ID or UUID
+		for i := range instances {
+			if instances[i].ID == instanceIdentifier || instances[i].UUID == instanceIdentifier {
+				selectedInstance = &instances[i]
+				break
 			}
-			selectedInstance = &instances[index]
-			selectedIndex = index
-		} else {
-			// Not a number - treat as ID or UUID
-			for i := range instances {
-				if instances[i].ID == instanceIdentifier || instances[i].UUID == instanceIdentifier {
-					selectedInstance = &instances[i]
-					selectedIndex = i
-					break
+		}
+
+		// If not found and it's a number, try as array index (for backwards compatibility)
+		if selectedInstance == nil {
+			if index, err := strconv.Atoi(instanceIdentifier); err == nil {
+				if index >= 0 && index < len(instances) {
+					selectedInstance = &instances[index]
 				}
 			}
+		}
 
-			if selectedInstance == nil {
-				return fmt.Errorf("instance '%s' not found", instanceIdentifier)
-			}
+		if selectedInstance == nil {
+			return fmt.Errorf("instance '%s' not found", instanceIdentifier)
 		}
 	}
 
@@ -168,7 +158,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	// Make API call with progress spinner
-	p := tea.NewProgram(newModifyProgressModel(client, selectedIndex, modifyReq))
+	p := tea.NewProgram(newModifyProgressModel(client, selectedInstance.ID, modifyReq))
 	finalModel, err := p.Run()
 	if err != nil {
 		return fmt.Errorf("error during modification: %w", err)
@@ -372,29 +362,29 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 
 // Progress model for modify operation
 type modifyProgressModel struct {
-	client    *api.Client
-	index     int
-	req       api.InstanceModifyRequest
-	spinner   spinner.Model
-	message   string
-	done      bool
-	err       error
-	resp      *api.InstanceModifyResponse
-	cancelled bool
+	client     *api.Client
+	instanceID string
+	req        api.InstanceModifyRequest
+	spinner    spinner.Model
+	message    string
+	done       bool
+	err        error
+	resp       *api.InstanceModifyResponse
+	cancelled  bool
 }
 
-func newModifyProgressModel(client *api.Client, index int, req api.InstanceModifyRequest) modifyProgressModel {
+func newModifyProgressModel(client *api.Client, instanceID string, req api.InstanceModifyRequest) modifyProgressModel {
 	theme.Init(os.Stdout)
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = theme.Primary()
 
 	return modifyProgressModel{
-		client:  client,
-		index:   index,
-		req:     req,
-		spinner: s,
-		message: "Modifying instance...",
+		client:     client,
+		instanceID: instanceID,
+		req:        req,
+		spinner:    s,
+		message:    "Modifying instance...",
 	}
 }
 
@@ -406,13 +396,13 @@ type modifyInstanceResultMsg struct {
 func (m modifyProgressModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
-		modifyInstanceCmd(m.client, m.index, m.req),
+		modifyInstanceCmd(m.client, m.instanceID, m.req),
 	)
 }
 
-func modifyInstanceCmd(client *api.Client, index int, req api.InstanceModifyRequest) tea.Cmd {
+func modifyInstanceCmd(client *api.Client, instanceID string, req api.InstanceModifyRequest) tea.Cmd {
 	return func() tea.Msg {
-		resp, err := client.ModifyInstance(index, req)
+		resp, err := client.ModifyInstance(instanceID, req)
 		return modifyInstanceResultMsg{
 			resp: resp,
 			err:  err,
