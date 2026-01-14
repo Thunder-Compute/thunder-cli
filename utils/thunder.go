@@ -88,13 +88,6 @@ func CleanupLdSoPreloadIfBinaryMissing(client *SSHClient) error {
 }
 
 func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpuType string, gpuCount int, token, binaryHash string, existingConfig *ThunderConfig) error {
-	gpuTypeMatches := false
-	gpuCountMatches := false
-	if existingConfig != nil {
-		gpuTypeMatches = strings.EqualFold(existingConfig.GPUType, gpuType)
-		gpuCountMatches = existingConfig.GPUCount == gpuCount
-	}
-
 	expectedHash := NormalizeHash(binaryHash)
 	isValidHash := expectedHash != "" && len(expectedHash) == 32 && IsHexString(expectedHash)
 	hashAlgorithm := DetectHashAlgorithm(expectedHash)
@@ -105,24 +98,13 @@ func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpu
 		}
 	}
 
-	if gpuTypeMatches && gpuCountMatches && existingConfig != nil && existingConfig.DeviceID != "" && isValidHash && existingHash != "" && existingHash == expectedHash {
+	// If binary hash matches, no update needed
+	if isValidHash && existingHash != "" && existingHash == expectedHash {
 		return nil
 	}
 
-	configNeedsUpdate := existingConfig == nil || existingConfig.DeviceID == "" || !gpuTypeMatches || !gpuCountMatches
 	binaryNeedsUpdate := !isValidHash || existingHash == "" || existingHash != expectedHash
 
-	config := ThunderConfig{
-		InstanceID: instanceID,
-		DeviceID:   deviceID,
-		GPUType:    gpuType,
-		GPUCount:   gpuCount,
-	}
-	configJSON, err := json.Marshal(config)
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-	configB64 := base64.StdEncoding.EncodeToString(configJSON)
 	tokenB64 := base64.StdEncoding.EncodeToString([]byte(token))
 
 	var scriptParts []string
@@ -131,16 +113,8 @@ func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpu
 
 	if binaryNeedsUpdate {
 		scriptParts = append(scriptParts, fmt.Sprintf("curl -sL %s -o /tmp/libthunder.tmp && mv /tmp/libthunder.tmp %s", thunderBinaryURL, thunderLibPath))
-	}
-
-	if binaryNeedsUpdate || configNeedsUpdate {
 		scriptParts = append(scriptParts, fmt.Sprintf("sudo ln -sf %s %s", thunderLibPath, thunderSymlink))
 		scriptParts = append(scriptParts, fmt.Sprintf("echo '%s' | sudo tee %s > /dev/null", thunderSymlink, ldPreloadPath))
-	}
-
-	if configNeedsUpdate {
-		scriptParts = append(scriptParts, fmt.Sprintf("echo '%s' | base64 -d > %s", configB64, thunderConfigPath))
-		scriptParts = append(scriptParts, fmt.Sprintf("sudo ln -sf %s /etc/thunder/config.json", thunderConfigPath))
 	}
 
 	// Always ensure token is set (in case it changed)
