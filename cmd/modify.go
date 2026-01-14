@@ -255,9 +255,9 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 
 		// Normalize GPU names
 		gpuMap := map[string]string{
-			"t4":    "t4",
-			"a100":  "a100xl",
-			"h100":  "h100",
+			"t4":   "t4",
+			"a100": "a100xl",
+			"h100": "h100",
 		}
 
 		normalizedGPU, ok := gpuMap[gpuType]
