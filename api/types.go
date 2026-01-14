@@ -62,6 +62,23 @@ type DeleteInstanceResponse struct {
 	Success bool   `json:"success"`
 }
 
+type InstanceModifyRequest struct {
+	CpuCores   *int    `json:"cpu_cores,omitempty"`
+	GpuType    *string `json:"gpu_type,omitempty"`
+	NumGpus    *int    `json:"num_gpus,omitempty"`
+	DiskSizeGb *int    `json:"disk_size_gb,omitempty"`
+	Mode       *string `json:"mode,omitempty"`
+}
+
+type InstanceModifyResponse struct {
+	Identifier   string  `json:"identifier"`
+	InstanceName string  `json:"instance_name"`
+	Mode         *string `json:"mode,omitempty"`
+	GpuType      *string `json:"gpu_type,omitempty"`
+	NumGpus      *int    `json:"num_gpus,omitempty"`
+	Message      string  `json:"message,omitempty"`
+}
+
 type AddSSHKeyResponse struct {
 	UUID string `json:"uuid"`
 	Key  string `json:"key"`

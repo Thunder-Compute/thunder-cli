@@ -395,6 +395,55 @@ func (c *Client) DeleteInstance(instanceID string) (*DeleteInstanceResponse, err
 	}, nil
 }
 
+// ModifyInstance modifies an existing instance configuration
+func (c *Client) ModifyInstance(instanceID string, req InstanceModifyRequest) (*InstanceModifyResponse, error) {
+	jsonData, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/v1/instances/%s/modify", c.baseURL, instanceID)
+	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	c.setHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	switch resp.StatusCode {
+	case 401:
+		return nil, fmt.Errorf("authentication failed: invalid token")
+	case 404:
+		return nil, fmt.Errorf("instance not found")
+	case 400:
+		return nil, fmt.Errorf("invalid request: %s", string(body))
+	case 409:
+		return nil, fmt.Errorf("instance cannot be modified (may not be in RUNNING state)")
+	case 200, 201, 202:
+		// Success - continue to parse
+	default:
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var modifyResp InstanceModifyResponse
+	if err := json.Unmarshal(body, &modifyResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &modifyResp, nil
+}
+
 // AddSSHKey generates and adds SSH keypair to instance
 func (c *Client) AddSSHKey(instanceID string) (*AddSSHKeyResponse, error) {
 	return c.AddSSHKeyCtx(context.Background(), instanceID)
