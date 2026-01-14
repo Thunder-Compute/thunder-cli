@@ -81,7 +81,7 @@ func newModifyStyles() modifyStyles {
 	}
 }
 
-func NewModifyModel(client *api.Client, instance *api.Instance) modifyModel {
+func NewModifyModel(client *api.Client, instance *api.Instance) tea.Model {
 	styles := newModifyStyles()
 
 	ti := textinput.New()
@@ -213,7 +213,7 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 
 		var gpuValues []string
 		if effectiveMode == "prototyping" {
-			gpuValues = []string{"t4", "a100xl"}
+			gpuValues = []string{"t4", "a100xl", "h100"}
 		} else {
 			gpuValues = []string{"a100xl", "h100"}
 		}
@@ -284,11 +284,11 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.step = modifyStepComplete
 			m.quitting = true
 			return m, tea.Quit
-		} else { // Cancel
-			m.cancelled = true
-			m.quitting = true
-			return m, tea.Quit
 		}
+		// Cancel
+		m.cancelled = true
+		m.quitting = true
+		return m, tea.Quit
 	}
 
 	return m, nil
@@ -306,13 +306,15 @@ func (m modifyModel) getCurrentGPUCursorPosition() int {
 		if currentGPU == "t4" {
 			return 0
 		}
-		return 1 // a100xl
-	} else {
-		if currentGPU == "a100xl" || currentGPU == "a100" {
-			return 0
+		if currentGPU == "a100xl" {
+			return 1
 		}
-		return 1 // h100
+		return 2 // h100
 	}
+	if currentGPU == "a100xl" {
+		return 0
+	}
+	return 1 // h100
 }
 
 func (m modifyModel) formatGPUType(gpuType string) string {
@@ -320,7 +322,7 @@ func (m modifyModel) formatGPUType(gpuType string) string {
 	switch gpuType {
 	case "t4":
 		return "T4"
-	case "a100xl", "a100":
+	case "a100xl":
 		return "A100 80GB"
 	case "h100":
 		return "H100"
@@ -344,16 +346,15 @@ func (m modifyModel) getCurrentComputeCursorPosition() int {
 			}
 		}
 		return 0
-	} else {
-		currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
-		gpuOptions := []int{1, 2, 4}
-		for i, gpus := range gpuOptions {
-			if gpus == currentNumGPUs {
-				return i
-			}
-		}
-		return 0
 	}
+	currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
+	gpuOptions := []int{1, 2, 4}
+	for i, gpus := range gpuOptions {
+		if gpus == currentNumGPUs {
+			return i
+		}
+	}
+	return 0
 }
 
 func (m modifyModel) getMaxCursor() int {
@@ -362,7 +363,14 @@ func (m modifyModel) getMaxCursor() int {
 		return 1 // Prototyping, Production
 
 	case modifyStepGPU:
-		return 1 // 2 GPU options (t4/a100xl or a100xl/h100)
+		effectiveMode := m.currentInstance.Mode
+		if m.config.ModeChanged {
+			effectiveMode = m.config.Mode
+		}
+		if effectiveMode == "prototyping" {
+			return 2 // 3 GPU options (t4/a100xl/h100)
+		}
+		return 1 // 2 GPU options (a100xl/h100)
 
 	case modifyStepCompute:
 		effectiveMode := m.currentInstance.Mode
@@ -372,9 +380,8 @@ func (m modifyModel) getMaxCursor() int {
 
 		if effectiveMode == "prototyping" {
 			return 3 // 4 vCPU options
-		} else {
-			return 2 // 3 GPU options
 		}
+		return 2 // 3 GPU options
 
 	case modifyStepConfirmation:
 		return 1 // Apply Changes, Cancel
@@ -414,11 +421,12 @@ func (m modifyModel) View() string {
 
 	// Help text
 	s.WriteString("\n")
-	if m.step == modifyStepConfirmation {
+	switch m.step {
+	case modifyStepConfirmation:
 		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Confirm  Q: Cancel"))
-	} else if m.step == modifyStepDiskSize {
+	case modifyStepDiskSize:
 		s.WriteString(m.styles.help.Render("Type disk size  Enter: Continue  ESC: Back  Q: Quit"))
-	} else {
+	default:
 		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  ESC: Back  Q: Quit"))
 	}
 
@@ -469,9 +477,10 @@ func (m modifyModel) renderGPUStep() string {
 	if effectiveMode == "prototyping" {
 		optionLabels = []string{
 			"T4 (more affordable)",
-			"A100 80GB (more powerful)",
+			"A100 80GB (high performance)",
+			"H100 (most powerful)",
 		}
-		optionValues = []string{"t4", "a100xl"}
+		optionValues = []string{"t4", "a100xl", "h100"}
 	} else {
 		optionLabels = []string{
 			"A100 80GB",

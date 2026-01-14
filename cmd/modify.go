@@ -147,7 +147,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	// Display success message
-	PrintSuccessSimple(fmt.Sprintf("✓ Instance modified successfully!"))
+	PrintSuccessSimple("✓ Instance modified successfully!")
 	fmt.Println()
 	fmt.Printf("Instance ID:   %s\n", progressModel.resp.Identifier)
 	fmt.Printf("Instance Name: %s\n", progressModel.resp.InstanceName)
