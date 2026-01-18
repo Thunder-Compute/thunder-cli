@@ -12,6 +12,7 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -175,28 +176,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to modify instance: %w", progressModel.err)
 	}
 
-	// Display success message
-	PrintSuccessSimple("✓ Instance modified successfully!")
-	fmt.Println()
-	fmt.Printf("Instance ID:   %s\n", progressModel.resp.Identifier)
-	fmt.Printf("Instance Name: %s\n", progressModel.resp.InstanceName)
-
-	if progressModel.resp.Mode != nil {
-		fmt.Printf("New Mode:      %s\n", *progressModel.resp.Mode)
-	}
-	if progressModel.resp.GpuType != nil {
-		fmt.Printf("New GPU:       %s\n", *progressModel.resp.GpuType)
-	}
-	if progressModel.resp.NumGpus != nil {
-		fmt.Printf("New GPUs:      %d\n", *progressModel.resp.NumGpus)
-	}
-
-	fmt.Println()
-	fmt.Println("Next steps:")
-	fmt.Println("  • Instance is restarting with new configuration")
-	fmt.Println("  • Run 'tnr status' to monitor progress")
-	fmt.Printf("  • Run 'tnr connect %s' once RUNNING\n", selectedInstance.ID)
-
+	// Success output is rendered in the View() method
 	return nil
 }
 
@@ -434,8 +414,50 @@ func (m modifyProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m modifyProgressModel) View() string {
-	if m.done || m.cancelled {
-		return ""
+	if m.done {
+		if m.cancelled {
+			return ""
+		}
+
+		if m.err != nil {
+			return ""
+		}
+
+		headerStyle := theme.Primary().Bold(true)
+		labelStyle := theme.Neutral()
+		valueStyle := lipgloss.NewStyle().Bold(true)
+		cmdStyle := theme.Neutral()
+		boxStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(theme.PrimaryColor)).
+			Padding(1, 2)
+
+		var lines []string
+		successTitleStyle := theme.Success()
+		lines = append(lines, successTitleStyle.Render("✓ Instance modified successfully!"))
+		lines = append(lines, "")
+		lines = append(lines, labelStyle.Render("Instance ID:")+"   "+valueStyle.Render(m.resp.Identifier))
+		lines = append(lines, labelStyle.Render("Instance Name:")+" "+valueStyle.Render(m.resp.InstanceName))
+
+		if m.resp.Mode != nil {
+			lines = append(lines, labelStyle.Render("New Mode:")+"      "+valueStyle.Render(*m.resp.Mode))
+		}
+		if m.resp.GpuType != nil {
+			lines = append(lines, labelStyle.Render("New GPU:")+"       "+valueStyle.Render(*m.resp.GpuType))
+		}
+		if m.resp.NumGpus != nil {
+			lines = append(lines, labelStyle.Render("New GPUs:")+"      "+valueStyle.Render(fmt.Sprintf("%d", *m.resp.NumGpus)))
+		}
+
+		lines = append(lines, "")
+		lines = append(lines, headerStyle.Render("Next steps:"))
+		lines = append(lines, cmdStyle.Render("  • Instance is restarting with new configuration"))
+		lines = append(lines, cmdStyle.Render("  • Run 'tnr status' to monitor progress"))
+		lines = append(lines, cmdStyle.Render(fmt.Sprintf("  • Run 'tnr connect %s' once RUNNING", m.instanceID)))
+
+		content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+		return "\n" + boxStyle.Render(content) + "\n\n"
 	}
+
 	return fmt.Sprintf("\n   %s %s\n\n", m.spinner.View(), m.message)
 }

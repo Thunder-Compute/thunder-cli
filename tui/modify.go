@@ -401,7 +401,7 @@ func (m modifyModel) View() string {
 
 	// Title
 	s.WriteString(m.styles.title.Render("Modify Instance Configuration"))
-	s.WriteString("\n\n")
+	s.WriteString("\n")
 
 	// Show current instance info
 	s.WriteString(m.styles.label.Render(fmt.Sprintf("Instance: (%s) %s", m.currentInstance.ID, m.currentInstance.Name)))
@@ -582,19 +582,19 @@ func (m modifyModel) renderDiskSizeStep() string {
 func (m modifyModel) renderConfirmationStep() string {
 	var s strings.Builder
 
-	s.WriteString("Review your configuration changes:\n\n")
+	s.WriteString("Review your configuration changes:\n")
 
-	// Build change summary
-	var changes []string
+	// Build change summary using panel style like create.go
+	var panel strings.Builder
 
 	if m.config.ModeChanged {
-		changes = append(changes, fmt.Sprintf("Mode:      %s → %s", m.currentInstance.Mode, m.config.Mode))
+		panel.WriteString(m.styles.label.Render("Mode:       ") + fmt.Sprintf("%s → %s", utils.Capitalize(m.currentInstance.Mode), utils.Capitalize(m.config.Mode)) + "\n")
 	}
 
 	if m.config.GPUChanged {
 		currentGPU := m.formatGPUType(m.currentInstance.GPUType)
 		newGPU := m.formatGPUType(m.config.GPUType)
-		changes = append(changes, fmt.Sprintf("GPU Type:  %s → %s", currentGPU, newGPU))
+		panel.WriteString(m.styles.label.Render("GPU Type:   ") + fmt.Sprintf("%s → %s", currentGPU, newGPU) + "\n")
 	}
 
 	if m.config.ComputeChanged {
@@ -607,8 +607,8 @@ func (m modifyModel) renderConfirmationStep() string {
 			currentRAM, _ := strconv.Atoi(m.currentInstance.CPUCores)
 			currentRAM *= 8
 			newRAM := m.config.VCPUs * 8
-			changes = append(changes, fmt.Sprintf("vCPUs:     %s → %d", m.currentInstance.CPUCores, m.config.VCPUs))
-			changes = append(changes, fmt.Sprintf("RAM:       %d GB → %d GB", currentRAM, newRAM))
+			panel.WriteString(m.styles.label.Render("vCPUs:      ") + fmt.Sprintf("%s → %d", m.currentInstance.CPUCores, m.config.VCPUs) + "\n")
+			panel.WriteString(m.styles.label.Render("RAM:        ") + fmt.Sprintf("%d GB → %d GB", currentRAM, newRAM) + "\n")
 		} else {
 			currentVCPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
 			currentVCPUs *= 18
@@ -616,37 +616,28 @@ func (m modifyModel) renderConfirmationStep() string {
 			currentRAM, _ := strconv.Atoi(m.currentInstance.NumGPUs)
 			currentRAM *= 144
 			newRAM := m.config.NumGPUs * 144
-			changes = append(changes, fmt.Sprintf("GPUs:      %s → %d", m.currentInstance.NumGPUs, m.config.NumGPUs))
-			changes = append(changes, fmt.Sprintf("vCPUs:     %d → %d", currentVCPUs, newVCPUs))
-			changes = append(changes, fmt.Sprintf("RAM:       %d GB → %d GB", currentRAM, newRAM))
+			panel.WriteString(m.styles.label.Render("GPUs:       ") + fmt.Sprintf("%s → %d", m.currentInstance.NumGPUs, m.config.NumGPUs) + "\n")
+			panel.WriteString(m.styles.label.Render("vCPUs:      ") + fmt.Sprintf("%d → %d", currentVCPUs, newVCPUs) + "\n")
+			panel.WriteString(m.styles.label.Render("RAM:        ") + fmt.Sprintf("%d GB → %d GB", currentRAM, newRAM) + "\n")
 		}
 	}
 
 	if m.config.DiskChanged {
-		changes = append(changes, fmt.Sprintf("Disk Size: %d GB → %d GB", m.currentInstance.Storage, m.config.DiskSizeGB))
+		panel.WriteString(m.styles.label.Render("Disk Size:  ") + fmt.Sprintf("%d GB → %d GB", m.currentInstance.Storage, m.config.DiskSizeGB) + "\n")
 	}
 
-	if len(changes) == 0 {
+	panelStr := panel.String()
+	if panelStr == "" {
 		s.WriteString(warningStyleTUI.Render("⚠ Warning: No changes detected"))
 		s.WriteString("\n\n")
 	} else {
-		// Display changes in a box
-		changeBox := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(theme.PrimaryColor)).
-			Padding(1, 2)
-
-		changeText := "CHANGES:\n"
-		for _, change := range changes {
-			changeText += change + "\n"
-		}
-
-		s.WriteString(changeBox.Render(changeText))
-		s.WriteString("\n\n")
+		// Trim trailing newline for consistent panel rendering
+		panelStr = strings.TrimSuffix(panelStr, "\n")
+		s.WriteString(m.styles.panel.Render(panelStr))
 	}
 
 	s.WriteString(warningStyleTUI.Render("⚠ Warning: Modifying will restart the instance, running processes will be interrupted."))
-	s.WriteString("\n\n")
+	s.WriteString("\n")
 
 	s.WriteString("Confirm modification?\n\n")
 
@@ -798,10 +789,9 @@ func (m modifyInstanceSelectorModel) View() string {
 		}
 
 		statusText := statusStyle.Render(fmt.Sprintf("(%s)", instance.Status))
-		rest := fmt.Sprintf(" %s%s - %s - %sx%s - %s",
+		rest := fmt.Sprintf(" %s%s - %sx%s - %s",
 			statusText,
 			statusSuffix,
-			instance.IP,
 			instance.NumGPUs,
 			instance.GPUType,
 			utils.Capitalize(instance.Mode),
