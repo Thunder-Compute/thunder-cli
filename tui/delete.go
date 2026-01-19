@@ -212,10 +212,9 @@ func (m deleteModel) View() string {
 			}
 
 			statusText := statusStyle.Render(fmt.Sprintf("(%s)", instance.Status))
-			rest := fmt.Sprintf(" %s%s - %s - %sx%s - %s",
+			rest := fmt.Sprintf(" %s%s - %sx%s - %s",
 				statusText,
 				statusSuffix,
-				instance.IP,
 				instance.NumGPUs,
 				instance.GPUType,
 				utils.Capitalize(instance.Mode),
@@ -240,7 +239,6 @@ func (m deleteModel) View() string {
 		instanceInfo.WriteString(m.styles.label.Render("ID:           ") + m.selected.ID + "\n")
 		instanceInfo.WriteString(m.styles.label.Render("Name:         ") + m.selected.Name + "\n")
 		instanceInfo.WriteString(m.styles.label.Render("Status:       ") + m.selected.Status + "\n")
-		instanceInfo.WriteString(m.styles.label.Render("IP Address:   ") + m.selected.IP + "\n")
 		instanceInfo.WriteString(m.styles.label.Render("Mode:         ") + utils.Capitalize(m.selected.Mode) + "\n")
 		instanceInfo.WriteString(m.styles.label.Render("GPU:          ") + m.selected.NumGPUs + "x" + m.selected.GPUType + "\n")
 		instanceInfo.WriteString(m.styles.label.Render("Template:     ") + utils.Capitalize(m.selected.Template))

@@ -313,10 +313,9 @@ func (m snapshotCreateModel) View() string {
 					cursor = m.styles.cursor.Render("▶ ")
 				}
 
-				display := fmt.Sprintf("(%s) %s - %s - %sx%s",
+				display := fmt.Sprintf("(%s) %s - %sx%s",
 					instance.ID,
 					instance.Name,
-					instance.IP,
 					instance.NumGPUs,
 					instance.GPUType,
 				)
