@@ -70,6 +70,16 @@ func filterLdSoErrors(output string) string {
 	return strings.Join(filtered, "\n")
 }
 
+// EnsureToken sets up the token file and bashrc export. This is idempotent and should be called
+// on every connect to ensure the token is always present, regardless of other early-return optimizations.
+func EnsureToken(client *SSHClient, token string) error {
+	tokenB64 := base64.StdEncoding.EncodeToString([]byte(token))
+	cmd := fmt.Sprintf("sudo install -d -m 755 %s && echo '%s' | base64 -d | sudo tee %s > /dev/null && sudo chown ubuntu:ubuntu %s && sudo chmod 600 %s && sudo sed -i '/export TNR_API_TOKEN/d' /home/ubuntu/.bashrc || true && echo 'export TNR_API_TOKEN=\"$(cat %s)\"' | sudo tee -a /home/ubuntu/.bashrc > /dev/null",
+		thunderConfigDir, tokenB64, tokenPath, tokenPath, tokenPath, tokenPath)
+	_, err := ExecuteSSHCommand(client, cmd)
+	return err
+}
+
 // CleanupLdSoPreloadIfBinaryMissing prevents stderr pollution from breaking command output parsing
 func CleanupLdSoPreloadIfBinaryMissing(client *SSHClient) error {
 	checkCmd := fmt.Sprintf("test -f %s && echo 'exists' || echo 'missing'", thunderLibPath)
@@ -98,12 +108,12 @@ func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpu
 		}
 	}
 
-	// If binary hash matches, no update needed
-	if isValidHash && existingHash != "" && existingHash == expectedHash {
-		return nil
-	}
-
 	binaryNeedsUpdate := !isValidHash || existingHash == "" || existingHash != expectedHash
+
+	// If binary doesn't need update, just ensure token is set and return
+	if !binaryNeedsUpdate {
+		return EnsureToken(client, token)
+	}
 
 	tokenB64 := base64.StdEncoding.EncodeToString([]byte(token))
 
@@ -111,21 +121,17 @@ func ConfigureThunderVirtualization(client *SSHClient, instanceID, deviceID, gpu
 	scriptParts = append(scriptParts, fmt.Sprintf("mkdir -p %s", thunderConfigDir))
 	scriptParts = append(scriptParts, "sudo mkdir -p /etc/thunder")
 
-	if binaryNeedsUpdate {
-		scriptParts = append(scriptParts, fmt.Sprintf("curl -sL %s -o /tmp/libthunder.tmp && mv /tmp/libthunder.tmp %s", thunderBinaryURL, thunderLibPath))
-		scriptParts = append(scriptParts, fmt.Sprintf("sudo ln -sf %s %s", thunderLibPath, thunderSymlink))
-		scriptParts = append(scriptParts, fmt.Sprintf("echo '%s' | sudo tee %s > /dev/null", thunderSymlink, ldPreloadPath))
-	}
+	scriptParts = append(scriptParts, fmt.Sprintf("curl -sL %s -o /tmp/libthunder.tmp && mv /tmp/libthunder.tmp %s", thunderBinaryURL, thunderLibPath))
+	scriptParts = append(scriptParts, fmt.Sprintf("sudo ln -sf %s %s", thunderLibPath, thunderSymlink))
+	scriptParts = append(scriptParts, fmt.Sprintf("echo '%s' | sudo tee %s > /dev/null", thunderSymlink, ldPreloadPath))
 
-	// Always ensure token is set (in case it changed)
+	// Always ensure token is set
 	scriptParts = append(scriptParts, fmt.Sprintf("echo '%s' | base64 -d > %s", tokenB64, tokenPath))
 	scriptParts = append(scriptParts, fmt.Sprintf("sudo ln -sf %s %s", tokenPath, tokenSymlink))
 
-	if len(scriptParts) > 0 {
-		setupScript := strings.Join(scriptParts, " && ")
-		if _, err := ExecuteSSHCommand(client, setupScript); err != nil {
-			return fmt.Errorf("failed to configure Thunder virtualization: %w", err)
-		}
+	setupScript := strings.Join(scriptParts, " && ")
+	if _, err := ExecuteSSHCommand(client, setupScript); err != nil {
+		return fmt.Errorf("failed to configure Thunder virtualization: %w", err)
 	}
 
 	return nil

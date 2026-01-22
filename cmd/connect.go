@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -491,6 +490,9 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		return nil
 	}
 
+	// Always ensure token is set first (idempotent, fast)
+	_ = utils.EnsureToken(sshClient, config.Token)
+
 	// Get binary hash (already fetched in background)
 	var binaryHash string
 	select {
@@ -520,9 +522,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		}
 
 		if activeSessions > 1 {
-			tokenB64 := base64.StdEncoding.EncodeToString([]byte(config.Token))
-			combinedTokenCmd := fmt.Sprintf("sudo install -d -m 755 /home/ubuntu/.thunder && echo '%s' | base64 -d | sudo tee /home/ubuntu/.thunder/token > /dev/null && sudo chown ubuntu:ubuntu /home/ubuntu/.thunder/token && sudo chmod 600 /home/ubuntu/.thunder/token && sudo sed -i '/export TNR_API_TOKEN/d' /home/ubuntu/.bashrc || true && echo 'export TNR_API_TOKEN=\"$(cat /home/ubuntu/.thunder/token)\"' | sudo tee -a /home/ubuntu/.bashrc > /dev/null", tokenB64)
-			_, _ = utils.ExecuteSSHCommand(sshClient, combinedTokenCmd)
+			// Token already set above, just mark complete
 			phaseTimings["instance_setup"] = time.Since(phase5Start)
 			tui.SendPhaseComplete(p, 4, phaseTimings["instance_setup"])
 			canEarlyReturn = true
@@ -589,7 +589,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	ranConfigurator := false
 
-	// Early return if GPU config and hash match
+	// Early return if GPU config and hash match (token already set above)
 	if !canEarlyReturn {
 		if instance.Mode == "prototyping" && existingConfig != nil && existingConfig.DeviceID != "" {
 			expectedHash := utils.NormalizeHash(binaryHash)
@@ -607,27 +607,18 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		}
 	}
 
-	// Skip token/bootstrap operations if GPU config matches (ConfigureThunderVirtualization handles token update)
-	skipTokenBootstrap := canEarlyReturn
+	// Skip active sessions check if GPU config matches (ConfigureThunderVirtualization handles binary update)
 	skipActiveSessionsCheck := canEarlyReturn
 	if !canEarlyReturn && instance.Mode == "prototyping" && existingConfig != nil && existingConfig.DeviceID != "" {
 		gpuTypeMatches := strings.EqualFold(existingConfig.GPUType, instance.GPUType)
 		gpuCountMatches := existingConfig.GPUCount == gpuCount
 		if gpuTypeMatches && gpuCountMatches {
-			skipTokenBootstrap = true
 			skipActiveSessionsCheck = true
 		}
 	}
 
-	// For prototyping mode, handle token/bootstrap and active sessions check
+	// For prototyping mode, handle active sessions check (token already set above)
 	if instance.Mode == "prototyping" && !canEarlyReturn {
-		if !skipTokenBootstrap {
-			// Combine token bootstrap and bashrc update into a single SSH command
-			tokenB64 := base64.StdEncoding.EncodeToString([]byte(config.Token))
-			combinedTokenCmd := fmt.Sprintf("sudo install -d -m 755 /home/ubuntu/.thunder && echo '%s' | base64 -d | sudo tee /home/ubuntu/.thunder/token > /dev/null && sudo chown ubuntu:ubuntu /home/ubuntu/.thunder/token && sudo chmod 600 /home/ubuntu/.thunder/token && sudo sed -i '/export TNR_API_TOKEN/d' /home/ubuntu/.bashrc || true && echo 'export TNR_API_TOKEN=\"$(cat /home/ubuntu/.thunder/token)\"' | sudo tee -a /home/ubuntu/.bashrc > /dev/null", tokenB64)
-			_, _ = utils.ExecuteSSHCommand(sshClient, combinedTokenCmd)
-		}
-
 		if !skipActiveSessionsCheck {
 			var checkErr error
 			activeSessions, checkErr = utils.CheckActiveSessions(sshClient)
