@@ -281,11 +281,6 @@ func (m snapshotCreateModel) View() string {
 	var s strings.Builder
 	s.WriteString("\n")
 	s.WriteString(m.styles.title.Render("⚡ Create Snapshot"))
-	s.WriteString("\n")
-
-	// Beta notice
-	betaNotice := "ℹ Snapshots are currently in beta. Please share feedback with us on Discord (https://discord.gg/nwuETS9jJK) or by emailing support@thundercompute.com"
-	s.WriteString(WarningStyle().Width(80).Render(betaNotice))
 	s.WriteString("\n\n")
 
 	progressSteps := []string{"Instance", "Name", "Confirm"}
@@ -318,10 +313,9 @@ func (m snapshotCreateModel) View() string {
 					cursor = m.styles.cursor.Render("▶ ")
 				}
 
-				display := fmt.Sprintf("(%s) %s - %s - %sx%s",
+				display := fmt.Sprintf("(%s) %s - %sx%s",
 					instance.ID,
 					instance.Name,
-					instance.IP,
 					instance.NumGPUs,
 					instance.GPUType,
 				)
