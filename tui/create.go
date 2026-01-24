@@ -338,7 +338,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 func (m createModel) getGPUOptions() []string {
 	switch m.config.Mode {
 	case "prototyping":
-		return []string{"t4", "a100xl", "h100"}
+		return []string{"a6000", "a100xl", "h100"}
 	case "production":
 		return []string{"a100xl", "h100"}
 	default:
@@ -425,21 +425,18 @@ func (m createModel) View() string {
 			if m.cursor == i {
 				cursor = m.styles.cursor.Render("▶ ")
 			}
-			displayName := strings.ToUpper(gpu)
+			displayName := utils.FormatGPUType(gpu)
 
 			switch gpu {
 			case "a100xl":
-				switch m.config.Mode {
-				case "production":
-					displayName = "A100 80GB"
-				case "prototyping":
+				if m.config.Mode == "prototyping" {
 					displayName = "A100 80GB (more powerful)"
 				}
 			case "h100":
 				if m.config.Mode == "prototyping" {
 					displayName += " (most powerful)"
 				}
-			case "t4":
+			case "a6000":
 				if m.config.Mode == "prototyping" {
 					displayName += " (more affordable)"
 				}
@@ -540,7 +537,7 @@ func (m createModel) View() string {
 
 		var panel strings.Builder
 		panel.WriteString(m.styles.label.Render("Mode:       ") + utils.Capitalize(m.config.Mode) + "\n")
-		panel.WriteString(m.styles.label.Render("GPU Type:   ") + strings.ToUpper(m.config.GPUType) + "\n")
+		panel.WriteString(m.styles.label.Render("GPU Type:   ") + utils.FormatGPUType(m.config.GPUType) + "\n")
 		panel.WriteString(m.styles.label.Render("GPUs:       ") + strconv.Itoa(m.config.NumGPUs) + "\n")
 		panel.WriteString(m.styles.label.Render("vCPUs:      ") + strconv.Itoa(m.config.VCPUs) + "\n")
 		ramPerVCPU := 8

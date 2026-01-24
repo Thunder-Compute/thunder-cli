@@ -8,6 +8,7 @@ import (
 
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -317,7 +318,7 @@ func (m snapshotCreateModel) View() string {
 					instance.ID,
 					instance.Name,
 					instance.NumGPUs,
-					instance.GPUType,
+					utils.FormatGPUType(instance.GPUType),
 				)
 				if m.cursor == i {
 					display = m.styles.selected.Render(display)

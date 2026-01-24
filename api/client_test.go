@@ -21,7 +21,7 @@ func TestNewClient(t *testing.T) {
 func TestCreateInstanceRequest(t *testing.T) {
 	req := CreateInstanceRequest{
 		CPUCores:   8,
-		GPUType:    "t4",
+		GPUType:    "a6000",
 		Template:   "ubuntu-22.04",
 		NumGPUs:    1,
 		DiskSizeGB: 100,
@@ -143,7 +143,7 @@ func TestTemplateStruct(t *testing.T) {
 		Version:             1,
 		DefaultSpecs: ThunderTemplateDefaultSpecs{
 			Cores:   8,
-			GpuType: "t4",
+			GpuType: "a6000",
 			NumGpus: 1,
 			Storage: 100,
 		},

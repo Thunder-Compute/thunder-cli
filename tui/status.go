@@ -247,7 +247,7 @@ func (m StatusModel) renderTable() string {
 		address := truncate(instance.IP, colWidths["Address"])
 		mode := truncate(utils.Capitalize(instance.Mode), colWidths["Mode"])
 		disk := truncate(fmt.Sprintf("%dGB", instance.Storage), colWidths["Disk"])
-		gpu := truncate(fmt.Sprintf("%sx%s", instance.NumGPUs, instance.GPUType), colWidths["GPU"])
+		gpu := truncate(fmt.Sprintf("%sx%s", instance.NumGPUs, utils.FormatGPUType(instance.GPUType)), colWidths["GPU"])
 		vcpus := truncate(instance.CPUCores, colWidths["vCPUs"])
 		ram := truncate(fmt.Sprintf("%sGB", instance.Memory), colWidths["RAM"])
 		template := truncate(utils.Capitalize(instance.Template), colWidths["Template"])

@@ -215,7 +215,7 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 
 		var gpuValues []string
 		if effectiveMode == "prototyping" {
-			gpuValues = []string{"t4", "a100xl", "h100"}
+			gpuValues = []string{"a6000", "a100xl", "h100"}
 		} else {
 			gpuValues = []string{"a100xl", "h100"}
 		}
@@ -305,7 +305,7 @@ func (m modifyModel) getCurrentGPUCursorPosition() int {
 	currentGPU := strings.ToLower(m.currentInstance.GPUType)
 
 	if effectiveMode == "prototyping" {
-		if currentGPU == "t4" {
+		if currentGPU == "a6000" {
 			return 0
 		}
 		if currentGPU == "a100xl" {
@@ -320,17 +320,7 @@ func (m modifyModel) getCurrentGPUCursorPosition() int {
 }
 
 func (m modifyModel) formatGPUType(gpuType string) string {
-	gpuType = strings.ToLower(gpuType)
-	switch gpuType {
-	case "t4":
-		return "T4"
-	case "a100xl":
-		return "A100 80GB"
-	case "h100":
-		return "H100"
-	default:
-		return gpuType
-	}
+	return utils.FormatGPUType(gpuType)
 }
 
 func (m modifyModel) getCurrentComputeCursorPosition() int {
@@ -370,7 +360,7 @@ func (m modifyModel) getMaxCursor() int {
 			effectiveMode = m.config.Mode
 		}
 		if effectiveMode == "prototyping" {
-			return 2 // 3 GPU options (t4/a100xl/h100)
+			return 2 // 3 GPU options (a6000/a100xl/h100)
 		}
 		return 1 // 2 GPU options (a100xl/h100)
 
@@ -478,11 +468,11 @@ func (m modifyModel) renderGPUStep() string {
 
 	if effectiveMode == "prototyping" {
 		optionLabels = []string{
-			"T4 (more affordable)",
+			"RTX A6000 (more affordable)",
 			"A100 80GB (high performance)",
 			"H100 (most powerful)",
 		}
-		optionValues = []string{"t4", "a100xl", "h100"}
+		optionValues = []string{"a6000", "a100xl", "h100"}
 	} else {
 		optionLabels = []string{
 			"A100 80GB",

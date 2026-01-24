@@ -34,7 +34,7 @@ func TestInstanceFields(t *testing.T) {
 		CPUCores:  "8",
 		Memory:    "32GB",
 		Storage:   100,
-		GPUType:   "T4",
+		GPUType:   "a6000",
 		NumGPUs:   "1",
 		Mode:      "prototyping",
 		Template:  "ubuntu-22.04",
@@ -52,7 +52,7 @@ func TestInstanceFields(t *testing.T) {
 	assert.Equal(t, "8", instance.CPUCores)
 	assert.Equal(t, "32GB", instance.Memory)
 	assert.Equal(t, 100, instance.Storage)
-	assert.Equal(t, "T4", instance.GPUType)
+	assert.Equal(t, "a6000", instance.GPUType)
 	assert.Equal(t, "1", instance.NumGPUs)
 	assert.Equal(t, "prototyping", instance.Mode)
 	assert.Equal(t, "ubuntu-22.04", instance.Template)

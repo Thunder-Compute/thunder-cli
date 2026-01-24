@@ -36,7 +36,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Prototyping"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr create --mode prototyping --gpu {t4|a100} --vcpus {4|8|16|32} --template {base|comfy-ui|comfy-ui-wan|ollama|webui-forge} --disk-size-gb {100-400}"))
+	output.WriteString(DescStyle.Render("tnr create --mode prototyping --gpu {a6000|a100} --vcpus {4|8|16|32} --template {base|comfy-ui|comfy-ui-wan|ollama|webui-forge} --disk-size-gb {100-400}"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
@@ -59,7 +59,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("# Prototyping instance (lowest cost)"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr create --mode prototyping --gpu t4 --vcpus 8 --template base --disk-size-gb 100"))
+	output.WriteString(CommandTextStyle.Render("tnr create --mode prototyping --gpu a6000 --vcpus 8 --template base --disk-size-gb 100"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
@@ -82,7 +82,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--gpu"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("GPU type (prototyping: t4 or a100, production: a100 or h100)"))
+	output.WriteString(DescStyle.Render("GPU type (prototyping: a6000 or a100, production: a100 or h100)"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

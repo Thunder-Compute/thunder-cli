@@ -24,7 +24,7 @@ func TestValidateCreateConfig(t *testing.T) {
 			name: "valid prototyping config",
 			config: &tui.CreateConfig{
 				Mode:       "prototyping",
-				GPUType:    "t4",
+				GPUType:    "a6000",
 				NumGPUs:    1,
 				VCPUs:      8,
 				Template:   "ubuntu-22.04",
@@ -65,13 +65,13 @@ func TestValidateCreateConfig(t *testing.T) {
 				GPUType: "invalid",
 			},
 			expectError:   true,
-			errorContains: "prototyping mode supports GPU types: t4 or a100",
+			errorContains: "prototyping mode supports GPU types: a6000 or a100",
 		},
 		{
 			name: "prototyping without vcpus",
 			config: &tui.CreateConfig{
 				Mode:    "prototyping",
-				GPUType: "t4",
+				GPUType: "a6000",
 				VCPUs:   0,
 			},
 			expectError:   true,
@@ -81,7 +81,7 @@ func TestValidateCreateConfig(t *testing.T) {
 			name: "invalid vcpus for prototyping",
 			config: &tui.CreateConfig{
 				Mode:    "prototyping",
-				GPUType: "t4",
+				GPUType: "a6000",
 				VCPUs:   6,
 			},
 			expectError:   true,
@@ -91,7 +91,7 @@ func TestValidateCreateConfig(t *testing.T) {
 			name: "production with invalid GPU type",
 			config: &tui.CreateConfig{
 				Mode:    "production",
-				GPUType: "t4",
+				GPUType: "a6000",
 			},
 			expectError:   true,
 			errorContains: "production mode supports GPU types: a100 or h100",
@@ -135,7 +135,7 @@ func TestValidateCreateConfig(t *testing.T) {
 			name: "invalid disk size",
 			config: &tui.CreateConfig{
 				Mode:       "prototyping",
-				GPUType:    "t4",
+				GPUType:    "a6000",
 				VCPUs:      8,
 				Template:   "ubuntu-22.04",
 				DiskSizeGB: 50,
@@ -150,7 +150,7 @@ func TestValidateCreateConfig(t *testing.T) {
 			name: "missing template",
 			config: &tui.CreateConfig{
 				Mode:       "prototyping",
-				GPUType:    "t4",
+				GPUType:    "a6000",
 				VCPUs:      8,
 				DiskSizeGB: 100,
 			},
@@ -161,7 +161,7 @@ func TestValidateCreateConfig(t *testing.T) {
 			name: "template not found",
 			config: &tui.CreateConfig{
 				Mode:       "prototyping",
-				GPUType:    "t4",
+				GPUType:    "a6000",
 				VCPUs:      8,
 				Template:   "nonexistent",
 				DiskSizeGB: 100,
@@ -193,7 +193,7 @@ func TestValidateCreateConfig(t *testing.T) {
 func TestCreateInstanceRequest(t *testing.T) {
 	config := &tui.CreateConfig{
 		Mode:       "prototyping",
-		GPUType:    "t4",
+		GPUType:    "a6000",
 		NumGPUs:    1,
 		VCPUs:      8,
 		Template:   "ubuntu-22.04",
@@ -216,7 +216,7 @@ func TestCreateInstanceRequest(t *testing.T) {
 	}
 
 	assert.Equal(t, "prototyping", req.Mode)
-	assert.Equal(t, "t4", req.GPUType)
+	assert.Equal(t, "a6000", req.GPUType)
 	assert.Equal(t, 1, req.NumGPUs)
 	assert.Equal(t, 8, req.CPUCores)
 	assert.Equal(t, "ubuntu-22.04", req.Template)
@@ -279,7 +279,7 @@ func TestCreateConfigVCPUsAutoSet(t *testing.T) {
 func TestCreateConfigGPUTypeCaseInsensitive(t *testing.T) {
 	config := &tui.CreateConfig{
 		Mode:       "prototyping",
-		GPUType:    "T4",
+		GPUType:    "A6000",
 		VCPUs:      8,
 		Template:   "ubuntu-22.04",
 		DiskSizeGB: 100,
@@ -292,7 +292,7 @@ func TestCreateConfigGPUTypeCaseInsensitive(t *testing.T) {
 	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
 	require.NoError(t, err)
 
-	assert.Equal(t, "t4", config.GPUType)
+	assert.Equal(t, "a6000", config.GPUType)
 }
 
 func TestCreateConfigA100Alias(t *testing.T) {
@@ -319,7 +319,7 @@ func TestCreateConfigA100Alias(t *testing.T) {
 func TestCreateConfigTemplateCaseInsensitive(t *testing.T) {
 	config := &tui.CreateConfig{
 		Mode:       "prototyping",
-		GPUType:    "t4",
+		GPUType:    "a6000",
 		VCPUs:      8,
 		Template:   "UBUNTU 22.04",
 		DiskSizeGB: 100,
@@ -340,7 +340,7 @@ func TestCreateConfigTemplateCaseInsensitive(t *testing.T) {
 func TestCreateConfigTemplateByDisplayName(t *testing.T) {
 	config := &tui.CreateConfig{
 		Mode:       "prototyping",
-		GPUType:    "t4",
+		GPUType:    "a6000",
 		VCPUs:      8,
 		Template:   "Ubuntu 22.04",
 		DiskSizeGB: 100,
@@ -390,7 +390,7 @@ func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			config := &tui.CreateConfig{
 				Mode:       "prototyping",
-				GPUType:    "t4",
+				GPUType:    "a6000",
 				VCPUs:      8,
 				Template:   "ubuntu-22.04",
 				DiskSizeGB: tt.diskSizeGB,

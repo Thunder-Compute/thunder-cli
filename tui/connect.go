@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -98,7 +99,7 @@ func (m ConnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var items []string
 		for _, inst := range msg.instances {
 			if inst.Status == "RUNNING" {
-				displayName := fmt.Sprintf("%s (%s) - %s GPU: %s", inst.Name, inst.ID, inst.NumGPUs, inst.GPUType)
+				displayName := fmt.Sprintf("%s (%s) - %s GPU: %s", inst.Name, inst.ID, inst.NumGPUs, utils.FormatGPUType(inst.GPUType))
 				items = append(items, displayName)
 				if m.displayToID == nil {
 					m.displayToID = make(map[string]string)
@@ -292,7 +293,7 @@ func RunConnectSelectWithInstances(instances []api.Instance) (string, error) {
 	displayToID := make(map[string]string)
 	for _, inst := range instances {
 		if inst.Status == "RUNNING" {
-			displayName := fmt.Sprintf("(%s) %s - %s GPU: %s", inst.ID, inst.Name, inst.NumGPUs, inst.GPUType)
+			displayName := fmt.Sprintf("(%s) %s - %s GPU: %s", inst.ID, inst.Name, inst.NumGPUs, utils.FormatGPUType(inst.GPUType))
 			items = append(items, displayName)
 			displayToID[displayName] = inst.ID
 		}

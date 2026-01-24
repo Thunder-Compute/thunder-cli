@@ -114,7 +114,7 @@ func createTestInstance(id, uuid, name, ip, status, template, mode string, port 
 		Mode:     mode,
 		Port:     port,
 		NumGPUs:  "1",
-		GPUType:  "t4",
+		GPUType:  "a6000",
 	}
 }
 
