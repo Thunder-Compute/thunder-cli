@@ -134,17 +134,17 @@ func checkIfUpdateNeeded(cmd *cobra.Command) {
 	}
 
 	if policyResult.Mandatory {
-		handleMandatoryUpdate(ctx, policyResult)
+		handleMandatoryUpdate(ctx, policyResult, false)
 		return
 	}
 
 	handleOptionalUpdate(ctx, policyResult)
 }
 
-func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result) {
+func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result, manual bool) {
 	displayCurrent := displayVersion(res.CurrentVersion)
 	displayMin := displayVersion(res.MinVersion)
-	fmt.Fprintf(os.Stderr, "⚠ Mandatory update required: current %s, minimum %s.\n", displayCurrent, displayMin)
+	fmt.Fprintf(os.Stderr, "⚠ Update required: current %s, minimum %s.\n", displayCurrent, displayMin)
 
 	binPath, _ := getCurrentBinaryPath()
 	if binPath != "" && isPMManaged(binPath) {
@@ -162,12 +162,20 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result) {
 		os.Exit(1)
 	}
 
-	fmt.Fprintln(os.Stderr, "Attempting automatic update...")
+	if manual {
+		fmt.Fprintln(os.Stderr, "Installing update...")
+	} else {
+		fmt.Fprintln(os.Stderr, "Attempting automatic update...")
+	}
 	updateCtx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
 	defer cancel()
 
 	if err := runSelfUpdate(updateCtx, res); err != nil {
-		fmt.Fprintf(os.Stderr, "Automatic update failed: %v\n", err)
+		if manual {
+			fmt.Fprintf(os.Stderr, "Update failed: %v\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "Automatic update failed: %v\n", err)
+		}
 		fmt.Fprintf(os.Stderr, "Download the latest version from GitHub: https://github.com/Thunder-Compute/thunder-cli/releases/tag/%s and reinstall the CLI.\n", releaseTag(res))
 		os.Exit(1)
 	}

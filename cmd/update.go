@@ -67,7 +67,7 @@ func runUpdateCommand() error {
 	}
 
 	if policyResult.Mandatory {
-		handleMandatoryUpdate(parentCtx, policyResult)
+		handleMandatoryUpdate(parentCtx, policyResult, true)
 		// handleMandatoryUpdate exits the process
 		return nil
 	}
