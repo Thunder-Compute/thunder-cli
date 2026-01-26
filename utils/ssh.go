@@ -500,26 +500,6 @@ func ExecuteSSHCommandStdoutOnly(client *SSHClient, command string) (string, err
 	return string(stdoutData), nil
 }
 
-// CheckActiveSessions counts active SSH sessions (pts/ terminals)
-func CheckActiveSessions(client *SSHClient) (int, error) {
-	// Use stdout-only and redirect stderr to avoid ld.so.preload error pollution
-	output, err := ExecuteSSHCommandStdoutOnly(client, "who | grep 'pts/' | wc -l 2>/dev/null")
-	if err != nil {
-		return 0, err
-	}
-
-	// Filter out any remaining ld.so.preload errors
-	output = filterLdSoErrors(output)
-
-	var count int
-	_, err = fmt.Sscanf(strings.TrimSpace(output), "%d", &count)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse session count: %w", err)
-	}
-
-	return count, nil
-}
-
 // UploadFile uploads a single file via SSH stdin pipe
 func UploadFile(client *SSHClient, localPath, remotePath string) error {
 	if client == nil || client.client == nil {

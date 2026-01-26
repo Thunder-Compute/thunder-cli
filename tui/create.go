@@ -552,7 +552,7 @@ func (m createModel) View() string {
 		s.WriteString("\n")
 
 		if m.config.Mode == "prototyping" {
-			warning := "⚠ Prototyping mode: for dev/testing; not for production inference or long-running tasks.\n"
+			warning := "⚠ Prototyping mode is optimized for dev/testing; switch to production mode for inference servers or large training runs.\n"
 			s.WriteString(warningStyleTUI.Render(warning))
 			s.WriteString("\n")
 		}

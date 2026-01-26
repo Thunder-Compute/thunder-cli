@@ -271,15 +271,15 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 
 		normalizedGPU, ok := gpuMap[gpuType]
 		if !ok {
-			return req, fmt.Errorf("invalid GPU type '%s'. Valid options: a6000, a100, h100", gpuType)
+			return req, fmt.Errorf("invalid GPU type '%s'. Valid options: a6000, a100xl, h100", gpuType)
 		}
 
 		// Validate GPU compatibility with mode
 		if effectiveMode == "prototyping" && normalizedGPU != "a6000" && normalizedGPU != "a100xl" && normalizedGPU != "h100" {
-			return req, fmt.Errorf("GPU type '%s' is not available in prototyping mode (use a6000, a100, or h100)", gpuType)
+			return req, fmt.Errorf("GPU type '%s' is not available in prototyping mode (use a6000, a100xl, or h100)", gpuType)
 		}
 		if effectiveMode == "production" && normalizedGPU == "a6000" {
-			return req, fmt.Errorf("GPU type 'a6000' is not available in production mode (use a100 or h100)")
+			return req, fmt.Errorf("GPU type 'a6000' is not available in production mode (use a100xl or h100)")
 		}
 
 		req.GpuType = &normalizedGPU

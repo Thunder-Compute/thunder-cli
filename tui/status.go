@@ -207,7 +207,7 @@ func (m StatusModel) renderTable() string {
 		"Address":  18,
 		"Mode":     15,
 		"Disk":     8,
-		"GPU":      10,
+		"GPU":      14,
 		"vCPUs":    8,
 		"RAM":      8,
 		"Template": 18,

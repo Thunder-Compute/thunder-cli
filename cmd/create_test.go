@@ -65,7 +65,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				GPUType: "invalid",
 			},
 			expectError:   true,
-			errorContains: "prototyping mode supports GPU types: a6000 or a100",
+			errorContains: "prototyping mode supports GPU types: a6000 or a100xl or h100",
 		},
 		{
 			name: "prototyping without vcpus",

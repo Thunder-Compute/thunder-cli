@@ -117,6 +117,4 @@ type ConnectClient interface {
 	ListInstances() ([]Instance, error)
 	ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, error)
 	AddSSHKeyCtx(ctx context.Context, instanceID string) (*AddSSHKeyResponse, error)
-	GetLatestBinaryHashCtx(ctx context.Context) (string, error)
-	GetNextDeviceID() (string, error)
 }

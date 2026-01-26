@@ -114,40 +114,6 @@ func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, 
 	return instances, nil
 }
 
-func (c *Client) GetLatestBinaryHashCtx(ctx context.Context) (string, error) {
-	metadataURL := "https://storage.googleapis.com/storage/v1/b/client-binary/o/client_linux_x86_64?alt=json"
-
-	req, err := http.NewRequest("GET", metadataURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.do(ctx, req)
-	if err != nil {
-		return "", fmt.Errorf("failed to make request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var result struct {
-		Metadata map[string]string `json:"metadata"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	return result.Metadata["hash"], nil
-}
-
 func (c *Client) AddSSHKeyCtx(ctx context.Context, instanceID string) (*AddSSHKeyResponse, error) {
 	url := fmt.Sprintf("%s/instances/%s/add_key", c.baseURL, instanceID)
 
