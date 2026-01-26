@@ -38,12 +38,6 @@ type mockAPIClient struct {
 	addSSHKeyCalled      int
 	addSSHKeyInstanceIDs []string
 
-	binaryHash    string
-	binaryHashErr error
-
-	nextDeviceID    string
-	nextDeviceIDErr error
-
 	mu sync.Mutex
 }
 
@@ -70,18 +64,6 @@ func (m *mockAPIClient) AddSSHKeyCtx(ctx context.Context, instanceID string) (*a
 	m.addSSHKeyCalled++
 	m.addSSHKeyInstanceIDs = append(m.addSSHKeyInstanceIDs, instanceID)
 	return m.addSSHKeyResponse, m.addSSHKeyErr
-}
-
-func (m *mockAPIClient) GetLatestBinaryHashCtx(ctx context.Context) (string, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.binaryHash, m.binaryHashErr
-}
-
-func (m *mockAPIClient) GetNextDeviceID() (string, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.nextDeviceID, m.nextDeviceIDErr
 }
 
 // =============================================================================
@@ -114,7 +96,7 @@ func createTestInstance(id, uuid, name, ip, status, template, mode string, port 
 		Mode:     mode,
 		Port:     port,
 		NumGPUs:  "1",
-		GPUType:  "t4",
+		GPUType:  "a6000",
 	}
 }
 

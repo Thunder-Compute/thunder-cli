@@ -37,8 +37,8 @@ var createCmd = &cobra.Command{
 
 var (
 	prototypingGPUMap = map[string]string{
-		"t4":   "t4",
-		"a100": "a100xl",
+		"a6000": "a6000",
+		"a100":  "a100xl",
 	}
 
 	productionGPUMap = map[string]string{
@@ -55,7 +55,7 @@ func init() {
 	rootCmd.AddCommand(createCmd)
 
 	createCmd.Flags().StringVar(&mode, "mode", "", "Instance mode: prototyping or production")
-	createCmd.Flags().StringVar(&gpuType, "gpu", "", "GPU type (prototyping: t4 or a100, production: a100 or h100)")
+	createCmd.Flags().StringVar(&gpuType, "gpu", "", "GPU type (prototyping: a6000 or a100, production: a100 or h100)")
 	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs (production only): 1, 2, 4, or 8")
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): 4, 8, 16, or 32")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
@@ -313,7 +313,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.Template, sn
 	if config.Mode == "prototyping" {
 		canonical, ok := prototypingGPUMap[config.GPUType]
 		if !ok {
-			return fmt.Errorf("prototyping mode supports GPU types: t4 or a100")
+			return fmt.Errorf("prototyping mode supports GPU types: a6000 or a100")
 		}
 		config.GPUType = canonical
 		config.NumGPUs = 1

@@ -31,7 +31,7 @@ var modifyCmd = &cobra.Command{
 
 func init() {
 	modifyCmd.Flags().String("mode", "", "Instance mode (prototyping or production)")
-	modifyCmd.Flags().String("gpu", "", "GPU type (t4, a100, h100)")
+	modifyCmd.Flags().String("gpu", "", "GPU type (a6000, a100, h100)")
 	modifyCmd.Flags().Int("num-gpus", 0, "Number of GPUs (production mode: 1, 2, or 4)")
 	modifyCmd.Flags().Int("vcpus", 0, "CPU cores (prototyping mode: 4, 8, 16, or 32)")
 	modifyCmd.Flags().Int("disk-size-gb", 0, "Disk size in GB (100-1000, cannot shrink)")
@@ -264,22 +264,22 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 
 		// Normalize GPU names
 		gpuMap := map[string]string{
-			"t4":   "t4",
-			"a100": "a100xl",
-			"h100": "h100",
+			"a6000": "a6000",
+			"a100":  "a100xl",
+			"h100":  "h100",
 		}
 
 		normalizedGPU, ok := gpuMap[gpuType]
 		if !ok {
-			return req, fmt.Errorf("invalid GPU type '%s'. Valid options: t4, a100, h100", gpuType)
+			return req, fmt.Errorf("invalid GPU type '%s'. Valid options: a6000, a100xl, h100", gpuType)
 		}
 
 		// Validate GPU compatibility with mode
-		if effectiveMode == "prototyping" && normalizedGPU != "t4" && normalizedGPU != "a100xl" && normalizedGPU != "h100" {
-			return req, fmt.Errorf("GPU type '%s' is not available in prototyping mode (use t4, a100, or h100)", gpuType)
+		if effectiveMode == "prototyping" && normalizedGPU != "a6000" && normalizedGPU != "a100xl" && normalizedGPU != "h100" {
+			return req, fmt.Errorf("GPU type '%s' is not available in prototyping mode (use a6000, a100xl, or h100)", gpuType)
 		}
-		if effectiveMode == "production" && normalizedGPU == "t4" {
-			return req, fmt.Errorf("GPU type 't4' is not available in production mode (use a100 or h100)")
+		if effectiveMode == "production" && normalizedGPU == "a6000" {
+			return req, fmt.Errorf("GPU type 'a6000' is not available in production mode (use a100xl or h100)")
 		}
 
 		req.GpuType = &normalizedGPU
