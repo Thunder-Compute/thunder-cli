@@ -280,6 +280,7 @@ func (m portsForwardProgressModel) View() string {
 		lines = append(lines, successTitleStyle.Render("✓ Ports updated successfully!"))
 		lines = append(lines, "")
 		lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(m.resp.Identifier))
+		lines = append(lines, labelStyle.Render("Instance UUID:")+" "+valueStyle.Render(m.resp.InstanceName))
 
 		if len(m.resp.HttpPorts) > 0 {
 			portStrs := make([]string, len(m.resp.HttpPorts))
@@ -294,7 +295,7 @@ func (m portsForwardProgressModel) View() string {
 		lines = append(lines, "")
 		lines = append(lines, headerStyle.Render("Access your services:"))
 		if len(m.resp.HttpPorts) > 0 {
-			lines = append(lines, labelStyle.Render(fmt.Sprintf("  • HTTP ports will be accessible at <instance-ip>:<port>")))
+			lines = append(lines, labelStyle.Render(fmt.Sprintf("  https://%s-<port>.thundercompute.net", m.resp.InstanceName)))
 		}
 		lines = append(lines, labelStyle.Render("  • Run 'tnr ports list' to see all forwarded ports"))
 

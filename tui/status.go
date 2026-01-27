@@ -202,7 +202,7 @@ func (m StatusModel) renderTable() string {
 
 	colWidths := map[string]int{
 		"ID":       4,
-		"UUID":     38,
+		"UUID":     15,
 		"Status":   12,
 		"Address":  18,
 		"Mode":     15,

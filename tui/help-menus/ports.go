@@ -36,28 +36,15 @@ func RenderPortsHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("list"))
-	output.WriteString("      ")
+	output.WriteString(CommandStyle.Render("list, ls     "))
+	output.WriteString(" ")
 	output.WriteString(DescStyle.Render("List forwarded ports for all instances"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("forward"))
-	output.WriteString("   ")
+	output.WriteString(CommandStyle.Render("forward, fwd "))
+	output.WriteString(" ")
 	output.WriteString(DescStyle.Render("Forward HTTP ports for an instance"))
-	output.WriteString("\n\n")
-
-	// Aliases Section
-	output.WriteString(SectionStyle.Render("● ALIASES"))
-	output.WriteString("\n\n")
-	output.WriteString("  ")
-	output.WriteString(DescStyle.Render("tnr port    → tnr ports"))
-	output.WriteString("\n")
-	output.WriteString("  ")
-	output.WriteString(DescStyle.Render("tnr ports ls  → tnr ports list"))
-	output.WriteString("\n")
-	output.WriteString("  ")
-	output.WriteString(DescStyle.Render("tnr ports fwd → tnr ports forward"))
 	output.WriteString("\n\n")
 
 	// Examples Section
@@ -108,7 +95,7 @@ func RenderPortsHelp(cmd *cobra.Command) {
 	output.WriteString(DescStyle.Render("• Valid port range: 1-65535"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(DescStyle.Render("• Forwarded ports are accessible at https://<instance-ip>:<port>.thundercompute.net"))
+	output.WriteString(DescStyle.Render("• Forwarded ports are accessible at https://<uuid>-<port>.thundercompute.net"))
 	output.WriteString("\n\n")
 
 	fmt.Fprint(os.Stdout, output.String())
@@ -199,11 +186,7 @@ func RenderPortsListHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 	output.WriteString("  ")
 	output.WriteString(DescStyle.Render("tnr ports list"))
-	output.WriteString("\n\n")
-
-	// Aliases Section
-	output.WriteString(SectionStyle.Render("● ALIASES"))
-	output.WriteString("\n\n")
+	output.WriteString("\n")
 	output.WriteString("  ")
 	output.WriteString(DescStyle.Render("tnr ports ls"))
 	output.WriteString("\n\n")

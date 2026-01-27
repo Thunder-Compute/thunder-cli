@@ -85,7 +85,7 @@ func runPortsList() error {
 	// Define column widths
 	colWidths := map[string]int{
 		"ID":     4,
-		"UUID":   38,
+		"UUID":   15,
 		"Status": 12,
 		"Ports":  30,
 	}
