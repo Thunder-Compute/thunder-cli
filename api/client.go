@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"sort"
 	"time"
+
+	"github.com/Thunder-Compute/thunder-cli/sentry"
+	sentrygo "github.com/getsentry/sentry-go"
 )
 
 type Client struct {
@@ -41,6 +44,8 @@ func (c *Client) setHeaders(req *http.Request) {
 }
 
 func (c *Client) ValidateToken(ctx context.Context) error {
+	sentry.AddBreadcrumb("api", "validate_token", nil, sentry.LevelInfo)
+
 	req, err := http.NewRequest("GET", c.baseURL+"/v1/auth/validate", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -50,17 +55,39 @@ func (c *Client) ValidateToken(ctx context.Context) error {
 
 	resp, err := c.do(ctx, req)
 	if err != nil {
+		sentry.CaptureError(err, &sentry.EventOptions{
+			Tags: sentry.NewTags().
+				Set("api_method", "ValidateToken").
+				Set("api_url", c.baseURL),
+			Level: ptr(sentry.LevelError),
+		})
 		return fmt.Errorf("failed to validate token: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 401 {
-		return fmt.Errorf("authentication failed: invalid token")
+		err := fmt.Errorf("authentication failed: invalid token")
+		sentry.CaptureError(err, &sentry.EventOptions{
+			Tags: sentry.NewTags().
+				Set("api_method", "ValidateToken").
+				Set("status_code", "401"),
+			Level: ptr(sentry.LevelWarning),
+		})
+		return err
 	}
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("token validation failed with status %d: %s", resp.StatusCode, string(body))
+		err := fmt.Errorf("token validation failed with status %d: %s", resp.StatusCode, string(body))
+		sentry.CaptureError(err, &sentry.EventOptions{
+			Tags: sentry.NewTags().
+				Set("api_method", "ValidateToken").
+				Set("status_code", fmt.Sprintf("%d", resp.StatusCode)),
+			Extra: sentry.NewExtra().
+				Set("response_body", string(body)),
+			Level: ptr(getLogLevelForStatus(resp.StatusCode)),
+		})
+		return err
 	}
 
 	_, _ = io.ReadAll(resp.Body)
@@ -68,6 +95,8 @@ func (c *Client) ValidateToken(ctx context.Context) error {
 }
 
 func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, error) {
+	sentry.AddBreadcrumb("api", "list_instances", nil, sentry.LevelInfo)
+
 	req, err := http.NewRequest("GET", c.baseURL+"/instances/list?update_ips=true", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -77,17 +106,37 @@ func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, 
 
 	resp, err := c.do(ctx, req)
 	if err != nil {
+		sentry.CaptureError(err, &sentry.EventOptions{
+			Tags: sentry.NewTags().
+				Set("api_method", "ListInstances").
+				Set("api_url", c.baseURL),
+			Level: ptr(sentry.LevelError),
+		})
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 401 {
-		return nil, fmt.Errorf("authentication failed: invalid token")
+		err := fmt.Errorf("authentication failed: invalid token")
+		sentry.CaptureError(err, &sentry.EventOptions{
+			Tags: sentry.NewTags().
+				Set("api_method", "ListInstances").
+				Set("status_code", "401"),
+			Level: ptr(sentry.LevelWarning),
+		})
+		return nil, err
 	}
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		err := fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		sentry.CaptureError(err, &sentry.EventOptions{
+			Tags: sentry.NewTags().
+				Set("api_method", "ListInstances").
+				Set("status_code", fmt.Sprintf("%d", resp.StatusCode)),
+			Level: ptr(getLogLevelForStatus(resp.StatusCode)),
+		})
+		return nil, err
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -531,4 +580,23 @@ func (c *Client) DeleteSnapshot(snapshotID string) error {
 	}
 
 	return nil
+}
+
+// Helper functions for Sentry integration
+
+// ptr is a helper to create a pointer to a value
+func ptr[T any](v T) *T {
+	return &v
+}
+
+// getLogLevelForStatus determines the appropriate Sentry level for HTTP status codes
+func getLogLevelForStatus(statusCode int) sentrygo.Level {
+	switch {
+	case statusCode >= 500:
+		return sentrygo.LevelError
+	case statusCode >= 400:
+		return sentrygo.LevelWarning
+	default:
+		return sentrygo.LevelInfo
+	}
 }

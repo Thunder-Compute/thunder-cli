@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/sentry"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/utils"
@@ -24,19 +25,15 @@ var scpCmd = &cobra.Command{
 	Use:   "scp [source...] [destination]",
 	Short: "Securely copy files between local machine and Thunder Compute instances",
 	Args:  cobra.MinimumNArgs(2),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) < 2 {
-			PrintError(fmt.Errorf("requires at least a source and destination"))
-			os.Exit(1)
+			return fmt.Errorf("requires at least a source and destination")
 		}
 
 		sources := args[:len(args)-1]
 		destination := args[len(args)-1]
 
-		if err := runSCP(sources, destination); err != nil {
-			PrintError(err)
-			os.Exit(1)
-		}
+		return runSCP(sources, destination)
 	},
 }
 
@@ -105,6 +102,11 @@ func isValidInstanceID(s string) bool {
 }
 
 func runSCP(sources []string, destination string) error {
+	sentry.AddBreadcrumb("scp", "starting SCP operation", map[string]interface{}{
+		"source_count": len(sources),
+		"destination":  destination,
+	}, sentry.LevelInfo)
+
 	config, err := LoadConfig()
 	if err != nil {
 		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
@@ -118,6 +120,10 @@ func runSCP(sources []string, destination string) error {
 	for i, src := range sources {
 		parsed, err := parsePath(src)
 		if err != nil {
+			sentry.AddBreadcrumb("scp", "path parsing failed", map[string]interface{}{
+				"path":  src,
+				"error": err.Error(),
+			}, sentry.LevelError)
 			return fmt.Errorf("failed to parse source path '%s': %w", src, err)
 		}
 		sourcePaths[i] = parsed
@@ -125,13 +131,25 @@ func runSCP(sources []string, destination string) error {
 
 	destPath, err := parsePath(destination)
 	if err != nil {
+		sentry.AddBreadcrumb("scp", "destination path parsing failed", map[string]interface{}{
+			"path":  destination,
+			"error": err.Error(),
+		}, sentry.LevelError)
 		return fmt.Errorf("failed to parse destination path '%s': %w", destination, err)
 	}
 
 	direction, instanceID, err := determineTransferDirection(sourcePaths, destPath)
 	if err != nil {
+		sentry.AddBreadcrumb("scp", "transfer direction error", map[string]interface{}{
+			"error": err.Error(),
+		}, sentry.LevelError)
 		return err
 	}
+
+	sentry.AddBreadcrumb("scp", "transfer direction determined", map[string]interface{}{
+		"direction":   direction,
+		"instance_id": instanceID,
+	}, sentry.LevelInfo)
 
 	if len(sourcePaths) > 1 {
 		if direction == "upload" {
@@ -181,8 +199,13 @@ func runSCP(sources []string, destination string) error {
 
 	p.Send(tui.SCPPhaseMsg{Phase: tui.SCPPhaseConnecting})
 
+	sentry.AddBreadcrumb("scp", "fetching instances", nil, sentry.LevelInfo)
+
 	instances, err := client.ListInstances()
 	if err != nil {
+		sentry.AddBreadcrumb("scp", "failed to list instances", map[string]interface{}{
+			"error": err.Error(),
+		}, sentry.LevelError)
 		p.Send(tui.SCPErrorMsg{Err: fmt.Errorf("failed to list instances: %w", err)})
 		<-tuiDone
 		return fmt.Errorf("failed to list instances: %w", err)
@@ -197,30 +220,57 @@ func runSCP(sources []string, destination string) error {
 	}
 
 	if targetInstance == nil {
+		sentry.AddBreadcrumb("scp", "instance not found", map[string]interface{}{
+			"instance_id": instanceID,
+		}, sentry.LevelError)
 		p.Send(tui.SCPErrorMsg{Err: fmt.Errorf("instance '%s' not found", instanceID)})
 		<-tuiDone
 		return fmt.Errorf("instance '%s' not found", instanceID)
 	}
 
 	if targetInstance.Status != "RUNNING" {
+		sentry.AddBreadcrumb("scp", "instance not running", map[string]interface{}{
+			"instance_id": instanceID,
+			"status":      targetInstance.Status,
+		}, sentry.LevelError)
 		p.Send(tui.SCPErrorMsg{Err: fmt.Errorf("instance '%s' is not running (status: %s)", instanceID, targetInstance.Status)})
 		<-tuiDone
 		return fmt.Errorf("instance '%s' is not running (status: %s)", instanceID, targetInstance.Status)
 	}
 
+	sentry.AddBreadcrumb("scp", "instance validated", map[string]interface{}{
+		"instance_id":   targetInstance.ID,
+		"instance_name": targetInstance.Name,
+		"instance_ip":   targetInstance.IP,
+	}, sentry.LevelInfo)
+
 	instanceName := fmt.Sprintf("%s (%s)", targetInstance.Name, targetInstance.ID)
 	p.Send(tui.SCPInstanceNameMsg{InstanceName: instanceName})
 
 	keyFile := utils.GetKeyFile(targetInstance.UUID)
-	if !utils.KeyExists(targetInstance.UUID) {
+	keyExists := utils.KeyExists(targetInstance.UUID)
+
+	sentry.AddBreadcrumb("scp", "checking SSH keys", map[string]interface{}{
+		"key_exists": keyExists,
+	}, sentry.LevelInfo)
+
+	if !keyExists {
+		sentry.AddBreadcrumb("scp", "generating SSH key", nil, sentry.LevelInfo)
+
 		keyResp, err := client.AddSSHKey(targetInstance.ID)
 		if err != nil {
+			sentry.AddBreadcrumb("scp", "SSH key generation failed", map[string]interface{}{
+				"error": err.Error(),
+			}, sentry.LevelError)
 			p.Send(tui.SCPErrorMsg{Err: fmt.Errorf("failed to add SSH key: %w", err)})
 			<-tuiDone
 			return fmt.Errorf("failed to add SSH key: %w", err)
 		}
 
 		if err := utils.SavePrivateKey(targetInstance.UUID, keyResp.Key); err != nil {
+			sentry.AddBreadcrumb("scp", "SSH key save failed", map[string]interface{}{
+				"error": err.Error(),
+			}, sentry.LevelError)
 			p.Send(tui.SCPErrorMsg{Err: fmt.Errorf("failed to save private key: %w", err)})
 			<-tuiDone
 			return fmt.Errorf("failed to save private key: %w", err)
@@ -246,6 +296,11 @@ func runSCP(sources []string, destination string) error {
 		return nil
 	}
 
+	sentry.AddBreadcrumb("scp", "establishing SSH connection", map[string]interface{}{
+		"ip":   targetInstance.IP,
+		"port": targetInstance.Port,
+	}, sentry.LevelInfo)
+
 	sshClient, err := utils.RobustSSHConnectCtx(cancelCtx, targetInstance.IP, keyFile, targetInstance.Port, 60)
 	if checkCancelled() {
 		<-tuiDone
@@ -253,11 +308,19 @@ func runSCP(sources []string, destination string) error {
 		return nil
 	}
 	if err != nil {
+		sentry.AddBreadcrumb("scp", "SSH connection failed", map[string]interface{}{
+			"ip":         targetInstance.IP,
+			"port":       targetInstance.Port,
+			"error":      err.Error(),
+			"error_type": string(utils.ClassifySSHError(err)),
+		}, sentry.LevelError)
 		p.Send(tui.SCPErrorMsg{Err: fmt.Errorf("SSH connection failed: %w", err)})
 		<-tuiDone
 		return fmt.Errorf("SSH connection failed: %w", err)
 	}
 	defer sshClient.Close()
+
+	sentry.AddBreadcrumb("scp", "SSH connection established", nil, sentry.LevelInfo)
 
 	if checkCancelled() {
 		<-tuiDone
@@ -286,6 +349,13 @@ func runSCP(sources []string, destination string) error {
 
 	startTime := time.Now()
 	p.Send(tui.SCPPhaseMsg{Phase: tui.SCPPhaseTransferring})
+
+	sentry.AddBreadcrumb("scp", "starting file transfer", map[string]interface{}{
+		"direction":    direction,
+		"file_count":   len(sourcePaths),
+		"instance_id":  instanceID,
+		"instance_ip":  targetInstance.IP,
+	}, sentry.LevelInfo)
 
 	filesTransferred := 0
 	var totalBytes int64
@@ -341,6 +411,11 @@ func runSCP(sources []string, destination string) error {
 				return nil
 			}
 			if err != nil {
+				sentry.AddBreadcrumb("scp", "upload failed", map[string]interface{}{
+					"local_path":  localPath,
+					"remote_path": remotePath,
+					"error":       err.Error(),
+				}, sentry.LevelError)
 				p.Send(tui.SCPErrorMsg{Err: err})
 				<-tuiDone
 				return fmt.Errorf("upload failed: %w", err)
@@ -412,6 +487,11 @@ func runSCP(sources []string, destination string) error {
 				return nil
 			}
 			if err != nil {
+				sentry.AddBreadcrumb("scp", "download failed", map[string]interface{}{
+					"remote_path": remotePath,
+					"local_path":  localPath,
+					"error":       err.Error(),
+				}, sentry.LevelError)
 				p.Send(tui.SCPErrorMsg{Err: err})
 				<-tuiDone
 				return fmt.Errorf("download failed: %w", err)
@@ -430,6 +510,13 @@ func runSCP(sources []string, destination string) error {
 	}
 
 	duration := time.Since(startTime)
+
+	sentry.AddBreadcrumb("scp", "transfer complete", map[string]interface{}{
+		"direction":         direction,
+		"files_transferred": filesTransferred,
+		"bytes_transferred": totalBytes,
+		"duration_ms":       duration.Milliseconds(),
+	}, sentry.LevelInfo)
 
 	p.Send(tui.SCPCompleteMsg{
 		FilesTransferred: filesTransferred,

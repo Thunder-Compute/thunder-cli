@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/sentry"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/utils"
@@ -77,16 +78,12 @@ func defaultConnectOptions(token, baseURL string) *connectOptions {
 var connectCmd = &cobra.Command{
 	Use:   "connect [instance_id]",
 	Short: "Establish an SSH connection to a Thunder Compute instance",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		var instanceID string
 		if len(args) > 0 {
 			instanceID = args[0]
 		}
-
-		if err := runConnect(instanceID, tunnelPorts, debugMode); err != nil {
-			PrintError(err)
-			os.Exit(1)
-		}
+		return runConnect(instanceID, tunnelPorts, debugMode)
 	},
 }
 
@@ -107,6 +104,11 @@ func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
 
 // runConnectWithOptions accepts options for testing. If opts is nil, default options are used.
 func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug bool, opts *connectOptions) error {
+	sentry.AddBreadcrumb("connect", "starting connection", map[string]interface{}{
+		"instance_id": instanceID,
+		"has_tunnels": len(tunnelPortsStr) > 0,
+	}, sentry.LevelInfo)
+
 	configLoader := resolveConfigLoader(opts)
 	config, err := configLoader()
 	if err != nil {
@@ -123,6 +125,8 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	}
 
 	client := resolveConnectClient(opts, config.Token, config.APIURL)
+
+	sentry.AddBreadcrumb("connect", "fetching instances", nil, sentry.LevelInfo)
 
 	busy := tui.NewBusyModel("Fetching instances...")
 	bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
@@ -176,6 +180,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 		instanceID = foundInstance.ID
 	}
+
+	sentry.AddBreadcrumb("connect", "instance selected", map[string]interface{}{
+		"instance_id": instanceID,
+	}, sentry.LevelInfo)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -312,6 +320,14 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		port = 22
 	}
 
+	sentry.AddBreadcrumb("connect", "instance validated", map[string]interface{}{
+		"instance_id":   instanceID,
+		"instance_name": instance.Name,
+		"instance_ip":   instance.IP,
+		"instance_port": port,
+		"instance_mode": instance.Mode,
+	}, sentry.LevelInfo)
+
 	phaseTimings["instance_validation"] = time.Since(phase2Start)
 	tui.SendPhaseUpdate(p, 1, tui.PhaseCompleted, fmt.Sprintf("Found: %s (%s)", instance.Name, instance.IP), phaseTimings["instance_validation"])
 
@@ -320,25 +336,43 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	keyFile := utils.GetKeyFile(instance.UUID)
 	newKeyCreated := false
+	keyExists := utils.KeyExists(instance.UUID)
+
+	sentry.AddBreadcrumb("connect", "checking SSH keys", map[string]interface{}{
+		"key_exists": keyExists,
+		"key_file":   keyFile,
+	}, sentry.LevelInfo)
+
 	if checkCancelled() {
 		return nil
 	}
-	if !utils.KeyExists(instance.UUID) {
+	if !keyExists {
+		sentry.AddBreadcrumb("connect", "generating new SSH key", map[string]interface{}{
+			"instance_id": instanceID,
+		}, sentry.LevelInfo)
+
 		tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Generating new SSH key...", 0)
 		keyResp, err := client.AddSSHKeyCtx(ctx, instanceID)
 		if checkCancelled() {
 			return nil
 		}
 		if err != nil {
+			sentry.AddBreadcrumb("connect", "SSH key generation failed", map[string]interface{}{
+				"error": err.Error(),
+			}, sentry.LevelError)
 			shutdownTUI()
 			return fmt.Errorf("failed to add SSH key: %w", err)
 		}
 
 		if err := utils.SavePrivateKey(instance.UUID, keyResp.Key); err != nil {
+			sentry.AddBreadcrumb("connect", "SSH key save failed", map[string]interface{}{
+				"error": err.Error(),
+			}, sentry.LevelError)
 			shutdownTUI()
 			return fmt.Errorf("failed to save private key: %w", err)
 		}
 		newKeyCreated = true
+		sentry.AddBreadcrumb("connect", "SSH key created successfully", nil, sentry.LevelInfo)
 	}
 
 	phaseTimings["ssh_key_management"] = time.Since(phase3Start)
@@ -347,6 +381,11 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	phase4Start := time.Now()
 	tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Waiting for SSH service on %s:%d...", instance.IP, port), 0)
 
+	sentry.AddBreadcrumb("connect", "waiting for SSH port", map[string]interface{}{
+		"ip":   instance.IP,
+		"port": port,
+	}, sentry.LevelInfo)
+
 	if checkCancelled() {
 		return nil
 	}
@@ -354,6 +393,11 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil
 		}
+		sentry.AddBreadcrumb("connect", "SSH port not available", map[string]interface{}{
+			"ip":    instance.IP,
+			"port":  port,
+			"error": err.Error(),
+		}, sentry.LevelError)
 		shutdownTUI()
 		return fmt.Errorf("SSH service not available: %w", err)
 	}
@@ -390,6 +434,12 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		return nil
 	}
 
+	sentry.AddBreadcrumb("connect", "establishing SSH connection", map[string]interface{}{
+		"ip":              instance.IP,
+		"port":            port,
+		"new_key_created": newKeyCreated,
+	}, sentry.LevelInfo)
+
 	// Use different connection strategies for new keys vs reconnections
 	if newKeyCreated {
 		// New key: expect auth failures while key propagates, use longer timeout
@@ -408,6 +458,13 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	// Handle persistent auth failure (likely deleted ~/.ssh on instance) or other auth errors
 	needsKeyRegeneration := err != nil && !newKeyCreated && (errors.Is(err, utils.ErrPersistentAuthFailure) || utils.IsAuthError(err) || utils.IsKeyParseError(err))
 	if needsKeyRegeneration {
+		sentry.AddBreadcrumb("connect", "SSH auth failed, regenerating key", map[string]interface{}{
+			"error":                   err.Error(),
+			"is_persistent_auth_fail": errors.Is(err, utils.ErrPersistentAuthFailure),
+			"is_auth_error":           utils.IsAuthError(err),
+			"is_key_parse_error":      utils.IsKeyParseError(err),
+		}, sentry.LevelWarning)
+
 		if errors.Is(err, utils.ErrPersistentAuthFailure) {
 			tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH keys on instance appear to be missing. Reconfiguring access...", 0)
 		} else {
@@ -419,16 +476,23 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			return nil
 		}
 		if keyErr != nil {
+			sentry.AddBreadcrumb("connect", "key regeneration failed", map[string]interface{}{
+				"error": keyErr.Error(),
+			}, sentry.LevelError)
 			shutdownTUI()
 			return fmt.Errorf("failed to generate new SSH key: %w", keyErr)
 		}
 
 		if saveErr := utils.SavePrivateKey(instance.UUID, keyResp.Key); saveErr != nil {
+			sentry.AddBreadcrumb("connect", "key save failed after regeneration", map[string]interface{}{
+				"error": saveErr.Error(),
+			}, sentry.LevelError)
 			shutdownTUI()
 			return fmt.Errorf("failed to save new private key: %w", saveErr)
 		}
 
 		keyFile = utils.GetKeyFile(instance.UUID)
+		sentry.AddBreadcrumb("connect", "key regenerated, retrying connection", nil, sentry.LevelInfo)
 
 		tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Retrying connection with new key to %s:%d...", instance.IP, port), 0)
 
@@ -451,13 +515,25 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			return nil
 		}
 		if err != nil {
+			sentry.AddBreadcrumb("connect", "SSH connection failed after key regeneration", map[string]interface{}{
+				"error": err.Error(),
+			}, sentry.LevelError)
 			shutdownTUI()
 			return fmt.Errorf("failed to establish SSH connection after key regeneration: %w", err)
 		}
 	} else if err != nil {
+		sentry.AddBreadcrumb("connect", "SSH connection failed", map[string]interface{}{
+			"error":         err.Error(),
+			"error_type":    string(utils.ClassifySSHError(err)),
+			"is_auth_error": utils.IsAuthError(err),
+		}, sentry.LevelError)
 		shutdownTUI()
 		return fmt.Errorf("failed to establish SSH connection: %w", err)
 	}
+
+	sentry.AddBreadcrumb("connect", "SSH connection established", map[string]interface{}{
+		"duration_ms": time.Since(phase4Start).Milliseconds(),
+	}, sentry.LevelInfo)
 
 	phaseTimings["ssh_connection"] = time.Since(phase4Start)
 	tui.SendPhaseComplete(p, 3, phaseTimings["ssh_connection"])
@@ -469,16 +545,26 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		return nil
 	}
 
+	sentry.AddBreadcrumb("connect", "setting up token", map[string]interface{}{
+		"mode": instance.Mode,
+	}, sentry.LevelInfo)
+
 	// Set up token on the instance (binary is now managed by the instance itself)
 	if instance.Mode == "production" {
 		tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Production mode detected, setting up token...", 0)
 		if err := utils.RemoveThunderVirtualization(sshClient, config.Token); err != nil {
+			sentry.AddBreadcrumb("connect", "token setup failed (production)", map[string]interface{}{
+				"error": err.Error(),
+			}, sentry.LevelError)
 			shutdownTUI()
 			return fmt.Errorf("failed to set up token: %w", err)
 		}
 	} else {
 		tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Setting up token...", 0)
 		if err := utils.SetupToken(sshClient, config.Token); err != nil {
+			sentry.AddBreadcrumb("connect", "token setup failed (prototyping)", map[string]interface{}{
+				"error": err.Error(),
+			}, sentry.LevelError)
 			shutdownTUI()
 			return fmt.Errorf("failed to set up token: %w", err)
 		}
@@ -494,6 +580,12 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	// Update SSH config for easy reconnection via `ssh tnr-{instance_id}`
 	templatePorts := utils.GetTemplateOpenPorts(instance.Template)
 	_ = utils.UpdateSSHConfig(instanceID, instance.IP, port, instance.UUID, tunnelPorts, templatePorts)
+
+	sentry.AddBreadcrumb("connect", "connection setup complete", map[string]interface{}{
+		"instance_id":   instanceID,
+		"tunnel_count":  len(tunnelPorts),
+		"total_time_ms": time.Since(phase1Start).Milliseconds(),
+	}, sentry.LevelInfo)
 
 	tui.SendConnectComplete(p)
 

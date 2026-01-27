@@ -27,11 +27,8 @@ var (
 var createCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new Thunder Compute GPU instance",
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := runCreate(cmd); err != nil {
-			PrintError(err)
-			os.Exit(1)
-		}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runCreate(cmd)
 	},
 }
 
