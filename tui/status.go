@@ -202,7 +202,7 @@ func (m StatusModel) renderTable() string {
 
 	colWidths := map[string]int{
 		"ID":       4,
-		"Name":     14,
+		"UUID":     38,
 		"Status":   12,
 		"Address":  18,
 		"Mode":     15,
@@ -215,7 +215,7 @@ func (m StatusModel) renderTable() string {
 
 	var b strings.Builder
 
-	headers := []string{"ID", "Name", "Status", "Address", "Mode", "Disk", "GPU", "vCPUs", "RAM", "Template"}
+	headers := []string{"ID", "UUID", "Status", "Address", "Mode", "Disk", "GPU", "vCPUs", "RAM", "Template"}
 	headerRow := make([]string, len(headers))
 	for i, h := range headers {
 		headerRow[i] = headerStyle.Width(colWidths[h]).Render(h)
@@ -242,7 +242,7 @@ func (m StatusModel) renderTable() string {
 
 	for _, instance := range instances {
 		id := truncate(instance.ID, colWidths["ID"])
-		name := truncate(instance.Name, colWidths["Name"])
+		uuid := truncate(instance.UUID, colWidths["UUID"])
 		status := m.formatStatus(instance.Status, colWidths["Status"])
 		address := truncate(instance.IP, colWidths["Address"])
 		mode := truncate(utils.Capitalize(instance.Mode), colWidths["Mode"])
@@ -254,7 +254,7 @@ func (m StatusModel) renderTable() string {
 
 		row := []string{
 			cellStyle.Width(colWidths["ID"]).Render(id),
-			cellStyle.Width(colWidths["Name"]).Render(name),
+			cellStyle.Width(colWidths["UUID"]).Render(uuid),
 			cellStyle.Width(colWidths["Status"]).Render(status),
 			cellStyle.Width(colWidths["Address"]).Render(address),
 			cellStyle.Width(colWidths["Mode"]).Render(mode),

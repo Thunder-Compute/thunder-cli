@@ -17,6 +17,7 @@ type Instance struct {
 	Template  string `json:"template"`
 	CreatedAt string `json:"createdAt"`
 	Port      int    `json:"port"`
+	HttpPorts []int  `json:"httpPorts,omitempty"`
 	K8s       bool   `json:"k8s"`
 	Promoted  bool   `json:"promoted"`
 }
@@ -63,11 +64,13 @@ type DeleteInstanceResponse struct {
 }
 
 type InstanceModifyRequest struct {
-	CpuCores   *int    `json:"cpu_cores,omitempty"`
-	GpuType    *string `json:"gpu_type,omitempty"`
-	NumGpus    *int    `json:"num_gpus,omitempty"`
-	DiskSizeGb *int    `json:"disk_size_gb,omitempty"`
-	Mode       *string `json:"mode,omitempty"`
+	CpuCores    *int    `json:"cpu_cores,omitempty"`
+	GpuType     *string `json:"gpu_type,omitempty"`
+	NumGpus     *int    `json:"num_gpus,omitempty"`
+	DiskSizeGb  *int    `json:"disk_size_gb,omitempty"`
+	Mode        *string `json:"mode,omitempty"`
+	AddPorts    []int   `json:"add_ports,omitempty"`
+	RemovePorts []int   `json:"remove_ports,omitempty"`
 }
 
 type InstanceModifyResponse struct {
@@ -77,6 +80,7 @@ type InstanceModifyResponse struct {
 	GpuType      *string `json:"gpu_type,omitempty"`
 	NumGpus      *int    `json:"num_gpus,omitempty"`
 	Message      string  `json:"message,omitempty"`
+	HttpPorts    []int   `json:"http_ports,omitempty"`
 }
 
 type AddSSHKeyResponse struct {
