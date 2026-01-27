@@ -47,8 +47,7 @@ func CaptureCommandError(cmd *cobra.Command, err error) {
 	eventID := sentry.CaptureError(err, &sentry.EventOptions{
 		Tags: sentry.NewTags().
 			Set("command", cmd.Name()).
-			Set("version", version.BuildVersion).
-			Set("error_type", getErrorType(err)),
+			Set("version", version.BuildVersion),
 		Extra: sentry.NewExtra().
 			Set("args", cmd.Flags().Args()),
 		Level: ptr(getLogLevelForError(err)),
