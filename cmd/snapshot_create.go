@@ -22,11 +22,8 @@ var (
 var snapshotCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a snapshot from an instance",
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := runSnapshotCreate(cmd); err != nil {
-			PrintError(err)
-			os.Exit(1)
-		}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runSnapshotCreate(cmd)
 	},
 }
 

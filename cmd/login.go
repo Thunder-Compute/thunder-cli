@@ -232,11 +232,8 @@ var loginToken string
 var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Authenticate with Thunder Compute",
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := runLogin(); err != nil {
-			PrintError(err)
-			os.Exit(1)
-		}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runLogin()
 	},
 }
 
@@ -573,11 +570,8 @@ var logoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "Log out from Thunder Compute",
 	Long:  `Log out from Thunder Compute and remove saved authentication credentials.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := runLogout(); err != nil {
-			PrintError(err)
-			os.Exit(1)
-		}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runLogout()
 	},
 }
 

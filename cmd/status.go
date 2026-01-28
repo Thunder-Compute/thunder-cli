@@ -18,11 +18,8 @@ var noWait bool
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "List and monitor Thunder Compute instances",
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := RunStatus(); err != nil {
-			PrintError(err)
-			os.Exit(1)
-		}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return RunStatus()
 	},
 }
 

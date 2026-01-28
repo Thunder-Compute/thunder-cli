@@ -24,6 +24,7 @@ builds:
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildVersion={{ .Version }}
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildCommit={{ .Commit }}
       - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildDate={{ .Date }}
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.SentryDSN={{ .Env.SENTRY_DSN }}
     hooks:
       post:
         - >-

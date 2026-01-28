@@ -11,6 +11,7 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
 	"github.com/Thunder-Compute/thunder-cli/internal/updatepolicy"
 	"github.com/Thunder-Compute/thunder-cli/internal/version"
+	"github.com/Thunder-Compute/thunder-cli/sentry"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/spf13/cobra"
@@ -31,8 +32,9 @@ var rootCmd = &cobra.Command{
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	err := rootCmd.Execute()
+	cmd, err := rootCmd.ExecuteC()
 	if err != nil {
+		CaptureCommandError(cmd, err)
 		PrintError(err)
 		os.Exit(1)
 	}
@@ -48,6 +50,13 @@ func init() {
 
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		helpmenus.RenderRootHelp(cmd)
+	})
+
+	// Wrap all subcommands with Sentry after they're registered
+	cobra.OnInitialize(func() {
+		for _, cmd := range rootCmd.Commands() {
+			WrapCommandWithSentry(cmd)
+		}
 	})
 
 	completionCmd := &cobra.Command{
@@ -125,6 +134,13 @@ func checkIfUpdateNeeded(cmd *cobra.Command) {
 
 	policyResult, err := updatepolicy.Check(ctx, version.BuildVersion, false)
 	if err != nil {
+		// Capture update check failures to Sentry
+		sentry.CaptureError(err, &sentry.EventOptions{
+			Tags: sentry.NewTags().
+				Set("operation", "update_check").
+				Set("version", version.BuildVersion),
+			Level: ptr(sentry.LevelWarning),
+		})
 		fmt.Fprintf(os.Stderr, "Warning: update check failed: %v\n", err)
 		return
 	}
@@ -171,6 +187,14 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result, m
 	defer cancel()
 
 	if err := runSelfUpdate(updateCtx, res); err != nil {
+		// Capture update failures to Sentry
+		sentry.CaptureError(err, &sentry.EventOptions{
+			Tags: sentry.NewTags().
+				Set("operation", "mandatory_update").
+				Set("current_version", res.CurrentVersion).
+				Set("target_version", res.LatestVersion),
+			Level: ptr(sentry.LevelError),
+		})
 		if manual {
 			fmt.Fprintf(os.Stderr, "Update failed: %v\n", err)
 		} else {
@@ -243,6 +267,14 @@ func handleOptionalUpdate(parentCtx context.Context, res updatepolicy.Result) {
 	if updateErr == nil {
 		fmt.Println("Update finished! You can now re-run your command.")
 	} else {
+		// Capture optional update failures to Sentry
+		sentry.CaptureError(updateErr, &sentry.EventOptions{
+			Tags: sentry.NewTags().
+				Set("operation", "optional_update").
+				Set("current_version", res.CurrentVersion).
+				Set("target_version", res.LatestVersion),
+			Level: ptr(sentry.LevelWarning),
+		})
 		fmt.Fprintf(os.Stderr, "Warning: optional update failed: %v\n", updateErr)
 		fmt.Printf("You can download the latest version from GitHub: https://github.com/Thunder-Compute/thunder-cli/releases/tag/%s and reinstall the CLI.\n", releaseTag(res))
 	}

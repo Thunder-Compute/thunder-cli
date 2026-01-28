@@ -20,11 +20,8 @@ var updateCmd = &cobra.Command{
 	Annotations: map[string]string{
 		"skipUpdateCheck": "true",
 	},
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := runUpdateCommand(); err != nil {
-			PrintError(err)
-			os.Exit(1)
-		}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runUpdateCommand()
 	},
 }
 
