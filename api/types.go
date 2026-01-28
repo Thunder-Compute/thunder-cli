@@ -1,25 +1,29 @@
 package api
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type Instance struct {
-	ID        string `json:"-"`
-	UUID      string `json:"uuid"`
-	Name      string `json:"name"`
-	Status    string `json:"status"`
-	IP        string `json:"ip"`
-	CPUCores  string `json:"cpuCores"`
-	Memory    string `json:"memory"`
-	Storage   int    `json:"storage"`
-	GPUType   string `json:"gpuType"`
-	NumGPUs   string `json:"numGpus"`
-	Mode      string `json:"mode"`
-	Template  string `json:"template"`
-	CreatedAt string `json:"createdAt"`
-	Port      int    `json:"port"`
-	HttpPorts []int  `json:"httpPorts,omitempty"`
-	K8s       bool   `json:"k8s"`
-	Promoted  bool   `json:"promoted"`
+	ID               string    `json:"-"`
+	UUID             string    `json:"uuid"`
+	Name             string    `json:"name"`
+	Status           string    `json:"status"`
+	IP               string    `json:"ip"`
+	CPUCores         string    `json:"cpuCores"`
+	Memory           string    `json:"memory"`
+	Storage          int       `json:"storage"`
+	GPUType          string    `json:"gpuType"`
+	NumGPUs          string    `json:"numGpus"`
+	Mode             string    `json:"mode"`
+	Template         string    `json:"template"`
+	CreatedAt        string    `json:"createdAt"`
+	Port             int       `json:"port"`
+	HttpPorts        []int     `json:"httpPorts,omitempty"`
+	K8s              bool      `json:"k8s"`
+	Promoted         bool      `json:"promoted"`
+	ProvisioningTime time.Time `json:"provisioningTime,omitempty"`
 }
 
 type ThunderTemplateDefaultSpecs struct {
