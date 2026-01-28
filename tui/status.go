@@ -18,14 +18,14 @@ import (
 )
 
 var (
-	headerStyle        lipgloss.Style
-	runningStyle       lipgloss.Style
-	startingStyle      lipgloss.Style
-	restoringStyle     lipgloss.Style
-	deletingStyle      lipgloss.Style
-	provisioningStyle  lipgloss.Style
-	cellStyle          lipgloss.Style
-	timestampStyle     lipgloss.Style
+	headerStyle       lipgloss.Style
+	runningStyle      lipgloss.Style
+	startingStyle     lipgloss.Style
+	restoringStyle    lipgloss.Style
+	deletingStyle     lipgloss.Style
+	provisioningStyle lipgloss.Style
+	cellStyle         lipgloss.Style
+	timestampStyle    lipgloss.Style
 )
 
 const (
@@ -33,16 +33,16 @@ const (
 )
 
 type StatusModel struct {
-	instances     []api.Instance
-	client        *api.Client
-	monitoring    bool
-	lastUpdate    time.Time
-	quitting      bool
-	spinner       spinner.Model
-	err           error
-	done          bool
-	cancelled     bool
-	progressBars  map[string]progress.Model
+	instances    []api.Instance
+	client       *api.Client
+	monitoring   bool
+	lastUpdate   time.Time
+	quitting     bool
+	spinner      spinner.Model
+	err          error
+	done         bool
+	cancelled    bool
+	progressBars map[string]progress.Model
 }
 
 type tickMsg time.Time
