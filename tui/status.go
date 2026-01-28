@@ -11,31 +11,38 @@ import (
 
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/utils"
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 var (
-	headerStyle    lipgloss.Style
-	runningStyle   lipgloss.Style
-	startingStyle  lipgloss.Style
-	restoringStyle lipgloss.Style
-	deletingStyle  lipgloss.Style
-	cellStyle      lipgloss.Style
-	timestampStyle lipgloss.Style
+	headerStyle        lipgloss.Style
+	runningStyle       lipgloss.Style
+	startingStyle      lipgloss.Style
+	restoringStyle     lipgloss.Style
+	deletingStyle      lipgloss.Style
+	provisioningStyle  lipgloss.Style
+	cellStyle          lipgloss.Style
+	timestampStyle     lipgloss.Style
+)
+
+const (
+	provisioningExpectedDuration = 10 * time.Minute
 )
 
 type StatusModel struct {
-	instances  []api.Instance
-	client     *api.Client
-	monitoring bool
-	lastUpdate time.Time
-	quitting   bool
-	spinner    spinner.Model
-	err        error
-	done       bool
-	cancelled  bool
+	instances     []api.Instance
+	client        *api.Client
+	monitoring    bool
+	lastUpdate    time.Time
+	quitting      bool
+	spinner       spinner.Model
+	err           error
+	done          bool
+	cancelled     bool
+	progressBars  map[string]progress.Model
 }
 
 type tickMsg time.Time
@@ -51,11 +58,12 @@ func NewStatusModel(client *api.Client, monitoring bool, instances []api.Instanc
 	s := NewPrimarySpinner()
 
 	return StatusModel{
-		client:     client,
-		monitoring: monitoring,
-		instances:  instances,
-		lastUpdate: time.Now(),
-		spinner:    s,
+		client:       client,
+		monitoring:   monitoring,
+		instances:    instances,
+		lastUpdate:   time.Now(),
+		spinner:      s,
+		progressBars: make(map[string]progress.Model),
 	}
 }
 
@@ -146,6 +154,12 @@ func (m StatusModel) View() string {
 	b.WriteString(m.renderTable())
 	b.WriteString("\n")
 
+	// Render provisioning progress section
+	provisioningSection := m.renderProvisioningSection()
+	if provisioningSection != "" {
+		b.WriteString(provisioningSection)
+	}
+
 	if m.quitting {
 		timestamp := m.lastUpdate.Format("15:04:05")
 		b.WriteString(timestampStyle.Render(fmt.Sprintf("Last updated: %s", timestamp)))
@@ -203,7 +217,7 @@ func (m StatusModel) renderTable() string {
 	colWidths := map[string]int{
 		"ID":       4,
 		"Name":     14,
-		"Status":   12,
+		"Status":   14,
 		"Address":  18,
 		"Mode":     15,
 		"Disk":     8,
@@ -282,10 +296,91 @@ func (m StatusModel) formatStatus(status string, width int) string {
 		style = restoringStyle
 	case "DELETING":
 		style = deletingStyle
+	case "PROVISIONING":
+		style = provisioningStyle
 	default:
 		style = lipgloss.NewStyle()
 	}
 	return style.Render(truncate(status, width))
+}
+
+func (m *StatusModel) ensureProgressBar(gpuType string) {
+	if _, exists := m.progressBars[gpuType]; !exists {
+		p := progress.New(
+			progress.WithScaledGradient("#FFA500", "#FF8C00"),
+			progress.WithWidth(70),
+		)
+		m.progressBars[gpuType] = p
+	}
+}
+
+func (m *StatusModel) renderProvisioningSection() string {
+	// Group instances with PROVISIONING status by GPU type
+	instancesByGPU := make(map[string][]api.Instance)
+	for _, instance := range m.instances {
+		if instance.Status == "PROVISIONING" {
+			instancesByGPU[instance.GPUType] = append(instancesByGPU[instance.GPUType], instance)
+		}
+	}
+
+	if len(instancesByGPU) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(primaryStyle.Bold(true).Render("Provisioning Instances:"))
+	b.WriteString("\n\n")
+
+	for gpuType, instances := range instancesByGPU {
+		m.ensureProgressBar(gpuType)
+		progressBar := m.progressBars[gpuType]
+
+		// Use the earliest provisioning time from all instances of this GPU type
+		earliestTime := instances[0].ProvisioningTime
+		for _, instance := range instances[1:] {
+			if instance.ProvisioningTime.Before(earliestTime) {
+				earliestTime = instance.ProvisioningTime
+			}
+		}
+
+		// Calculate progress using the GetProgress method
+		progressPercent := utils.GetProgress(earliestTime, provisioningExpectedDuration)
+
+		// Calculate time remaining
+		elapsed := time.Since(earliestTime)
+		remaining := provisioningExpectedDuration - elapsed
+		if remaining < 0 {
+			remaining = 0
+		}
+		remainingMinutes := int(remaining.Minutes())
+		if remainingMinutes < 1 {
+			remainingMinutes = 1
+		}
+
+		// Build comma-separated list of instance names
+		var names []string
+		for _, instance := range instances {
+			names = append(names, instance.Name)
+		}
+		instanceList := strings.Join(names, ", ")
+
+		// Render instance names (grey, unbolded)
+		b.WriteString(fmt.Sprintf("  %s\n", SubtleTextStyle().Render(instanceList)))
+
+		// Render progress bar
+		b.WriteString(fmt.Sprintf("  %s\n", progressBar.ViewAs(progressPercent)))
+
+		// Render message (compressed)
+		message := fmt.Sprintf("  ~%d min total, ~%d min remaining",
+			int(provisioningExpectedDuration.Minutes()),
+			remainingMinutes,
+		)
+		b.WriteString(timestampStyle.Render(message))
+		b.WriteString("\n\n")
+	}
+
+	return b.String()
 }
 
 func truncate(s string, maxLen int) string {
@@ -313,6 +408,8 @@ func RunStatus(client *api.Client, monitoring bool, instances []api.Instance) er
 	restoringStyle = PrimaryStyle().Bold(true)
 
 	deletingStyle = ErrorStyle()
+
+	provisioningStyle = WarningStyle()
 
 	cellStyle = lipgloss.NewStyle().
 		Padding(0, 1)
