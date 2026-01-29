@@ -307,7 +307,7 @@ func (m StatusModel) formatStatus(status string, width int) string {
 func (m *StatusModel) ensureProgressBar(gpuType string) {
 	if _, exists := m.progressBars[gpuType]; !exists {
 		p := progress.New(
-			progress.WithScaledGradient("#FFA500", "#FF8C00"),
+			progress.WithSolidFill("#FFA500"),
 			progress.WithWidth(70),
 		)
 		m.progressBars[gpuType] = p
