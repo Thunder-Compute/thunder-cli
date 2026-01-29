@@ -10,8 +10,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Thunder-Compute/thunder-cli/sentry"
-	sentrygo "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 )
 
 type Client struct {
@@ -44,7 +43,11 @@ func (c *Client) setHeaders(req *http.Request) {
 }
 
 func (c *Client) ValidateToken(ctx context.Context) error {
-	sentry.AddBreadcrumb("api", "validate_token", nil, sentry.LevelInfo)
+	sentry.AddBreadcrumb(&sentry.Breadcrumb{
+		Category: "api",
+		Message:  "validate_token",
+		Level:    sentry.LevelInfo,
+	})
 
 	req, err := http.NewRequest("GET", c.baseURL+"/v1/auth/validate", nil)
 	if err != nil {
@@ -55,11 +58,11 @@ func (c *Client) ValidateToken(ctx context.Context) error {
 
 	resp, err := c.do(ctx, req)
 	if err != nil {
-		sentry.CaptureError(err, &sentry.EventOptions{
-			Tags: sentry.NewTags().
-				Set("api_method", "ValidateToken").
-				Set("api_url", c.baseURL),
-			Level: ptr(sentry.LevelError),
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("api_method", "ValidateToken")
+			scope.SetTag("api_url", c.baseURL)
+			scope.SetLevel(sentry.LevelError)
+			sentry.CaptureException(err)
 		})
 		return fmt.Errorf("failed to validate token: %w", err)
 	}
@@ -67,11 +70,11 @@ func (c *Client) ValidateToken(ctx context.Context) error {
 
 	if resp.StatusCode == 401 {
 		err := fmt.Errorf("authentication failed: invalid token")
-		sentry.CaptureError(err, &sentry.EventOptions{
-			Tags: sentry.NewTags().
-				Set("api_method", "ValidateToken").
-				Set("status_code", "401"),
-			Level: ptr(sentry.LevelWarning),
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("api_method", "ValidateToken")
+			scope.SetTag("status_code", "401")
+			scope.SetLevel(sentry.LevelWarning)
+			sentry.CaptureException(err)
 		})
 		return err
 	}
@@ -79,13 +82,12 @@ func (c *Client) ValidateToken(ctx context.Context) error {
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
 		err := fmt.Errorf("token validation failed with status %d: %s", resp.StatusCode, string(body))
-		sentry.CaptureError(err, &sentry.EventOptions{
-			Tags: sentry.NewTags().
-				Set("api_method", "ValidateToken").
-				Set("status_code", fmt.Sprintf("%d", resp.StatusCode)),
-			Extra: sentry.NewExtra().
-				Set("response_body", string(body)),
-			Level: ptr(getLogLevelForStatus(resp.StatusCode)),
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("api_method", "ValidateToken")
+			scope.SetTag("status_code", fmt.Sprintf("%d", resp.StatusCode))
+			scope.SetExtra("response_body", string(body))
+			scope.SetLevel(getLogLevelForStatus(resp.StatusCode))
+			sentry.CaptureException(err)
 		})
 		return err
 	}
@@ -95,7 +97,11 @@ func (c *Client) ValidateToken(ctx context.Context) error {
 }
 
 func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, error) {
-	sentry.AddBreadcrumb("api", "list_instances", nil, sentry.LevelInfo)
+	sentry.AddBreadcrumb(&sentry.Breadcrumb{
+		Category: "api",
+		Message:  "list_instances",
+		Level:    sentry.LevelInfo,
+	})
 
 	req, err := http.NewRequest("GET", c.baseURL+"/instances/list?update_ips=true", nil)
 	if err != nil {
@@ -106,11 +112,11 @@ func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, 
 
 	resp, err := c.do(ctx, req)
 	if err != nil {
-		sentry.CaptureError(err, &sentry.EventOptions{
-			Tags: sentry.NewTags().
-				Set("api_method", "ListInstances").
-				Set("api_url", c.baseURL),
-			Level: ptr(sentry.LevelError),
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("api_method", "ListInstances")
+			scope.SetTag("api_url", c.baseURL)
+			scope.SetLevel(sentry.LevelError)
+			sentry.CaptureException(err)
 		})
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -118,11 +124,11 @@ func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, 
 
 	if resp.StatusCode == 401 {
 		err := fmt.Errorf("authentication failed: invalid token")
-		sentry.CaptureError(err, &sentry.EventOptions{
-			Tags: sentry.NewTags().
-				Set("api_method", "ListInstances").
-				Set("status_code", "401"),
-			Level: ptr(sentry.LevelWarning),
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("api_method", "ListInstances")
+			scope.SetTag("status_code", "401")
+			scope.SetLevel(sentry.LevelWarning)
+			sentry.CaptureException(err)
 		})
 		return nil, err
 	}
@@ -130,11 +136,11 @@ func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
 		err := fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-		sentry.CaptureError(err, &sentry.EventOptions{
-			Tags: sentry.NewTags().
-				Set("api_method", "ListInstances").
-				Set("status_code", fmt.Sprintf("%d", resp.StatusCode)),
-			Level: ptr(getLogLevelForStatus(resp.StatusCode)),
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("api_method", "ListInstances")
+			scope.SetTag("status_code", fmt.Sprintf("%d", resp.StatusCode))
+			scope.SetLevel(getLogLevelForStatus(resp.StatusCode))
+			sentry.CaptureException(err)
 		})
 		return nil, err
 	}
@@ -608,21 +614,14 @@ func (c *Client) DeleteSnapshot(snapshotID string) error {
 	return nil
 }
 
-// Helper functions for Sentry integration
-
-// ptr is a helper to create a pointer to a value
-func ptr[T any](v T) *T {
-	return &v
-}
-
 // getLogLevelForStatus determines the appropriate Sentry level for HTTP status codes
-func getLogLevelForStatus(statusCode int) sentrygo.Level {
+func getLogLevelForStatus(statusCode int) sentry.Level {
 	switch {
 	case statusCode >= 500:
-		return sentrygo.LevelError
+		return sentry.LevelError
 	case statusCode >= 400:
-		return sentrygo.LevelWarning
+		return sentry.LevelWarning
 	default:
-		return sentrygo.LevelInfo
+		return sentry.LevelInfo
 	}
 }
