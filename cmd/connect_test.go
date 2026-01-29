@@ -58,7 +58,7 @@ func (m *mockAPIClient) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]api
 	return m.instances, m.listInstancesWithIPUpdateErr
 }
 
-func (m *mockAPIClient) AddSSHKeyCtx(ctx context.Context, instanceID string) (*api.AddSSHKeyResponse, error) {
+func (m *mockAPIClient) AddSSHKeyCtx(ctx context.Context, instanceID string, req *api.AddSSHKeyRequest) (*api.AddSSHKeyResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.addSSHKeyCalled++
@@ -506,15 +506,17 @@ func TestMockAPIClient_ListInstances(t *testing.T) {
 }
 
 func TestMockAPIClient_AddSSHKey(t *testing.T) {
+	testKey := "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
 	client := &mockAPIClient{
 		addSSHKeyResponse: &api.AddSSHKeyResponse{
-			UUID: "uuid-1",
-			Key:  "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----",
+			UUID:    "uuid-1",
+			Key:     &testKey,
+			Success: true,
 		},
 	}
 
 	ctx := context.Background()
-	resp, err := client.AddSSHKeyCtx(ctx, "inst-1")
+	resp, err := client.AddSSHKeyCtx(ctx, "inst-1", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "uuid-1", resp.UUID)
 	assert.Equal(t, 1, client.addSSHKeyCalled)

@@ -257,7 +257,7 @@ func runSCP(sources []string, destination string) error {
 	if !keyExists {
 		sentry.AddBreadcrumb("scp", "generating SSH key", nil, sentry.LevelInfo)
 
-		keyResp, err := client.AddSSHKey(targetInstance.ID)
+		keyResp, err := client.AddSSHKey(targetInstance.ID, nil)
 		if err != nil {
 			sentry.AddBreadcrumb("scp", "SSH key generation failed", map[string]interface{}{
 				"error": err.Error(),
@@ -267,7 +267,13 @@ func runSCP(sources []string, destination string) error {
 			return fmt.Errorf("failed to add SSH key: %w", err)
 		}
 
-		if err := utils.SavePrivateKey(targetInstance.UUID, keyResp.Key); err != nil {
+		if keyResp.Key == nil {
+			p.Send(tui.SCPErrorMsg{Err: fmt.Errorf("no private key returned from server")})
+			<-tuiDone
+			return fmt.Errorf("no private key returned from server")
+		}
+
+		if err := utils.SavePrivateKey(targetInstance.UUID, *keyResp.Key); err != nil {
 			sentry.AddBreadcrumb("scp", "SSH key save failed", map[string]interface{}{
 				"error": err.Error(),
 			}, sentry.LevelError)

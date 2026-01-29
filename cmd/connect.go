@@ -352,7 +352,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		}, sentry.LevelInfo)
 
 		tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Generating new SSH key...", 0)
-		keyResp, err := client.AddSSHKeyCtx(ctx, instanceID)
+		keyResp, err := client.AddSSHKeyCtx(ctx, instanceID, nil)
 		if checkCancelled() {
 			return nil
 		}
@@ -364,7 +364,12 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			return fmt.Errorf("failed to add SSH key: %w", err)
 		}
 
-		if err := utils.SavePrivateKey(instance.UUID, keyResp.Key); err != nil {
+		if keyResp.Key == nil {
+			shutdownTUI()
+			return fmt.Errorf("no private key returned from server")
+		}
+
+		if err := utils.SavePrivateKey(instance.UUID, *keyResp.Key); err != nil {
 			sentry.AddBreadcrumb("connect", "SSH key save failed", map[string]interface{}{
 				"error": err.Error(),
 			}, sentry.LevelError)
@@ -471,7 +476,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH key not found on instance. This typically occurs when your node crashes due to OOM, low disk space, or other reasons.", 0)
 		}
 
-		keyResp, keyErr := client.AddSSHKeyCtx(ctx, instanceID)
+		keyResp, keyErr := client.AddSSHKeyCtx(ctx, instanceID, nil)
 		if checkCancelled() {
 			return nil
 		}
@@ -483,7 +488,12 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			return fmt.Errorf("failed to generate new SSH key: %w", keyErr)
 		}
 
-		if saveErr := utils.SavePrivateKey(instance.UUID, keyResp.Key); saveErr != nil {
+		if keyResp.Key == nil {
+			shutdownTUI()
+			return fmt.Errorf("no private key returned from server")
+		}
+
+		if saveErr := utils.SavePrivateKey(instance.UUID, *keyResp.Key); saveErr != nil {
 			sentry.AddBreadcrumb("connect", "key save failed after regeneration", map[string]interface{}{
 				"error": saveErr.Error(),
 			}, sentry.LevelError)

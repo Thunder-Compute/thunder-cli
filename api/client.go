@@ -163,10 +163,19 @@ func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, 
 	return instances, nil
 }
 
-func (c *Client) AddSSHKeyCtx(ctx context.Context, instanceID string) (*AddSSHKeyResponse, error) {
+func (c *Client) AddSSHKeyCtx(ctx context.Context, instanceID string, req *AddSSHKeyRequest) (*AddSSHKeyResponse, error) {
 	url := fmt.Sprintf("%s/instances/%s/add_key", c.baseURL, instanceID)
 
-	httpReq, err := http.NewRequest("POST", url, nil)
+	var bodyReader io.Reader
+	if req != nil {
+		jsonData, err := json.Marshal(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request: %w", err)
+		}
+		bodyReader = bytes.NewBuffer(jsonData)
+	}
+
+	httpReq, err := http.NewRequest("POST", url, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -179,16 +188,32 @@ func (c *Client) AddSSHKeyCtx(ctx context.Context, instanceID string) (*AddSSHKe
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 401 {
-		return nil, fmt.Errorf("authentication failed: invalid token")
-	}
-
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	if resp.StatusCode != 200 && resp.StatusCode != 201 {
+	// Handle specific error cases with clear messages
+	switch resp.StatusCode {
+	case 200, 201:
+		// Success - continue to parse
+	case 401:
+		return nil, fmt.Errorf("authentication failed: invalid token")
+	case 400:
+		// Parse error response for specific message
+		var errResp struct {
+			Code    string `json:"error"`
+			Message string `json:"message"`
+		}
+		if json.Unmarshal(body, &errResp) == nil && errResp.Message != "" {
+			return nil, fmt.Errorf("%s", errResp.Message)
+		}
+		return nil, fmt.Errorf("invalid request: %s", string(body))
+	case 404:
+		return nil, fmt.Errorf("instance not found or not accessible")
+	case 503:
+		return nil, fmt.Errorf("instance is starting up and not ready yet - please wait and try again")
+	default:
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -470,9 +495,10 @@ func (c *Client) ModifyInstance(instanceID string, req InstanceModifyRequest) (*
 	return &modifyResp, nil
 }
 
-// AddSSHKey generates and adds SSH keypair to instance
-func (c *Client) AddSSHKey(instanceID string) (*AddSSHKeyResponse, error) {
-	return c.AddSSHKeyCtx(context.Background(), instanceID)
+// AddSSHKey adds an SSH key to an instance
+// If req is nil, a new key pair will be generated
+func (c *Client) AddSSHKey(instanceID string, req *AddSSHKeyRequest) (*AddSSHKeyResponse, error) {
+	return c.AddSSHKeyCtx(context.Background(), instanceID, req)
 }
 
 // CreateSnapshot creates a snapshot from an instance

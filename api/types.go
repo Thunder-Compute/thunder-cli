@@ -87,9 +87,17 @@ type InstanceModifyResponse struct {
 	HttpPorts    []int   `json:"http_ports,omitempty"`
 }
 
+// AddSSHKeyRequest represents the request to add an SSH key
+type AddSSHKeyRequest struct {
+	PublicKey *string `json:"public_key,omitempty"`
+}
+
+// AddSSHKeyResponse represents the response from adding an SSH key
 type AddSSHKeyResponse struct {
-	UUID string `json:"uuid"`
-	Key  string `json:"key"`
+	UUID    string  `json:"uuid"`
+	Key     *string `json:"key,omitempty"`
+	Success bool    `json:"success"`
+	Message string  `json:"message,omitempty"`
 }
 
 type DeviceIDResponse struct {
@@ -124,5 +132,5 @@ type ListSnapshotsResponse []Snapshot
 type ConnectClient interface {
 	ListInstances() ([]Instance, error)
 	ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, error)
-	AddSSHKeyCtx(ctx context.Context, instanceID string) (*AddSSHKeyResponse, error)
+	AddSSHKeyCtx(ctx context.Context, instanceID string, req *AddSSHKeyRequest) (*AddSSHKeyResponse, error)
 }

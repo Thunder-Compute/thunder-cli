@@ -168,9 +168,12 @@ func TestTemplateStruct(t *testing.T) {
 }
 
 func TestAddSSHKeyResponse(t *testing.T) {
+	testKey := "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7..."
 	resp := AddSSHKeyResponse{
-		UUID: "test-uuid-12345",
-		Key:  "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...",
+		UUID:    "test-uuid-12345",
+		Key:     &testKey,
+		Success: true,
+		Message: "Key added successfully",
 	}
 
 	jsonData, err := json.Marshal(resp)
@@ -181,7 +184,9 @@ func TestAddSSHKeyResponse(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, resp.UUID, unmarshaled.UUID)
-	assert.Equal(t, resp.Key, unmarshaled.Key)
+	assert.Equal(t, *resp.Key, *unmarshaled.Key)
+	assert.Equal(t, resp.Success, unmarshaled.Success)
+	assert.Equal(t, resp.Message, unmarshaled.Message)
 }
 
 func TestDeviceIDResponse(t *testing.T) {
