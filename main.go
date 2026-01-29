@@ -1,6 +1,3 @@
-/*
-Copyright © 2025 NAME HERE <EMAIL ADDRESS>
-*/
 package main
 
 import (
@@ -9,13 +6,13 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/Thunder-Compute/thunder-cli/cmd"
 	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
 	"github.com/Thunder-Compute/thunder-cli/internal/console"
 	"github.com/Thunder-Compute/thunder-cli/internal/version"
-	"github.com/Thunder-Compute/thunder-cli/sentry"
-	sentrygo "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 )
 
 func main() {
@@ -29,14 +26,16 @@ func main() {
 	console.Init()
 
 	_ = initSentry()
-	defer sentry.Shutdown()
+	defer sentry.Flush(5 * time.Second)
 
 	// Wrap execution with panic recovery
-	defer sentry.CapturePanic(&sentry.EventOptions{
-		Tags: sentry.NewTags().
-			Set("command", "root").
-			Set("version", version.BuildVersion),
-	})
+	defer func() {
+		if r := recover(); r != nil {
+			sentry.CurrentHub().Recover(r)
+			sentry.Flush(5 * time.Second)
+			panic(r)
+		}
+	}()
 
 	cmd.Execute()
 }
@@ -50,25 +49,16 @@ func initSentry() error {
 	// Load config for user context only
 	cfg, _ := cmd.LoadConfig()
 
-	// Get configuration values
-	environment := getEnvironment()
-	sampleRate := getSampleRate()
-	tracesSampleRate := getTracesSampleRate()
-	release := fmt.Sprintf("thunder-cli@%s", version.BuildVersion)
-
-	// Initialize Sentry with build-injected DSN
-	err := sentry.Init(sentry.Config{
-		DSN:              version.SentryDSN,
-		Environment:      environment,
-		Release:          release,
-		Debug:            false, // Never debug in production
-		SampleRate:       sampleRate,
-		TracesSampleRate: tracesSampleRate,
-		EnableProfiling:  false,
-		ServiceName:      "thunder-cli",
-		InstanceID:       getInstanceID(),
-		FilteredErrors:   getFilteredErrors(),
-	}, nil)
+	err := sentry.Init(sentry.ClientOptions{
+		Dsn:              version.SentryDSN,
+		Environment:      getEnvironment(),
+		Release:          fmt.Sprintf("thunder-cli@%s", version.BuildVersion),
+		Debug:            false,
+		AttachStacktrace: true,
+		SampleRate:       1.0,
+		TracesSampleRate: 0.1,
+		EnableTracing:    true,
+	})
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize Sentry: %w", err)
@@ -80,11 +70,13 @@ func initSentry() error {
 	}
 
 	// Set global context tags
-	sentrygo.ConfigureScope(func(scope *sentrygo.Scope) {
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetTag("os", runtime.GOOS)
 		scope.SetTag("arch", runtime.GOARCH)
 		scope.SetTag("go_version", runtime.Version())
 		scope.SetTag("build_commit", version.BuildCommit)
+		scope.SetTag("service", "thunder-cli")
+		scope.SetTag("instance_id", getInstanceID())
 		if cfg != nil {
 			scope.SetTag("api_url", cfg.APIURL)
 		}
@@ -94,24 +86,13 @@ func initSentry() error {
 }
 
 func getEnvironment() string {
-	// Check if running from development build
 	if version.BuildVersion == "dev" {
 		return "dev"
 	}
-
 	return "production"
 }
 
-func getSampleRate() float64 {
-	return 1.0 // Capture all errors
-}
-
-func getTracesSampleRate() float64 {
-	return 0.1 // Sample 10% of traces
-}
-
 func getInstanceID() string {
-	// Try various environment variables for instance ID
 	if id := os.Getenv("HOSTNAME"); id != "" {
 		return id
 	}
@@ -121,23 +102,13 @@ func getInstanceID() string {
 	return "unknown"
 }
 
-func getFilteredErrors() []string {
-	return []string{
-		"user cancelled",
-		"context canceled",
-		"operation cancelled by user",
-		"authentication cancelled",
-	}
-}
-
 func setUserContext(token string) {
-	// Hash the token to create anonymous but unique user ID
 	hash := sha256.Sum256([]byte(token))
 	userID := hex.EncodeToString(hash[:8])
 
-	sentrygo.ConfigureScope(func(scope *sentrygo.Scope) {
-		scope.SetUser(sentrygo.User{
-			ID: userID, // Hashed, not personally identifiable
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetUser(sentry.User{
+			ID: userID,
 		})
 	})
 }
