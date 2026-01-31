@@ -1,0 +1,58 @@
+---
+title: "Deleting Instances"
+description: "Remove Thunder Compute instances and free up resources"
+icon: "trash"
+iconType: "solid"
+---
+
+<Columns cols={3}>
+  <Card title="VSCode / Cursor" icon="window" color="#3a6289" href="/vscode/operations/deleting-instances">
+    Editor extension
+  </Card>
+  <Card title="CLI" icon="terminal" color="#95c5ea" href="/cli/operations/deleting-instances">
+    Command line
+  </Card>
+  <Card title="Console" icon="browser" color="#3a6289" href="/console/operations/deleting-instances">
+    Web interface
+  </Card>
+</Columns>
+
+Delete instances you no longer need to stop billing. Make sure to back up any important data before deleting.
+
+<Warning>
+  Deleting an instance permanently removes it and all associated data. This action cannot be undone. Consider [creating a snapshot](/cli/operations/snapshots) first to back up your environment.
+</Warning>
+
+### Interactive Delete
+
+Run the delete command to see a list of your instances:
+
+```bash
+tnr delete
+```
+
+Select an instance and confirm the deletion.
+
+### Direct Delete
+
+Delete an instance directly by ID:
+
+```bash
+tnr delete 0
+```
+
+This skips the interactive menu but still requires confirmation.
+
+## Before Deleting
+
+Before deleting an instance, make sure to:
+
+1. **Download important files**: Use `tnr scp` to save any outputs, models, or data you need
+2. **Create a snapshot**: If you want to restore your environment later, [create a snapshot](/cli/operations/snapshots) first
+3. **Push code to GitHub**: Commit and push any code changes to a remote repository
+
+## Billing
+
+Billing stops immediately when an instance is deleted. You are charged only for the time the instance was running.
+
+Check your usage and billing details in the [console billing settings](https://console.thundercompute.com/settings/billing).

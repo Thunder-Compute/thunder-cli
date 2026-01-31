@@ -1,0 +1,62 @@
+---
+title: "Monitoring Instances"
+description: "View the status of your Thunder Compute instances"
+icon: "chart-line"
+iconType: "solid"
+---
+
+<Columns cols={3}>
+  <Card title="VSCode / Cursor" icon="window" color="#3a6289" href="/vscode/operations/monitoring-instances">
+    Editor extension
+  </Card>
+  <Card title="CLI" icon="terminal" color="#95c5ea" href="/cli/operations/monitoring-instances">
+    Command line
+  </Card>
+  <Card title="Console" icon="browser" color="#3a6289" href="/console/operations/monitoring-instances">
+    Web interface
+  </Card>
+</Columns>
+
+Monitor your instances to see their status, configuration, and resource allocation.
+
+### View Instance Status
+
+List all your instances with their details:
+
+```bash
+tnr status
+```
+
+This displays:
+- **Instance ID**: The identifier used for other commands (e.g., `0`)
+- **Status**: `RUNNING`, `CREATING`, `RESTORING`, etc.
+- **IP Address**: The public IP for SSH access
+- **GPU Type**: A6000, A100, or H100
+- **GPU Count**: Number of GPUs (production only)
+- **vCPU Count**: Number of virtual CPUs
+- **RAM**: Total memory
+- **Disk Size**: Storage capacity
+- **Template**: The template or snapshot used
+
+### Disable Auto-Refresh
+
+By default, `tnr status` monitors for status changes. Use the `--no-wait` flag to get a single snapshot:
+
+```bash
+tnr status --no-wait
+```
+
+## Instance States
+
+| Status      | Description                                      |
+|-------------|--------------------------------------------------|
+| `RUNNING`   | Instance is active and ready to use              |
+| `CREATING`  | Instance is being provisioned                    |
+| `RESTORING` | Instance is being restored from a snapshot       |
+| `DELETING`  | Instance is being removed                        |
+
+## Benchmarking Notes
+
+When measuring performance in **prototyping mode**, note that hardware-level metrics (temperature, wattage, utilization) may not be accurate due to CUDA-level optimizations. Use application-level metrics like iterations per second for reliable comparisons.
+
+For accurate hardware metrics, use **production mode** instances.

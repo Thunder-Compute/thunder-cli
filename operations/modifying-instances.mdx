@@ -1,0 +1,74 @@
+---
+title: "Modifying Instances"
+description: "Change the resources of a running Thunder Compute instance"
+icon: "sliders"
+iconType: "solid"
+---
+
+<Columns cols={3}>
+  <Card title="VSCode / Cursor" icon="window" color="#3a6289" href="/vscode/operations/modifying-instances">
+    Editor extension
+  </Card>
+  <Card title="CLI" icon="terminal" color="#95c5ea" href="/cli/operations/modifying-instances">
+    Command line
+  </Card>
+  <Card title="Console" icon="browser" color="#3a6289" href="/console/operations/modifying-instances">
+    Web interface
+  </Card>
+</Columns>
+
+Modify the resources of a running instance without creating a new one. This allows you to scale up or down based on your workload needs.
+
+### Modify an Instance
+
+Use the modify command with the instance ID and new configuration:
+
+```bash
+tnr modify <instance_id> [options]
+```
+
+### Available Options
+
+| Option       | Description                              |
+|--------------|------------------------------------------|
+| `--gpu`      | GPU type (e.g., `a6000`, `a100`, `h100`) |
+| `--vcpus`    | Number of virtual CPUs (prototyping mode) |
+| `--disk-size-gb` | Disk size (can only be increased)    |
+| `--mode`     | Switch between `prototyping` and `production` |
+
+### Examples
+
+```bash
+# Switch to a different GPU
+tnr modify 0 --gpu a100
+
+# Scale up CPUs (RAM scales automatically at 8GB per vCPU)
+tnr modify 0 --vcpus 16
+
+# Increase disk size
+tnr modify 0 --disk-size-gb 300
+
+# Switch to production mode
+tnr modify 0 --mode production
+```
+
+<Note>
+  Disk size can only be increased, not decreased.
+</Note>
+
+## What Can Be Modified
+
+| Resource    | Can Modify? | Notes                                           |
+|-------------|-------------|-------------------------------------------------|
+| GPU Type    | Yes         |                                                 |
+| GPU Count   | Yes         |                                                 |
+| vCPUs       | Yes         | Prototyping mode only                           |
+| RAM         | Yes         | Scales with vCPUs (prototyping) or GPUs (production) |
+| Mode        | Yes         | Switch between prototyping and production       |
+| Disk Size   | Increase only | Cannot shrink disk                            |
+
+<Note>
+  RAM is automatically determined based on your configuration:
+  - **Prototyping mode**: 8GB per vCPU
+  - **Production mode**: 90GB per GPU
+</Note>

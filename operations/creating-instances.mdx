@@ -1,0 +1,112 @@
+---
+title: "Creating Instances"
+description: "Launch new Thunder Compute instances with your preferred configuration"
+icon: "plus"
+iconType: "solid"
+---
+
+<Columns cols={3}>
+  <Card title="VSCode / Cursor" icon="window" color="#3a6289" href="/vscode/operations/creating-instances">
+    Editor extension
+  </Card>
+  <Card title="CLI" icon="terminal" color="#95c5ea" href="/cli/operations/creating-instances">
+    Command line
+  </Card>
+  <Card title="Console" icon="browser" color="#3a6289" href="/console/operations/creating-instances">
+    Web interface
+  </Card>
+</Columns>
+
+Create a new Thunder Compute instance to start running GPU workloads. You can configure the mode, GPU type, CPU count, disk size, and template.
+
+### Interactive Mode
+
+Run the create command to launch an interactive menu:
+
+```bash
+tnr create
+```
+
+This walks you through selecting your instance configuration step by step.
+
+### One-Line Creation
+
+Specify all options in a single command:
+
+```bash
+tnr create --mode prototyping --gpu a6000 --vcpus 8 --template base --disk-size-gb 100
+```
+
+### Configuration Options
+
+| Flag           | Description                                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------------------------------ |
+| `--mode`       | `prototyping` or `production`                                                                                |
+| `--gpu`        | `a6000`, `a100`, or `h100` (prototyping), `a100` or `h100` (production)                                      |
+| `--num-gpus`   | `1`, `2`, `4`, or `8` (production only)                                                                      |
+| `--vcpus`      | CPU cores: `4`, `8`, `16`, or `32` (prototyping only). RAM: 8GB per vCPU                                     |
+| `--template`   | `base`, `comfy-ui`, `comfy-ui-wan`, `ollama`, `webui-forge`, or a snapshot name                              |
+| `--disk-size-gb` | `100`-`400` GB (prototyping), `100`-`1000` GB (production)                                                 |
+
+### Mode Selection
+
+Choose between optimized development pricing or full compatibility:
+
+- **Prototyping** (default): Lower cost with CUDA-level optimizations. Best for development.
+- **Production**: Standard VM with full compatibility. Best for long-running jobs and production workloads.
+
+See [Prototyping vs Production](/prototyping-vs-production) for details on each mode.
+
+### GPU Options
+
+| GPU       | VRAM  | Availability         |
+|-----------|-------|----------------------|
+| A6000     | 48GB  | Prototyping only     |
+| A100      | 80GB  | Both modes           |
+| H100      | 80GB  | Both modes           |
+
+### CPU and RAM
+
+**Prototyping mode**: Configure vCPUs with 8GB RAM per vCPU.
+- 4 vCPUs = 32GB RAM
+- 8 vCPUs = 64GB RAM
+- 16 vCPUs = 128GB RAM
+- 32 vCPUs = 256GB RAM
+
+**Production mode**: Fixed at 18 vCPUs and 90GB RAM per GPU.
+- 2 GPUs = 36 vCPUs, 180GB RAM
+- 4 GPUs = 72 vCPUs, 360GB RAM
+- 8 GPUs = 144 vCPUs, 720GB RAM
+
+<Note>
+  By default, 4 vCPUs and 32GB of memory are included with prototyping instances. Additional vCPUs are billed hourly at the rates shown on the [pricing page](https://www.thundercompute.com/pricing).
+</Note>
+
+### Templates
+
+Templates pre-configure your instance for common AI workflows:
+
+| Template       | Description                           |
+|----------------|---------------------------------------|
+| `base`         | Ubuntu with PyTorch + CUDA            |
+| `ollama`       | Ollama server environment             |
+| `comfy-ui`     | ComfyUI for AI image generation       |
+| `comfy-ui-wan` | ComfyUI with Wan2.1 pre-installed     |
+| `webui-forge`  | WebUI Forge for Stable Diffusion      |
+
+After connecting to an instance with a template, start the server with:
+
+```bash
+start-ollama      # or start-comfy-ui, etc.
+```
+
+See [Using Instance Templates](/guides/using-instance-templates) for more details.
+
+### Restore from Snapshot
+
+Your snapshots appear alongside templates in the selection menu. Select a snapshot to create an instance with your previously saved state.
+
+```bash
+tnr create
+# Select your snapshot in the "Templates" step
+```

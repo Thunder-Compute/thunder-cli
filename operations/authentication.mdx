@@ -1,0 +1,66 @@
+---
+title: "Authentication"
+description: "Log in to Thunder Compute and manage your API tokens"
+icon: "key"
+iconType: "solid"
+---
+
+<Columns cols={3}>
+  <Card title="VSCode / Cursor" icon="window" color="#3a6289" href="/vscode/operations/authentication">
+    Editor extension
+  </Card>
+  <Card title="CLI" icon="terminal" color="#95c5ea" href="/cli/operations/authentication">
+    Command line
+  </Card>
+  <Card title="Console" icon="browser" color="#3a6289" href="/console/operations/authentication">
+    Web interface
+  </Card>
+</Columns>
+
+Before using Thunder Compute, you need to authenticate your account.
+
+### Log In
+
+Run the following command to authenticate the CLI:
+
+```bash
+tnr login
+```
+
+Your browser will open automatically to complete authentication via OAuth.
+
+To use a token instead, press `T` during login to enter a token generated from the [console](https://console.thundercompute.com/settings?tab=tokens).
+
+### Log Out
+
+To remove your stored credentials:
+
+```bash
+tnr logout
+```
+
+This deletes the token file from your machine.
+
+### Programmatic Authentication
+
+For scripts and automation, set the `TNR_API_TOKEN` environment variable:
+
+```bash
+export TNR_API_TOKEN=your_token_here
+```
+
+## Managing API Tokens
+
+API tokens authenticate your CLI and extension access. You can manage them in the [console](https://console.thundercompute.com/settings?tab=tokens).
+
+- **Generate tokens**: Create new tokens for each device or use case
+- **Revoke tokens**: Remove access for specific tokens without affecting others
+- **Token persistence**: Tokens never expire unless manually revoked
+
+<Note>
+  Use unique tokens for each device so you can revoke access individually if needed.
+</Note>
+
+## Adding a Payment Method
+
+Before creating instances, you need a payment method on file. Visit the [billing settings](https://console.thundercompute.com/settings/billing) to add a credit card.
