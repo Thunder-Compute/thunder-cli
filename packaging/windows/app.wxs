@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package
+    Name="Thunder Compute CLI"
+    Manufacturer="Thunder Compute"
+    Version="{{ .Version }}"
+    Language="1033"
+    InstallerVersion="200"
+    ProductCode="*"
+    UpgradeCode="ABCDDCBA-7349-453F-94F6-BCB5110BA4FD">
+    <SummaryInformation
+      Keywords="Installer"
+      Description="{{ .ProjectName }} installer"
+      Manufacturer="Thunder Compute"/>
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of {{ .ProjectName }} is already installed."/>
+
+    <Media Id="1" Cabinet="app.cab" EmbedCab="yes"/>
+
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER"/>
+    <ui:WixUI Id="WixUI_InstallDir" />
+    <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
+
+    <Feature Id="Complete" Level="1">
+      <ComponentRef Id="MainExecutable"/>
+      <ComponentRef Id="PathEnv"/>
+    </Feature>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="{{ .ProjectName }}">
+        <Component Id="MainExecutable" Guid="ABCDDCBA-83F1-4F22-985B-FDB3C8ABD474">
+          <File Id="{{ .Binary }}Exe" Name="{{ .Binary }}.exe" Source="{{ .Binary }}.exe" KeyPath="yes"/>
+        </Component>
+        <Component Id="PathEnv" Guid="*">
+          <!-- Store install dir in registry as the component KeyPath -->
+          <RegistryValue
+            Root="HKLM"
+            Key="Software\Thunder Compute\{{ .ProjectName }}"
+            Name="InstallDir"
+            Value="[INSTALLFOLDER]"
+            Type="string"
+            KeyPath="yes"/>
+          <!-- Append install folder to the system PATH -->
+          <Environment
+            Id="AddToPath"
+            Name="PATH"
+            Action="set"
+            Part="last"
+            System="yes"
+            Separator=";"
+            Value="[INSTALLFOLDER]"/>
+        </Component>
+      </Directory>
+    </StandardDirectory>
+  </Package>
+</Wix>

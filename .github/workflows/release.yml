@@ -1,0 +1,642 @@
+# GitHub Actions workflow for releasing Thunder CLI across all platforms
+# Triggered on version tags (e.g., v1.0.0) or manually via workflow_dispatch
+# Manual dispatch allows deploying from any commit without creating a git tag
+#
+# This workflow consists of 3 separate release jobs:
+# 1. macos_release  - Builds, signs, notarizes, and publishes macOS packages (.pkg) and Homebrew formula
+# 2. windows_release - Builds and publishes Windows installers (.msi), Scoop, and Winget packages
+# 3. ubuntu_release - Builds and publishes Linux packages (.deb, .rpm, .apk)
+#
+# Each job uses a separate GoReleaser config file:
+# - .goreleaser.macos.yaml
+# - .goreleaser.windows.yaml
+# - .goreleaser.ubuntu.yaml
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 1.0.0) - without v prefix"
+        required: true
+        type: string
+      create_release:
+        description: "Create GitHub release"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write # Required to create GitHub releases and upload assets
+
+jobs:
+  # ============================================================================
+  # macOS Release Job
+  # ============================================================================
+  # Builds universal binaries for Intel (amd64) and Apple Silicon (arm64)
+  # Signs binaries and .pkg installers with Developer ID certificates
+  # Notarizes packages with Apple's notary service
+  # Publishes to GitHub releases, S3, and Homebrew tap
+  # ============================================================================
+  macos_release:
+    runs-on: macos-latest
+    steps:
+      # Check out the repository with full git history for changelog generation
+      - name: Checkout
+        uses: actions/checkout@v6
+        with: { fetch-depth: 0 }
+
+      # Set version for GoReleaser (from manual input or git tag)
+      - name: Set version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "GORELEASER_CURRENT_TAG=v${{ inputs.version }}" >> $GITHUB_ENV
+            echo "Using manual version: v${{ inputs.version }}"
+          else
+            echo "Using git tag: ${GITHUB_REF#refs/tags/}"
+          fi
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with: { go-version: "1.25.x" }
+
+      # Configure GCP credentials for GoReleaser + gcloud
+      - name: Configure GCP credentials
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          set -euo pipefail
+
+          CREDS_FILE="$RUNNER_TEMP/gcp-sa.json"
+
+          echo "$GCP_SA_KEY" | base64 --decode > "$CREDS_FILE"
+
+          # Make these credentials the default for ALL GCP SDKs and gcloud.
+          {
+            echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE"
+            echo "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=$CREDS_FILE"
+          } >> "$GITHUB_ENV"
+
+      # Setup gcloud CLI
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      # Install Syft for generating Software Bill of Materials
+      - name: Install Syft (for SBOM)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft version
+
+      # Set up Apple Developer certificates for code signing
+      # Creates a temporary build keychain and imports both:
+      # - Developer ID Application (for signing binaries)
+      # - Developer ID Installer (for signing .pkg files)
+      - name: Prepare Apple certificate and keychain
+        env:
+          MACOS_CERT_P12_APP: ${{ secrets.MACOS_CERT_P12_APP }}
+          MACOS_CERT_P12_INSTALLER: ${{ secrets.MACOS_CERT_P12_INSTALLER }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          CERT_PATH="$RUNNER_TEMP/apple-cert.p12"
+          echo "$MACOS_CERT_P12_APP" | base64 -D > "$CERT_PATH"
+          /usr/bin/openssl pkcs12 -in "$CERT_PATH" -noout -passin pass:"$MACOS_CERT_PASSWORD"
+          security create-keychain -p "" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import "$CERT_PATH" -k ~/Library/Keychains/build.keychain \
+            -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productsign
+
+          # Import Developer ID Installer certificate (for productsign)
+          INSTALLER_CERT_PATH="$RUNNER_TEMP/installer-cert.p12"
+          echo "$MACOS_CERT_P12_INSTALLER" | base64 -D > "$INSTALLER_CERT_PATH"
+          /usr/bin/openssl pkcs12 -in "$INSTALLER_CERT_PATH" -noout -passin pass:"$MACOS_CERT_PASSWORD"
+          security import "$INSTALLER_CERT_PATH" -k ~/Library/Keychains/build.keychain \
+            -P "$MACOS_CERT_PASSWORD" -T /usr/bin/productsign -T /usr/bin/codesign
+
+          # Allow codesign/productsign to access keys without prompts
+          security set-key-partition-list -S apple-tool:,apple:,codesign:,productsign: -s -k "" ~/Library/Keychains/build.keychain
+          security list-keychains -d user -s ~/Library/Keychains/build.keychain
+          security default-keychain -s ~/Library/Keychains/build.keychain
+          security find-identity -p codesigning -v || true
+          echo "MACOS_SIGN_P12_PATH=$CERT_PATH" >> "$GITHUB_ENV"
+
+      # Prepare the Apple Notary API key for notarization
+      # Converts the key to proper PKCS#8 format if needed
+      - name: Prepare Notary API key
+        env:
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: |
+          set -euo pipefail
+
+          RAW="$RUNNER_TEMP/notary-key.raw"
+          OUT="$RUNNER_TEMP/notary-key.p8"
+
+          # Write secret as-is
+          printf "%s" "$MACOS_NOTARY_KEY" > "$RAW"
+
+          # If first line doesn't look like PEM, assume it's base64 and decode
+          if ! head -n1 "$RAW" | grep -q "BEGIN "; then
+            base64 -D < "$RAW" > "$RAW.dec" || { echo "Base64 decode failed"; exit 1; }
+            mv "$RAW.dec" "$RAW"
+          fi
+
+          # Normalize newlines (remove CR characters)
+          tr -d '\r' < "$RAW" > "$RAW.norm"
+          mv "$RAW.norm" "$RAW"
+          chmod 600 "$RAW"
+
+          # Convert SEC1 EC → PKCS#8 if needed
+          if head -n1 "$RAW" | grep -q "BEGIN EC PRIVATE KEY"; then
+            /usr/bin/openssl pkcs8 -topk8 -nocrypt -inform PEM -outform PEM -in "$RAW" -out "$OUT"
+          else
+            cp "$RAW" "$OUT"
+          fi
+
+          # Validate key parses
+          /usr/bin/openssl pkey -in "$OUT" -noout -text >/dev/null
+
+          echo "MACOS_NOTARY_KEY_PATH=$OUT" >> "$GITHUB_ENV"
+
+      # Run GoReleaser for macOS
+      # Uses goreleaser-pro for advanced features (signing, notarization)
+      # Config: .goreleaser.macos.yaml
+      - name: "GoReleaser (macOS: build + sign + notarize + publish)"
+        uses: goreleaser/goreleaser-action@v6.4.0
+        with:
+          distribution: goreleaser-pro
+          version: "~> v2"
+          args: release --clean --config .goreleaser.macos.yaml --skip=announce --verbose
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GCP_BUCKET: ${{ secrets.GCP_BUCKET }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+
+          # Binary signing
+          DEVELOPER_ID_APP: ${{ secrets.DEVELOPER_ID_APP }}
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12}}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+
+          # PKG signing & notarization
+          DEVELOPER_ID_INSTALLER: ${{ secrets.DEVELOPER_ID_INSTALLER }}
+          MACOS_NOTARY_KEY_PATH: ${{ env.MACOS_NOTARY_KEY_PATH }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+
+      # Copy files to latest/macos folder
+      # Copies all uploaded files to stable latest/ paths with simplified naming
+      - name: Copy to latest/macos
+        env:
+          BUCKET: ${{ secrets.GCP_BUCKET }}
+        run: |
+          set -euo pipefail
+
+          # Get version from git tag or manual input
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION_NO_V="${{ inputs.version }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION_NO_V="${TAG#v}"
+          fi
+
+          SOURCE_PREFIX="gs://${BUCKET}/tnr/releases/${VERSION_NO_V}/macos/"
+          DEST_PREFIX="gs://${BUCKET}/tnr/releases/latest/macos/"
+
+          # Copy archives (.tar.gz)
+          gcloud storage cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_amd64.tar.gz" \
+            "${DEST_PREFIX}tnr_darwin_amd64.tar.gz" \
+            --cache-control "public, max-age=3600" || true
+
+          gcloud storage cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_arm64.tar.gz" \
+            "${DEST_PREFIX}tnr_darwin_arm64.tar.gz" \
+            --cache-control "public, max-age=3600" || true
+
+          # Copy installers (.pkg)
+          gcloud storage cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_amd64.pkg" \
+            "${DEST_PREFIX}tnr_darwin_amd64.pkg" \
+            --cache-control "public, max-age=3600" || true
+
+          gcloud storage cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_darwin_arm64.pkg" \
+            "${DEST_PREFIX}tnr_darwin_arm64.pkg" \
+            --cache-control "public, max-age=3600" || true
+
+          echo "✅ Copied macOS files to latest/macos/"
+
+  # ============================================================================
+  # Windows Release Job
+  # ============================================================================
+  # Builds binaries for Windows amd64 and arm64
+  # Creates MSI installers using WiX v4
+  # Publishes to GitHub releases, GCS, Scoop bucket, and creates Winget PR
+  # ============================================================================
+  windows_release:
+    runs-on:
+      - self-hosted
+      - Windows
+      - thunder-yubikey
+    steps:
+      # Check out the repository with full git history for changelog generation
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 0 }
+
+      # Set version for GoReleaser (from manual input or git tag)
+      - name: Set version
+        shell: pwsh
+        run: |
+          if ("${{ inputs.version }}" -ne "") {
+            echo "GORELEASER_CURRENT_TAG=v${{ inputs.version }}" >> $env:GITHUB_ENV
+            Write-Host "Using manual version: v${{ inputs.version }}"
+          } else {
+            $tag = $env:GITHUB_REF -replace 'refs/tags/', ''
+            Write-Host "Using git tag: $tag"
+          }
+
+      - uses: actions/setup-go@v6
+        with: { go-version: "1.25.x" }
+
+      # Configure GCP credentials for GoReleaser + gcloud
+      - name: Configure GCP credentials
+        shell: pwsh
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $credsFile = Join-Path $env:RUNNER_TEMP "gcp-sa.json"
+
+          $decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:GCP_SA_KEY))
+          $decoded | Set-Content -Path $credsFile -Encoding utf8
+
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$credsFile" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=$credsFile" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      # Setup gcloud CLI
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      # Install .NET SDK and WiX v4
+      # Using temp directory to avoid permission issues with self-hosted runners
+      - name: Install .NET SDK and WiX v4
+        shell: pwsh
+        run: |
+          # Install .NET SDK 8.x (to temp directory)
+          $dotnetInstallDir = Join-Path $env:RUNNER_TEMP "dotnet"
+          Invoke-WebRequest "https://dot.net/v1/dotnet-install.ps1" -OutFile "$env:RUNNER_TEMP\dotnet-install.ps1"
+          & "$env:RUNNER_TEMP\dotnet-install.ps1" -Channel 8.0 -InstallDir $dotnetInstallDir
+          $env:PATH = "$dotnetInstallDir;$env:PATH"
+          echo $dotnetInstallDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & "$dotnetInstallDir\dotnet.exe" --version
+
+          # Install WiX v4
+          $wixDir = Join-Path $env:RUNNER_TEMP "wix"
+          & "$dotnetInstallDir\dotnet.exe" tool install wix --version 4.0.6 --tool-path $wixDir
+          echo $wixDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "WIX_EXE_PATH=$wixDir\wix.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          # Fetch WiX extension DLLs via NuGet
+          $nuget = Join-Path $env:RUNNER_TEMP "nuget.exe"
+          Invoke-WebRequest "https://dist.nuget.org/win-x86-commandline/v6.9.1/nuget.exe" -OutFile $nuget
+          $pkgsRoot = Join-Path $env:RUNNER_TEMP "wixexts"
+          & $nuget install WixToolset.UI.wixext -Version 4.0.6 -OutputDirectory $pkgsRoot -ExcludeVersion
+          & $nuget install WixToolset.Util.wixext -Version 4.0.6 -OutputDirectory $pkgsRoot -ExcludeVersion
+
+          # Locate extension DLLs and export them
+          $uiDll   = Get-ChildItem "$pkgsRoot\WixToolset.UI.wixext"   -Recurse -Filter WixToolset.UI.wixext.dll   | Select-Object -First 1
+          $utilDll = Get-ChildItem "$pkgsRoot\WixToolset.Util.wixext" -Recurse -Filter WixToolset.Util.wixext.dll | Select-Object -First 1
+          echo "WIX_EXT_UI_DLL=$($uiDll.FullName)"   | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "WIX_EXT_UTIL_DLL=$($utilDll.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      # Install Syft for generating Software Bill of Materials
+      - name: Install Syft (for SBOM)
+        shell: pwsh
+        run: |
+          # Download and install Syft for Windows
+          $syftVersion = "v1.18.0"
+          $syftUrl = "https://github.com/anchore/syft/releases/download/$syftVersion/syft_1.18.0_windows_amd64.zip"
+          $syftZip = "$env:TEMP\syft.zip"
+          $syftDir = "$env:TEMP\syft"
+
+          Invoke-WebRequest -Uri $syftUrl -OutFile $syftZip
+          Expand-Archive -Path $syftZip -DestinationPath $syftDir -Force
+
+          # Add to PATH
+          $env:PATH = "$syftDir;$env:PATH"
+          echo "$syftDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+          # Verify installation
+          syft version
+
+      # Run GoReleaser for Windows
+      # Creates MSI installers and updates Scoop/Winget package managers
+      # MSI files are signed with YubiKey via before_publish hook
+      # Config: .goreleaser.windows.yaml
+      - name: "GoReleaser (Windows: build + sign MSI + publish)"
+        uses: goreleaser/goreleaser-action@v6.4.0
+        with:
+          distribution: goreleaser-pro
+          version: "~> v2"
+          args: release --clean --config .goreleaser.windows.yaml --skip=announce --verbose
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          GCP_BUCKET: ${{ secrets.GCP_BUCKET }}
+          CERT_THUMBPRINT: ${{ secrets.CERT_THUMBPRINT }}
+          TIMESTAMP_SERVER: ${{ secrets.TIMESTAMP_SERVER }}
+
+      # Copy files to latest/windows folder
+      # Copies all uploaded files to stable latest/ paths with simplified naming
+      - name: Copy to latest/windows
+        shell: pwsh
+        env:
+          BUCKET: ${{ secrets.GCP_BUCKET }}
+        run: |
+          # Get version from git tag or manual input
+          if ("${{ inputs.version }}" -ne "") {
+            $versionNoV = "${{ inputs.version }}"
+          } else {
+            $tag = $env:GITHUB_REF -replace 'refs/tags/', ''
+            $versionNoV = $tag -replace '^v', ''
+          }
+
+          $sourcePrefix = "gs://$env:BUCKET/tnr/releases/$versionNoV/windows/"
+          $destPrefix = "gs://$env:BUCKET/tnr/releases/latest/windows/"
+
+          # Copy archives (.zip)
+          $srcZipAmd64 = "$sourcePrefix" + "tnr_$versionNoV" + "_windows_amd64.zip"
+          $destZipAmd64 = "$destPrefix" + "tnr_windows_amd64.zip"
+          gcloud storage cp $srcZipAmd64 $destZipAmd64 --cache-control "public, max-age=3600" 2>&1 | Out-Null
+
+          $srcZipArm64 = "$sourcePrefix" + "tnr_$versionNoV" + "_windows_arm64.zip"
+          $destZipArm64 = "$destPrefix" + "tnr_windows_arm64.zip"
+          gcloud storage cp $srcZipArm64 $destZipArm64 --cache-control "public, max-age=3600" 2>&1 | Out-Null
+
+          # Copy installers (.msi) - note: MSI naming uses hyphens
+          $srcMsiAmd64 = "$sourcePrefix" + "tnr-$versionNoV" + "-amd64.msi"
+          $destMsiAmd64 = "$destPrefix" + "tnr_windows_amd64.msi"
+          gcloud storage cp $srcMsiAmd64 $destMsiAmd64 --cache-control "public, max-age=3600" 2>&1 | Out-Null
+
+          $srcMsiArm64 = "$sourcePrefix" + "tnr-$versionNoV" + "-arm64.msi"
+          $destMsiArm64 = "$destPrefix" + "tnr_windows_arm64.msi"
+          gcloud storage cp $srcMsiArm64 $destMsiArm64 --cache-control "public, max-age=3600" 2>&1 | Out-Null
+
+          Write-Host "✅ Copied Windows files to latest/windows/"
+
+  # ============================================================================
+  # Linux/Ubuntu Release Job
+  # ============================================================================
+  # Builds binaries for Linux amd64 and arm64
+  # Creates distribution packages (.deb, .rpm, .apk)
+  # Publishes to GitHub releases and GCS
+  # ============================================================================
+  ubuntu_release:
+    runs-on: ubuntu-latest
+    steps:
+      # Check out the repository with full git history for changelog generation
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Set version for GoReleaser (from manual input or git tag)
+      - name: Set version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "GORELEASER_CURRENT_TAG=v${{ inputs.version }}" >> $GITHUB_ENV
+            echo "Using manual version: v${{ inputs.version }}"
+          else
+            echo "Using git tag: ${GITHUB_REF#refs/tags/}"
+          fi
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.x"
+
+      # Run tests before building to ensure quality
+      - name: Run tests
+        run: go test ./... -v
+
+      # Configure GCP credentials for GoReleaser + gcloud
+      - name: Configure GCP credentials
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          set -euo pipefail
+
+          CREDS_FILE="$RUNNER_TEMP/gcp-sa.json"
+
+          echo "$GCP_SA_KEY" | base64 --decode > "$CREDS_FILE"
+
+          {
+            echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE"
+            echo "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=$CREDS_FILE"
+          } >> "$GITHUB_ENV"
+
+      # Setup gcloud CLI
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Install Syft (for SBOM)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft version
+
+      # Run GoReleaser for Linux
+      # Creates .deb, .rpm, and .apk packages
+      # IMPORTANT: NFPM packages are auto-included in releases - don't add to extra_files
+      # Config: .goreleaser.ubuntu.yaml
+      - name: "GoReleaser (Ubuntu: linux publish)"
+        uses: goreleaser/goreleaser-action@v6.4.0
+        with:
+          distribution: goreleaser-pro
+          version: "~> v2"
+          args: release --clean --config .goreleaser.ubuntu.yaml --skip=announce --verbose
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GCP_BUCKET: ${{ secrets.GCP_BUCKET }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+
+      # Copy files to latest/linux folder
+      # Copies all uploaded files to stable latest/ paths with simplified naming
+      - name: Copy to latest/linux
+        env:
+          BUCKET: ${{ secrets.GCP_BUCKET }}
+        run: |
+          set -euo pipefail
+
+          # Get version from git tag or manual input
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION_NO_V="${{ inputs.version }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION_NO_V="${TAG#v}"
+          fi
+
+          SOURCE_PREFIX="gs://${BUCKET}/tnr/releases/${VERSION_NO_V}/linux/"
+          DEST_PREFIX="gs://${BUCKET}/tnr/releases/latest/linux/"
+
+          # Copy archives (.tar.gz)
+          gcloud storage cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_linux_amd64.tar.gz" \
+            "${DEST_PREFIX}tnr_linux_amd64.tar.gz" \
+            --cache-control "public, max-age=3600" || true
+
+          gcloud storage cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_linux_arm64.tar.gz" \
+            "${DEST_PREFIX}tnr_linux_arm64.tar.gz" \
+            --cache-control "public, max-age=3600" || true
+
+          # Copy package files (.deb, .rpm, .apk)
+          for arch in amd64 arm64; do
+            for ext in deb rpm apk; do
+              gcloud storage cp "${SOURCE_PREFIX}tnr_${VERSION_NO_V}_linux_${arch}.${ext}" \
+                "${DEST_PREFIX}tnr_linux_${arch}.${ext}" \
+                --cache-control "public, max-age=3600" || true
+            done
+          done
+
+          echo "✅ Copied Linux files to latest/linux/"
+
+  # ============================================================================
+  # Generate latest.json Job
+  # ============================================================================
+  # Runs after all three release jobs complete
+  # Generates complete latest.json manifest with all GCS asset URLs
+  # Uploads to GCS and attaches to GitHub release
+  # ============================================================================
+  generate_latest_json:
+    needs: [macos_release, ubuntu_release, windows_release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Set version for latest.json (from manual input or git tag)
+      - name: Set version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="v${{ inputs.version }}"
+            TAG="v${{ inputs.version }}"
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
+            echo "TAG=$TAG" >> $GITHUB_ENV
+            echo "Using manual version: $VERSION"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="$TAG"
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
+            echo "TAG=$TAG" >> $GITHUB_ENV
+            echo "Using git tag: $TAG"
+          fi
+
+      # Configure GCP credentials for GoReleaser + gcloud
+      - name: Configure GCP credentials
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          set -euo pipefail
+
+          CREDS_FILE="$RUNNER_TEMP/gcp-sa.json"
+
+          echo "$GCP_SA_KEY" | base64 --decode > "$CREDS_FILE"
+
+          {
+            echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS_FILE"
+            echo "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=$CREDS_FILE"
+          } >> "$GITHUB_ENV"
+
+      # Setup gcloud CLI
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      # Download and combine checksum files from all platforms
+      - name: Combine checksum files
+        env:
+          BUCKET: ${{ secrets.GCP_BUCKET }}
+        run: |
+          set -euo pipefail
+
+          VERSION_NO_V="${VERSION#v}"
+
+          # Download checksum files from all platforms
+          gcloud storage cp "gs://${BUCKET}/tnr/releases/${VERSION_NO_V}/linux/checksums-linux.txt" checksums-linux.txt || echo "Warning: Linux checksums not found"
+          gcloud storage cp "gs://${BUCKET}/tnr/releases/${VERSION_NO_V}/macos/checksums-macos.txt" checksums-macos.txt || echo "Warning: macOS checksums not found"
+          gcloud storage cp "gs://${BUCKET}/tnr/releases/${VERSION_NO_V}/windows/checksums-windows.txt" checksums-windows.txt || echo "Warning: Windows checksums not found"
+
+          # Combine all checksum files into one
+          cat checksums-*.txt 2>/dev/null > checksums.txt || touch checksums.txt
+
+      # Upload combined checksums.txt to GCS root level
+      - name: Upload combined checksums.txt to GCS
+        env:
+          BUCKET: ${{ secrets.GCP_BUCKET }}
+        run: |
+          # Strip 'v' prefix from VERSION for GCS paths
+          VERSION_NO_V="${VERSION#v}"
+
+          gcloud storage cp checksums.txt "gs://${BUCKET}/tnr/releases/${VERSION_NO_V}/checksums.txt" \
+            --cache-control "public, max-age=31536000, immutable" \
+            --content-type "text/plain"
+
+      # Generate latest.json with complete GCS asset URLs
+      - name: Generate latest.json
+        run: |
+          set -euo pipefail
+
+          VERSION_NO_V="${VERSION#v}"
+
+          BASE="https://storage.googleapis.com/thunder-cli/tnr/releases/${VERSION_NO_V}"
+
+          cat > latest.json <<JSON
+          {
+            "version": "${VERSION}",
+            "channel": "stable",
+            "assets": {
+              "macos/arm64": "${BASE}/macos/tnr_${VERSION_NO_V}_darwin_arm64.tar.gz",
+              "macos/amd64": "${BASE}/macos/tnr_${VERSION_NO_V}_darwin_amd64.tar.gz",
+              "macos/pkg-amd64": "${BASE}/macos/tnr_${VERSION_NO_V}_darwin_amd64.pkg",
+              "macos/pkg-arm64": "${BASE}/macos/tnr_${VERSION_NO_V}_darwin_arm64.pkg",
+              "linux/arm64": "${BASE}/linux/tnr_${VERSION_NO_V}_linux_arm64.tar.gz",
+              "linux/amd64": "${BASE}/linux/tnr_${VERSION_NO_V}_linux_amd64.tar.gz",
+              "windows/arm64": "${BASE}/windows/tnr_${VERSION_NO_V}_windows_arm64.zip",
+              "windows/amd64": "${BASE}/windows/tnr_${VERSION_NO_V}_windows_amd64.zip",
+              "windows/installer-amd64": "${BASE}/windows/tnr-${VERSION_NO_V}-amd64.msi",
+              "windows/installer-arm64": "${BASE}/windows/tnr-${VERSION_NO_V}-arm64.msi",
+              "checksums": "${BASE}/checksums.txt"
+            }
+          }
+          JSON
+
+      # Upload latest.json to GCS
+      - name: Upload latest.json to GCS
+        env:
+          BUCKET: ${{ secrets.GCP_BUCKET }}
+        run: |
+          gcloud storage cp latest.json "gs://${BUCKET}/tnr/releases/latest.json" \
+            --cache-control "public, max-age=120" \
+            --content-type "application/json"
+
+      # Install GitHub CLI
+      - name: Install GitHub CLI
+        run: |
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh -y
+
+      # Attach latest.json to GitHub release
+      - name: Upload latest.json to GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${TAG}" latest.json --repo Thunder-Compute/thunder-cli --clobber
