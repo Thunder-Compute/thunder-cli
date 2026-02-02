@@ -16,9 +16,10 @@ import (
 )
 
 var scpCmd = &cobra.Command{
-	Use:   "scp [source...] [destination]",
-	Short: "Copy files between local machine and Thunder Compute instances",
-	Args:  cobra.MinimumNArgs(2),
+	Use:          "scp [source...] [destination]",
+	Short:        "Copy files between local machine and Thunder Compute instances",
+	Args:         cobra.MinimumNArgs(2),
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sources := args[:len(args)-1]
 		destination := args[len(args)-1]
@@ -85,7 +86,7 @@ func runSCP(sources []string, destination string) error {
 	client := api.NewClient(config.Token, config.APIURL)
 	instances, err := client.ListInstances()
 	if err != nil {
-		return fmt.Errorf("failed to list instances: %w", err)
+		return utils.WrapAPIError(err, "failed to list instances")
 	}
 
 	var target *api.Instance
@@ -141,7 +142,7 @@ func runSCP(sources []string, destination string) error {
 			fmt.Printf("Downloading %s:%s to %s\n", target.Name, remotePath, localPath)
 		}
 
-		err := utils.SCPTransfer(ctx, keyFile, target.IP, target.Port, localPath, remotePath, direction == "upload")
+		err := utils.Transfer(ctx, keyFile, target.IP, target.Port, localPath, remotePath, direction == "upload")
 		if err != nil {
 			return err
 		}

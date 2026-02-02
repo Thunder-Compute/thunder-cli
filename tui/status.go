@@ -70,13 +70,20 @@ func NewStatusModel(client *api.Client, monitoring bool, instances []api.Instanc
 func (m StatusModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.spinner.Tick}
 	if m.monitoring {
-		cmds = append(cmds, tickCmd())
+		cmds = append(cmds, tickCmd(m.instances))
 	}
 	return tea.Batch(cmds...)
 }
 
-func tickCmd() tea.Cmd {
-	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+func tickCmd(instances []api.Instance) tea.Cmd {
+	interval := 10 * time.Second
+	for _, inst := range instances {
+		if inst.Status == "PROVISIONING" || inst.Status == "RESTORING" || inst.Status == "UNKNOWN" {
+			interval = 5 * time.Second
+			break
+		}
+	}
+	return tea.Tick(interval, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -112,7 +119,7 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		if m.monitoring && len(m.instances) > 0 {
-			return m, tea.Batch(tickCmd(), fetchInstancesCmd(m.client))
+			return m, tea.Batch(tickCmd(m.instances), fetchInstancesCmd(m.client))
 		}
 
 	case spinner.TickMsg:
