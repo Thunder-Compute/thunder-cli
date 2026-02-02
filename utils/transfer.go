@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -15,7 +16,7 @@ func WrapAPIError(err error, context string) error {
 		return nil
 	}
 	errStr := err.Error()
-	if strings.Contains(errStr, "dial tcp") || strings.Contains(errStr, "timeout") || strings.Contains(errStr, "no such host") {
+	if strings.Contains(errStr, "dial tcp") || strings.Contains(errStr, "timeout") || strings.Contains(errStr, "no such host") || strings.Contains(errStr, "deadline exceeded") {
 		return fmt.Errorf("%s: no internet connection", context)
 	}
 	return fmt.Errorf("%s: %w", context, err)
@@ -38,13 +39,10 @@ func Transfer(ctx context.Context, keyFile, ip string, port int, localPath, remo
 		if err == nil {
 			return nil
 		}
-		// Only retry on connection failures (exit code 255)
+		// Only retry on connection failures (exit code 1 or 255)
 		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 255 {
+		if !errors.As(err, &exitErr) || (exitErr.ExitCode() != 1 && exitErr.ExitCode() != 255) {
 			return wrapTransferError(err, upload)
-		}
-		if attempt < 3 {
-			fmt.Printf("Connection failed, retrying (%d/3)...\n", attempt)
 		}
 	}
 	return wrapTransferError(err, upload)
@@ -57,6 +55,10 @@ func wrapTransferError(err error, upload bool) error {
 	}
 
 	switch exitErr.ExitCode() {
+	case -1:
+		return fmt.Errorf("transfer cancelled")
+	case 1, 255:
+		return fmt.Errorf("connection failed: check your internet or instance status")
 	case 2, 23:
 		if upload {
 			return fmt.Errorf("local file not found")
@@ -67,8 +69,6 @@ func wrapTransferError(err error, upload bool) error {
 			return fmt.Errorf("remote directory does not exist")
 		}
 		return fmt.Errorf("local directory does not exist")
-	case 255:
-		return fmt.Errorf("connection failed: check your internet or instance status")
 	default:
 		return fmt.Errorf("transfer failed (exit code %d)", exitErr.ExitCode())
 	}
@@ -77,21 +77,25 @@ func wrapTransferError(err error, upload bool) error {
 func rsyncTransfer(ctx context.Context, keyFile, ip string, port int, localPath, remotePath string, upload bool) error {
 	remote := fmt.Sprintf("ubuntu@%s:%s", ip, remotePath)
 	sshCmd := fmt.Sprintf("ssh -i %s -p %d -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=30", keyFile, port)
-	args := []string{"-az", "-q", "-e", sshCmd, localPath, remote}
+	args := []string{"-az", "--progress", "-e", sshCmd, localPath, remote}
 	if !upload {
-		args = []string{"-az", "-q", "-e", sshCmd, remote, localPath}
+		args = []string{"-az", "--progress", "-e", sshCmd, remote, localPath}
 	}
 	cmd := exec.CommandContext(ctx, "rsync", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
 func scpTransfer(ctx context.Context, keyFile, ip string, port int, localPath, remotePath string, upload bool) error {
 	remote := fmt.Sprintf("ubuntu@%s:%s", ip, remotePath)
-	args := []string{"-i", keyFile, "-P", fmt.Sprintf("%d", port), "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=30", "-q", "-r", localPath, remote}
+	args := []string{"-i", keyFile, "-P", fmt.Sprintf("%d", port), "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=30", "-r", localPath, remote}
 	if !upload {
-		args = []string{"-i", keyFile, "-P", fmt.Sprintf("%d", port), "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=30", "-q", "-r", remote, localPath}
+		args = []string{"-i", keyFile, "-P", fmt.Sprintf("%d", port), "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=30", "-r", remote, localPath}
 	}
 	cmd := exec.CommandContext(ctx, "scp", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
