@@ -1,0 +1,48 @@
+# Binaries
+thunder-cli
+thunder-cli-draft
+tnr
+
+# Test binaries
+*.test
+*.test.exe
+
+# Output of the go coverage tool
+*.out
+docs
+plan.txt
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+/bin/
+/dist/
+*.pkg
+*.msi
+*.deb
+*.rpm
+*.apk
+*.zip
+*.tar.gz
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+.thunder.json.env
