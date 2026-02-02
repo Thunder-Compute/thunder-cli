@@ -35,6 +35,10 @@ tnr scp 0:/home/user/results.csv ./
   Directories are transferred recursively. SSH keys and `~/` expansion are handled automatically.
 </Info>
 
+<Note>
+  Uses `rsync` on Linux and macOS for better performance and progress display. Falls back to `scp` if rsync is unavailable. On Windows/WSL, uses `scp`.
+</Note>
+
 ## Best Practices
 
 - **Compress large transfers**: Zip files before transferring to reduce time
