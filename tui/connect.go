@@ -99,7 +99,7 @@ func (m ConnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var items []string
 		for _, inst := range msg.instances {
 			if inst.Status == "RUNNING" {
-				displayName := fmt.Sprintf("%s (%s) - %s GPU: %s", inst.Name, inst.ID, inst.NumGPUs, utils.FormatGPUType(inst.GPUType))
+				displayName := fmt.Sprintf("%s (%s) - %s GPU: %s", inst.Name, inst.ID, inst.NumGpus, utils.FormatGPUType(inst.GpuType))
 				items = append(items, displayName)
 				if m.displayToID == nil {
 					m.displayToID = make(map[string]string)
@@ -293,7 +293,7 @@ func RunConnectSelectWithInstances(instances []api.Instance) (string, error) {
 	displayToID := make(map[string]string)
 	for _, inst := range instances {
 		if inst.Status == "RUNNING" {
-			displayName := fmt.Sprintf("(%s) %s - %s GPU: %s", inst.ID, inst.Name, inst.NumGPUs, utils.FormatGPUType(inst.GPUType))
+			displayName := fmt.Sprintf("(%s) %s - %s GPU: %s", inst.ID, inst.Name, inst.NumGpus, utils.FormatGPUType(inst.GpuType))
 			items = append(items, displayName)
 			displayToID[displayName] = inst.ID
 		}

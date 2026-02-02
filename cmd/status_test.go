@@ -25,17 +25,18 @@ func TestInstanceStatus(t *testing.T) {
 // TestInstanceFields verifies that all instance fields are correctly
 // assigned and can be retrieved with their expected values.
 func TestInstanceFields(t *testing.T) {
+	ip := "192.168.1.100"
 	instance := &api.Instance{
 		ID:        "test-instance",
-		UUID:      "uuid-123",
+		Uuid:      "uuid-123",
 		Name:      "Test Instance",
 		Status:    "RUNNING",
-		IP:        "192.168.1.100",
-		CPUCores:  "8",
+		Ip:        &ip,
+		CpuCores:  "8",
 		Memory:    "32GB",
 		Storage:   100,
-		GPUType:   "a6000",
-		NumGPUs:   "1",
+		GpuType:   "a6000",
+		NumGpus:   "1",
 		Mode:      "prototyping",
 		Template:  "ubuntu-22.04",
 		CreatedAt: "2023-10-01T10:00:00Z",
@@ -45,15 +46,15 @@ func TestInstanceFields(t *testing.T) {
 	}
 
 	assert.Equal(t, "test-instance", instance.ID)
-	assert.Equal(t, "uuid-123", instance.UUID)
+	assert.Equal(t, "uuid-123", instance.Uuid)
 	assert.Equal(t, "Test Instance", instance.Name)
 	assert.Equal(t, "RUNNING", instance.Status)
-	assert.Equal(t, "192.168.1.100", instance.IP)
-	assert.Equal(t, "8", instance.CPUCores)
+	assert.Equal(t, "192.168.1.100", instance.GetIP())
+	assert.Equal(t, "8", instance.CpuCores)
 	assert.Equal(t, "32GB", instance.Memory)
 	assert.Equal(t, 100, instance.Storage)
-	assert.Equal(t, "a6000", instance.GPUType)
-	assert.Equal(t, "1", instance.NumGPUs)
+	assert.Equal(t, "a6000", instance.GpuType)
+	assert.Equal(t, "1", instance.NumGpus)
 	assert.Equal(t, "prototyping", instance.Mode)
 	assert.Equal(t, "ubuntu-22.04", instance.Template)
 	assert.Equal(t, "2023-10-01T10:00:00Z", instance.CreatedAt)

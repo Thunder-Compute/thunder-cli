@@ -91,7 +91,7 @@ func runSCP(sources []string, destination string) error {
 
 	var target *api.Instance
 	for i, inst := range instances {
-		if inst.ID == instanceID || inst.UUID == instanceID {
+		if inst.ID == instanceID || inst.Uuid == instanceID {
 			target = &instances[i]
 			break
 		}
@@ -103,16 +103,18 @@ func runSCP(sources []string, destination string) error {
 		return fmt.Errorf("instance '%s' is not running (status: %s)", instanceID, target.Status)
 	}
 
-	keyFile := utils.GetKeyFile(target.UUID)
-	if !utils.KeyExists(target.UUID) {
+	keyFile := utils.GetKeyFile(target.Uuid)
+	if !utils.KeyExists(target.Uuid) {
 		keyResp, err := client.AddSSHKey(target.ID)
 		if err != nil {
 			return fmt.Errorf("failed to add SSH key: %w", err)
 		}
-		if err := utils.SavePrivateKey(target.UUID, keyResp.Key); err != nil {
-			return fmt.Errorf("failed to save private key: %w", err)
+		if keyResp.Key != nil {
+			if err := utils.SavePrivateKey(target.Uuid, *keyResp.Key); err != nil {
+				return fmt.Errorf("failed to save private key: %w", err)
+			}
 		}
-		keyFile = utils.GetKeyFile(target.UUID)
+		keyFile = utils.GetKeyFile(target.Uuid)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -142,7 +144,7 @@ func runSCP(sources []string, destination string) error {
 			fmt.Printf("Downloading %s:%s to %s\n", target.Name, remotePath, localPath)
 		}
 
-		err := utils.Transfer(ctx, keyFile, target.IP, target.Port, localPath, remotePath, direction == "upload")
+		err := utils.Transfer(ctx, keyFile, target.GetIP(), target.Port, localPath, remotePath, direction == "upload")
 		if err != nil {
 			return err
 		}

@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func ptr(s string) *string { return &s }
+
 func TestNewClient(t *testing.T) {
 	token := "test_token_12345"
 	baseURL := "https://api.thundercompute.com:8443"
@@ -20,12 +22,12 @@ func TestNewClient(t *testing.T) {
 
 func TestCreateInstanceRequest(t *testing.T) {
 	req := CreateInstanceRequest{
-		CPUCores:   8,
-		GPUType:    "a6000",
+		CpuCores:   8,
+		GpuType:    "a6000",
 		Template:   "ubuntu-22.04",
-		NumGPUs:    1,
-		DiskSizeGB: 100,
-		Mode:       "prototyping",
+		NumGpus:    1,
+		DiskSizeGb: 100,
+		Mode:       InstanceMode("prototyping"),
 	}
 
 	jsonData, err := json.Marshal(req)
@@ -35,27 +37,28 @@ func TestCreateInstanceRequest(t *testing.T) {
 	err = json.Unmarshal(jsonData, &unmarshaled)
 	require.NoError(t, err)
 
-	assert.Equal(t, req.CPUCores, unmarshaled.CPUCores)
-	assert.Equal(t, req.GPUType, unmarshaled.GPUType)
+	assert.Equal(t, req.CpuCores, unmarshaled.CpuCores)
+	assert.Equal(t, req.GpuType, unmarshaled.GpuType)
 	assert.Equal(t, req.Template, unmarshaled.Template)
-	assert.Equal(t, req.NumGPUs, unmarshaled.NumGPUs)
-	assert.Equal(t, req.DiskSizeGB, unmarshaled.DiskSizeGB)
+	assert.Equal(t, req.NumGpus, unmarshaled.NumGpus)
+	assert.Equal(t, req.DiskSizeGb, unmarshaled.DiskSizeGb)
 	assert.Equal(t, req.Mode, unmarshaled.Mode)
 
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(jsonData, &raw))
-	assert.Equal(t, float64(req.CPUCores), raw["cpu_cores"])
-	assert.Equal(t, req.GPUType, raw["gpu_type"])
+	assert.Equal(t, float64(req.CpuCores), raw["cpu_cores"])
+	assert.Equal(t, req.GpuType, raw["gpu_type"])
 	assert.Equal(t, req.Template, raw["template"])
-	assert.Equal(t, float64(req.NumGPUs), raw["num_gpus"])
-	assert.Equal(t, float64(req.DiskSizeGB), raw["disk_size_gb"])
-	assert.Equal(t, req.Mode, raw["mode"])
+	assert.Equal(t, float64(req.NumGpus), raw["num_gpus"])
+	assert.Equal(t, float64(req.DiskSizeGb), raw["disk_size_gb"])
+	assert.Equal(t, string(req.Mode), raw["mode"])
 }
 
 func TestCreateInstanceResponse(t *testing.T) {
 	resp := CreateInstanceResponse{
-		UUID:    "test-uuid-12345",
-		Message: "Instance created successfully",
+		Uuid:       "test-uuid-12345",
+		Key:        "test-key",
+		Identifier: 1,
 	}
 
 	jsonData, err := json.Marshal(resp)
@@ -65,8 +68,9 @@ func TestCreateInstanceResponse(t *testing.T) {
 	err = json.Unmarshal(jsonData, &unmarshaled)
 	require.NoError(t, err)
 
-	assert.Equal(t, resp.UUID, unmarshaled.UUID)
-	assert.Equal(t, resp.Message, unmarshaled.Message)
+	assert.Equal(t, resp.Uuid, unmarshaled.Uuid)
+	assert.Equal(t, resp.Key, unmarshaled.Key)
+	assert.Equal(t, resp.Identifier, unmarshaled.Identifier)
 }
 
 func TestDeleteInstanceResponse(t *testing.T) {
@@ -87,17 +91,18 @@ func TestDeleteInstanceResponse(t *testing.T) {
 }
 
 func TestInstanceStruct(t *testing.T) {
+	ip := "192.168.1.100"
 	instance := Instance{
 		ID:        "test-instance",
-		UUID:      "uuid-123",
+		Uuid:      "uuid-123",
 		Name:      "Test Instance",
 		Status:    "RUNNING",
-		IP:        "192.168.1.100",
-		CPUCores:  "8",
+		Ip:        &ip,
+		CpuCores:  "8",
 		Memory:    "32GB",
 		Storage:   100,
-		GPUType:   "T4",
-		NumGPUs:   "1",
+		GpuType:   "T4",
+		NumGpus:   "1",
 		Mode:      "prototyping",
 		Template:  "ubuntu-22.04",
 		CreatedAt: "2023-10-01T10:00:00Z",
@@ -113,15 +118,15 @@ func TestInstanceStruct(t *testing.T) {
 	err = json.Unmarshal(jsonData, &unmarshaled)
 	require.NoError(t, err)
 
-	assert.Equal(t, instance.UUID, unmarshaled.UUID)
+	assert.Equal(t, instance.Uuid, unmarshaled.Uuid)
 	assert.Equal(t, instance.Name, unmarshaled.Name)
 	assert.Equal(t, instance.Status, unmarshaled.Status)
-	assert.Equal(t, instance.IP, unmarshaled.IP)
-	assert.Equal(t, instance.CPUCores, unmarshaled.CPUCores)
+	assert.Equal(t, instance.GetIP(), unmarshaled.GetIP())
+	assert.Equal(t, instance.CpuCores, unmarshaled.CpuCores)
 	assert.Equal(t, instance.Memory, unmarshaled.Memory)
 	assert.Equal(t, instance.Storage, unmarshaled.Storage)
-	assert.Equal(t, instance.GPUType, unmarshaled.GPUType)
-	assert.Equal(t, instance.NumGPUs, unmarshaled.NumGPUs)
+	assert.Equal(t, instance.GpuType, unmarshaled.GpuType)
+	assert.Equal(t, instance.NumGpus, unmarshaled.NumGpus)
 	assert.Equal(t, instance.Mode, unmarshaled.Mode)
 	assert.Equal(t, instance.Template, unmarshaled.Template)
 	assert.Equal(t, instance.CreatedAt, unmarshaled.CreatedAt)
@@ -141,7 +146,7 @@ func TestTemplateStruct(t *testing.T) {
 		StartupCommands:     []string{"sudo systemctl start docker"},
 		StartupMinutes:      5,
 		Version:             1,
-		DefaultSpecs: ThunderTemplateDefaultSpecs{
+		DefaultSpecs: TemplateDefaultSpecs{
 			Cores:   8,
 			GpuType: "a6000",
 			NumGpus: 1,
@@ -169,8 +174,8 @@ func TestTemplateStruct(t *testing.T) {
 
 func TestAddSSHKeyResponse(t *testing.T) {
 	resp := AddSSHKeyResponse{
-		UUID: "test-uuid-12345",
-		Key:  "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...",
+		Uuid: "test-uuid-12345",
+		Key:  ptr("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7..."),
 	}
 
 	jsonData, err := json.Marshal(resp)
@@ -180,23 +185,8 @@ func TestAddSSHKeyResponse(t *testing.T) {
 	err = json.Unmarshal(jsonData, &unmarshaled)
 	require.NoError(t, err)
 
-	assert.Equal(t, resp.UUID, unmarshaled.UUID)
+	assert.Equal(t, resp.Uuid, unmarshaled.Uuid)
 	assert.Equal(t, resp.Key, unmarshaled.Key)
-}
-
-func TestDeviceIDResponse(t *testing.T) {
-	resp := DeviceIDResponse{
-		ID: "device-12345",
-	}
-
-	jsonData, err := json.Marshal(resp)
-	require.NoError(t, err)
-
-	var unmarshaled DeviceIDResponse
-	err = json.Unmarshal(jsonData, &unmarshaled)
-	require.NoError(t, err)
-
-	assert.Equal(t, resp.ID, unmarshaled.ID)
 }
 
 func TestNewClientWithCustomURL(t *testing.T) {

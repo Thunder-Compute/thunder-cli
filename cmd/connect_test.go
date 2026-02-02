@@ -19,6 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func ptr(s string) *string { return &s }
+
 // =============================================================================
 // Mock API Client
 // =============================================================================
@@ -88,15 +90,15 @@ func (m *mockSSHClient) Close() error {
 func createTestInstance(id, uuid, name, ip, status, template, mode string, port int) api.Instance {
 	return api.Instance{
 		ID:       id,
-		UUID:     uuid,
+		Uuid:     uuid,
 		Name:     name,
-		IP:       ip,
+		Ip:       &ip,
 		Status:   status,
 		Template: template,
 		Mode:     mode,
 		Port:     port,
-		NumGPUs:  "1",
-		GPUType:  "a6000",
+		NumGpus:  "1",
+		GpuType:  "a6000",
 	}
 }
 
@@ -508,15 +510,15 @@ func TestMockAPIClient_ListInstances(t *testing.T) {
 func TestMockAPIClient_AddSSHKey(t *testing.T) {
 	client := &mockAPIClient{
 		addSSHKeyResponse: &api.AddSSHKeyResponse{
-			UUID: "uuid-1",
-			Key:  "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----",
+			Uuid: "uuid-1",
+			Key:  ptr("-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"),
 		},
 	}
 
 	ctx := context.Background()
 	resp, err := client.AddSSHKeyCtx(ctx, "inst-1")
 	require.NoError(t, err)
-	assert.Equal(t, "uuid-1", resp.UUID)
+	assert.Equal(t, "uuid-1", resp.Uuid)
 	assert.Equal(t, 1, client.addSSHKeyCalled)
 	assert.Contains(t, client.addSSHKeyInstanceIDs, "inst-1")
 }
@@ -544,9 +546,9 @@ func TestCreateTestInstance(t *testing.T) {
 	)
 
 	assert.Equal(t, "test-id", instance.ID)
-	assert.Equal(t, "test-uuid", instance.UUID)
+	assert.Equal(t, "test-uuid", instance.Uuid)
 	assert.Equal(t, "test-name", instance.Name)
-	assert.Equal(t, "10.0.0.1", instance.IP)
+	assert.Equal(t, "10.0.0.1", instance.GetIP())
 	assert.Equal(t, "RUNNING", instance.Status)
 	assert.Equal(t, "jupyter", instance.Template)
 	assert.Equal(t, "prototyping", instance.Mode)
@@ -645,7 +647,7 @@ func TestInstanceLookup_ByID(t *testing.T) {
 	var found *api.Instance
 	lookupID := "inst-1"
 	for i := range instances {
-		if instances[i].ID == lookupID || instances[i].UUID == lookupID || instances[i].Name == lookupID {
+		if instances[i].ID == lookupID || instances[i].Uuid == lookupID || instances[i].Name == lookupID {
 			found = &instances[i]
 			break
 		}
@@ -665,7 +667,7 @@ func TestInstanceLookup_ByUUID(t *testing.T) {
 	var found *api.Instance
 	lookupID := "uuid-2"
 	for i := range instances {
-		if instances[i].ID == lookupID || instances[i].UUID == lookupID || instances[i].Name == lookupID {
+		if instances[i].ID == lookupID || instances[i].Uuid == lookupID || instances[i].Name == lookupID {
 			found = &instances[i]
 			break
 		}
@@ -673,7 +675,7 @@ func TestInstanceLookup_ByUUID(t *testing.T) {
 
 	require.NotNil(t, found)
 	assert.Equal(t, "inst-2", found.ID)
-	assert.Equal(t, "uuid-2", found.UUID)
+	assert.Equal(t, "uuid-2", found.Uuid)
 }
 
 func TestInstanceLookup_ByName(t *testing.T) {
@@ -686,7 +688,7 @@ func TestInstanceLookup_ByName(t *testing.T) {
 	var found *api.Instance
 	lookupID := "training-server"
 	for i := range instances {
-		if instances[i].ID == lookupID || instances[i].UUID == lookupID || instances[i].Name == lookupID {
+		if instances[i].ID == lookupID || instances[i].Uuid == lookupID || instances[i].Name == lookupID {
 			found = &instances[i]
 			break
 		}

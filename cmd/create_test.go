@@ -207,20 +207,20 @@ func TestCreateInstanceRequest(t *testing.T) {
 	require.NoError(t, validateCreateConfig(config, templates, []api.Snapshot{}, false))
 
 	req := api.CreateInstanceRequest{
-		Mode:       config.Mode,
-		GPUType:    config.GPUType,
-		NumGPUs:    config.NumGPUs,
-		CPUCores:   config.VCPUs,
+		Mode:       api.InstanceMode(config.Mode),
+		GpuType:    config.GPUType,
+		NumGpus:    config.NumGPUs,
+		CpuCores:   config.VCPUs,
 		Template:   config.Template,
-		DiskSizeGB: config.DiskSizeGB,
+		DiskSizeGb: config.DiskSizeGB,
 	}
 
-	assert.Equal(t, "prototyping", req.Mode)
-	assert.Equal(t, "a6000", req.GPUType)
-	assert.Equal(t, 1, req.NumGPUs)
-	assert.Equal(t, 8, req.CPUCores)
+	assert.Equal(t, api.InstanceMode("prototyping"), req.Mode)
+	assert.Equal(t, "a6000", req.GpuType)
+	assert.Equal(t, 1, req.NumGpus)
+	assert.Equal(t, 8, req.CpuCores)
 	assert.Equal(t, "ubuntu-22.04", req.Template)
-	assert.Equal(t, 100, req.DiskSizeGB)
+	assert.Equal(t, 100, req.DiskSizeGb)
 }
 
 func TestCreateInstanceRequestA100Alias(t *testing.T) {
@@ -239,17 +239,17 @@ func TestCreateInstanceRequestA100Alias(t *testing.T) {
 	require.NoError(t, validateCreateConfig(config, templates, []api.Snapshot{}, false))
 
 	req := api.CreateInstanceRequest{
-		Mode:       config.Mode,
-		GPUType:    config.GPUType,
-		NumGPUs:    config.NumGPUs,
-		CPUCores:   config.VCPUs,
+		Mode:       api.InstanceMode(config.Mode),
+		GpuType:    config.GPUType,
+		NumGpus:    config.NumGPUs,
+		CpuCores:   config.VCPUs,
 		Template:   config.Template,
-		DiskSizeGB: config.DiskSizeGB,
+		DiskSizeGb: config.DiskSizeGB,
 	}
 
-	assert.Equal(t, "prototyping", req.Mode)
-	assert.Equal(t, "a100xl", req.GPUType)
-	assert.Equal(t, 1, req.NumGPUs)
+	assert.Equal(t, api.InstanceMode("prototyping"), req.Mode)
+	assert.Equal(t, "a100xl", req.GpuType)
+	assert.Equal(t, 1, req.NumGpus)
 }
 
 // TestCreateConfigVCPUsAutoSet verifies that VCPUs are automatically calculated

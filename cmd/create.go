@@ -162,9 +162,6 @@ func (m createProgressModel) View() string {
 		lines = append(lines, successTitleStyle.Render("✓ Instance created successfully!"))
 		lines = append(lines, "")
 		lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(fmt.Sprintf("%d", m.resp.Identifier)))
-		if m.resp.Message != "" {
-			lines = append(lines, labelStyle.Render("Message:")+" "+cmdStyle.Render(m.resp.Message))
-		}
 		lines = append(lines, "")
 		lines = append(lines, headerStyle.Render("Next steps:"))
 		lines = append(lines, cmdStyle.Render("  • Run 'tnr status' to monitor provisioning progress"))
@@ -267,12 +264,12 @@ func runCreate(cmd *cobra.Command) error {
 	}
 
 	req := api.CreateInstanceRequest{
-		Mode:       createConfig.Mode,
-		GPUType:    createConfig.GPUType,
-		NumGPUs:    createConfig.NumGPUs,
-		CPUCores:   createConfig.VCPUs,
+		Mode:       api.InstanceMode(createConfig.Mode),
+		GpuType:    createConfig.GPUType,
+		NumGpus:    createConfig.NumGPUs,
+		CpuCores:   createConfig.VCPUs,
 		Template:   createConfig.Template,
-		DiskSizeGB: createConfig.DiskSizeGB,
+		DiskSizeGb: createConfig.DiskSizeGB,
 	}
 
 	progressModel := newCreateProgressModel(client, "Creating instance...", req)
