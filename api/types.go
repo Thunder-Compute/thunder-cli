@@ -24,6 +24,8 @@ type Instance struct {
 	K8s              bool      `json:"k8s"`
 	Promoted         bool      `json:"promoted"`
 	ProvisioningTime time.Time `json:"provisioningTime,omitempty"`
+	RestoringTime    time.Time `json:"restoringTime,omitempty"`
+	SnapshotSize     int64     `json:"snapshotSize,omitempty"`
 }
 
 type ThunderTemplateDefaultSpecs struct {
