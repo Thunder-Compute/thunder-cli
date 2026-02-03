@@ -327,7 +327,7 @@ func runInteractiveLogin() error {
 		case <-ctx.Done():
 			tui.SendLoginCancel(p)
 		case <-time.After(5 * time.Minute):
-			tui.SendLoginError(p, fmt.Errorf("authentication timeout after 5 minutes"))
+			tui.SendLoginError(p, fmt.Errorf("authentication timeout - if you're using SSH, copy the token from your browser and press 'T' to enter it manually"))
 		}
 	}()
 
