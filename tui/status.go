@@ -9,12 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
 var (
@@ -165,6 +166,12 @@ func (m StatusModel) View() string {
 	provisioningSection := m.renderProvisioningSection()
 	if provisioningSection != "" {
 		b.WriteString(provisioningSection)
+	}
+
+	// Render restoring progress section
+	restoringSection := m.renderRestoringSection()
+	if restoringSection != "" {
+		b.WriteString(restoringSection)
 	}
 
 	if m.quitting {
@@ -325,7 +332,7 @@ func (m *StatusModel) renderProvisioningSection() string {
 	// Group instances with PROVISIONING status by GPU type
 	instancesByGPU := make(map[string][]api.Instance)
 	for _, instance := range m.instances {
-		if instance.Status == "PROVISIONING" {
+		if instance.Status == "PROVISIONING" && !instance.ProvisioningTime.IsZero() {
 			instancesByGPU[instance.GPUType] = append(instancesByGPU[instance.GPUType], instance)
 		}
 	}
@@ -381,6 +388,63 @@ func (m *StatusModel) renderProvisioningSection() string {
 		// Render message (compressed)
 		message := fmt.Sprintf("  ~%d min total, ~%d min remaining",
 			int(provisioningExpectedDuration.Minutes()),
+			remainingMinutes,
+		)
+		b.WriteString(timestampStyle.Render(message))
+		b.WriteString("\n\n")
+	}
+
+	return b.String()
+}
+
+func (m *StatusModel) renderRestoringSection() string {
+	// Filter instances with RESTORING status
+	var restoringInstances []api.Instance
+	for _, instance := range m.instances {
+		if instance.Status == "RESTORING" && !instance.RestoringTime.IsZero() {
+			restoringInstances = append(restoringInstances, instance)
+		}
+	}
+
+	if len(restoringInstances) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(primaryStyle.Bold(true).Render("Restoring Instances:"))
+	b.WriteString("\n\n")
+
+	for _, instance := range restoringInstances {
+		// Use instance ID for restoring progress bars (each instance gets its own)
+		progressBarKey := "restoring-" + instance.ID
+		m.ensureProgressBar(progressBarKey)
+		progressBar := m.progressBars[progressBarKey]
+
+		// Calculate progress using the GetProgress method
+		restoringExpectedDuration := utils.EstimateInstanceRestorationDuration(instance.SnapshotSize)
+		progressPercent := utils.GetProgress(instance.RestoringTime, restoringExpectedDuration)
+
+		// Calculate time remaining
+		elapsed := time.Since(instance.RestoringTime)
+		remaining := restoringExpectedDuration - elapsed
+		if remaining < 0 {
+			remaining = 0
+		}
+		remainingMinutes := int(remaining.Minutes())
+		if remainingMinutes < 1 {
+			remainingMinutes = 1
+		}
+
+		// Render instance name (grey, unbolded)
+		b.WriteString(fmt.Sprintf("  %s\n", SubtleTextStyle().Render(instance.Name)))
+
+		// Render progress bar
+		b.WriteString(fmt.Sprintf("  %s\n", progressBar.ViewAs(progressPercent)))
+
+		// Render message (compressed)
+		message := fmt.Sprintf("  ~%d min total, ~%d min remaining",
+			int(restoringExpectedDuration.Minutes()),
 			remainingMinutes,
 		)
 		b.WriteString(timestampStyle.Render(message))

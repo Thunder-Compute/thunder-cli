@@ -29,3 +29,22 @@ func GetProgress(startTime time.Time, expectedDuration time.Duration) float64 {
 	ratio := float64(over) / float64(expectedDuration)
 	return 1 - 0.2*math.Exp(-ratio)
 }
+
+/*
+EstimateInstanceRestorationDuration returns the total duration of how long a snapshot would take to restore
+
+	@param snapshotSize (int64) - the size of the snapshot (in bytes)
+	@return (time.Duration) - the duration of the restoration
+*/
+func EstimateInstanceRestorationDuration(snapshotSize int64) time.Duration {
+	if snapshotSize <= 0 {
+		return 5 * time.Minute
+	}
+
+	const bytesPerGiB = int64(1 << 30)
+	const perGiB = 6 * time.Second
+
+	whole := (snapshotSize / bytesPerGiB) * int64(perGiB)
+	rem := (snapshotSize % bytesPerGiB) * int64(perGiB) / bytesPerGiB
+	return 5*time.Minute + time.Duration(whole+rem)
+}
