@@ -3,23 +3,23 @@ package api
 import (
 	"context"
 
-	"github.com/Thunder-Compute/thundernetes/services/pkg/apitypes"
+	"github.com/Thunder-Compute/thundernetes/services/pkg/thundertypes"
 )
 
 type (
-	Instance               = apitypes.InstanceListItem
-	Template               = apitypes.Template
-	TemplateDefaultSpecs   = apitypes.TemplateDefaultSpecs
-	InstanceMode           = apitypes.InstanceMode
-	CreateInstanceRequest  = apitypes.InstanceCreateRequest
-	CreateInstanceResponse = apitypes.InstanceCreateResponse
-	InstanceModifyRequest  = apitypes.InstanceModifyRequest
-	InstanceModifyResponse = apitypes.InstanceModifyResponse
-	AddSSHKeyResponse      = apitypes.InstanceAddKeyResponse
-	CreateSnapshotRequest  = apitypes.CreateSnapshotRequest
-	CreateSnapshotResponse = apitypes.CreateSnapshotResponse
-	Snapshot               = apitypes.Snapshot
-	ListSnapshotsResponse  = apitypes.ListSnapshotsResponse
+	Instance               = thundertypes.InstanceListItem
+	Template               = thundertypes.Template
+	TemplateDefaultSpecs   = thundertypes.TemplateDefaultSpecs
+	InstanceMode           = thundertypes.InstanceMode
+	CreateInstanceRequest  = thundertypes.InstanceCreateRequest
+	CreateInstanceResponse = thundertypes.InstanceCreateResponse
+	InstanceModifyRequest  = thundertypes.InstanceModifyRequest
+	InstanceModifyResponse = thundertypes.InstanceModifyResponse
+	AddSSHKeyResponse      = thundertypes.InstanceAddKeyResponse
+	CreateSnapshotRequest  = thundertypes.CreateSnapshotRequest
+	CreateSnapshotResponse = thundertypes.CreateSnapshotResponse
+	Snapshot               = thundertypes.Snapshot
+	ListSnapshotsResponse  = thundertypes.ListSnapshotsResponse
 )
 
 // DeleteInstanceResponse is CLI-specific (constructed by client, not from API).

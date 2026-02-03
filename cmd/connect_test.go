@@ -14,9 +14,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Thunder-Compute/thunder-cli/api"
 )
 
 func ptr(s string) *string { return &s }
@@ -113,11 +114,11 @@ func setupTestEnvironment(t *testing.T) (string, func()) {
 	// Create .thunder directory structure
 	thunderDir := filepath.Join(tmpDir, ".thunder")
 	keysDir := filepath.Join(thunderDir, "keys")
-	require.NoError(t, os.MkdirAll(keysDir, 0700))
+	require.NoError(t, os.MkdirAll(keysDir, 0o700))
 
 	// Create .ssh directory
 	sshDir := filepath.Join(tmpDir, ".ssh")
-	require.NoError(t, os.MkdirAll(sshDir, 0700))
+	require.NoError(t, os.MkdirAll(sshDir, 0o700))
 
 	cleanup := func() {
 		if originalHome != "" {
@@ -148,7 +149,7 @@ func saveTestKey(t *testing.T, tmpDir, uuid string) string {
 
 	keyFile := filepath.Join(tmpDir, ".thunder", "keys", uuid)
 	keyData := generateTestSSHKey(t)
-	require.NoError(t, os.WriteFile(keyFile, []byte(keyData), 0600))
+	require.NoError(t, os.WriteFile(keyFile, []byte(keyData), 0o600))
 	return keyFile
 }
 
@@ -629,7 +630,7 @@ func TestSSHConfigUpdate(t *testing.T) {
     HostName 10.0.0.1
     User admin
 `
-	require.NoError(t, os.WriteFile(configPath, []byte(initialConfig), 0600))
+	require.NoError(t, os.WriteFile(configPath, []byte(initialConfig), 0o600))
 
 	// Verify initial state
 	data, err := os.ReadFile(configPath)
