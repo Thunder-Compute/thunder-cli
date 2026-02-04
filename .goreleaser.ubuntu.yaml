@@ -1,0 +1,104 @@
+# GoReleaser configuration for Linux builds
+# This file handles building and publishing Linux packages (.deb, .rpm, .apk)
+# Run by GitHub Actions in the ubuntu_release job
+# See: .github/workflows/release.yml
+
+version: 2
+project_name: tnr
+
+before:
+  hooks: []
+
+# Build configuration for Linux binaries
+builds:
+  - id: tnr
+    main: ./main.go
+    binary: tnr
+    env:
+      - CGO_ENABLED=0
+    goos: [linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildVersion={{ .Version }}
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildCommit={{ .Commit }}
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.BuildDate={{ .Date }}
+      - -X github.com/Thunder-Compute/thunder-cli/internal/version.SentryDSN={{ .Env.SENTRY_DSN }}
+
+# Linux package configuration (.deb, .rpm, .apk)
+# These packages are automatically included in GitHub releases - DO NOT add to release.extra_files
+nfpms:
+  - id: tnr-packages
+    package_name: tnr
+    builds: [tnr]
+    vendor: Thunder Compute
+    homepage: https://github.com/Thunder-Compute/thunder-cli
+    maintainer: Thunder Compute <support@thundercompute.com>
+    description: |
+      Thunder Compute CLI - Manage Thunder GPU compute instances
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/tnr/LICENSE
+      - src: README.md
+        dst: /usr/share/doc/tnr/README.md
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+# Archive configuration (.tar.gz)
+archives:
+  - id: archive
+    ids: [tnr]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+# Checksum file for Linux artifacts
+checksum:
+  name_template: "checksums-linux.txt"
+
+# Software Bill of Materials (SBOM) generation
+sboms:
+  - id: sbom
+    artifacts: archive
+
+# GCS upload configuration
+# Uploads archives and Linux packages to Google Cloud Storage for distribution
+# extra_files needed here because NFPM packages aren't automatically included in blobs
+blobs:
+  - provider: gs
+    bucket: "{{ .Env.GCP_BUCKET }}"
+    directory: "tnr/releases/{{ .Version }}/linux"
+    cache_control:
+      - public
+      - max-age=31536000
+      - immutable
+    ids:
+      - archive
+      - checksum
+    extra_files:
+      - glob: "dist/*.deb"
+      - glob: "dist/*.rpm"
+      - glob: "dist/*.apk"
+
+# GitHub release configuration
+# NOTE: Do NOT add extra_files here for .deb/.rpm/.apk - they're auto-included from nfpms
+# Adding them causes "422 already_exists" errors
+release:
+  disable: false
+  draft: false
+  prerelease: auto
+
+# Changelog generation settings
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
