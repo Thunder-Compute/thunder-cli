@@ -8,8 +8,6 @@ import (
 
 type (
 	Instance               = thundertypes.InstanceListItem
-	Template               = thundertypes.Template
-	TemplateDefaultSpecs   = thundertypes.TemplateDefaultSpecs
 	InstanceMode           = thundertypes.InstanceMode
 	CreateInstanceRequest  = thundertypes.InstanceCreateRequest
 	CreateInstanceResponse = thundertypes.InstanceCreateResponse
@@ -21,6 +19,12 @@ type (
 	Snapshot               = thundertypes.Snapshot
 	ListSnapshotsResponse  = thundertypes.ListSnapshotsResponse
 )
+
+// TemplateEntry represents a template with its key, used for ordered iteration.
+type TemplateEntry struct {
+	Key      string
+	Template thundertypes.EnvironmentTemplate
+}
 
 // DeleteInstanceResponse is CLI-specific (constructed by client, not from API).
 type DeleteInstanceResponse struct {

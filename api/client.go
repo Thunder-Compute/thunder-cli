@@ -10,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/Thunder-Compute/thundernetes/services/pkg/thundertypes"
 	"github.com/getsentry/sentry-go"
 )
 
@@ -206,63 +207,10 @@ func (c *Client) AddSSHKeyCtx(ctx context.Context, instanceID string) (*AddSSHKe
 	return &keyResp, nil
 }
 
-// TODO: Most likely just going to remove this
-func (c *Client) GetNextDeviceIDCtx(ctx context.Context) (string, error) {
-	req, err := http.NewRequest("GET", c.baseURL+"/next_id", nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	c.setHeaders(req)
-
-	resp, err := c.do(ctx, req)
-	if err != nil {
-		return "", fmt.Errorf("failed to make request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 401 {
-		return "", fmt.Errorf("authentication failed: invalid token")
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode != 200 && resp.StatusCode != 201 {
-		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	type deviceIDResponse struct {
-		ID json.Number `json:"id"`
-	}
-
-	var deviceResp deviceIDResponse
-	if err := json.Unmarshal(body, &deviceResp); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if deviceResp.ID == "" {
-		return "", fmt.Errorf("response missing 'id' field")
-	}
-
-	idInt, err := deviceResp.ID.Int64()
-	if err != nil {
-		return "", fmt.Errorf("device ID must be an integer number, got: %q", string(deviceResp.ID))
-	}
-
-	deviceID := fmt.Sprintf("%d", idInt)
-	return deviceID, nil
-}
-
 func (c *Client) ListInstancesWithIPUpdate() ([]Instance, error) {
 	return c.ListInstancesWithIPUpdateCtx(context.Background())
 }
 
-func (c *Client) GetNextDeviceID() (string, error) {
-	return c.GetNextDeviceIDCtx(context.Background())
-}
 func (c *Client) ListInstances() ([]Instance, error) {
 	req, err := http.NewRequest("GET", c.baseURL+"/instances/list", nil)
 	if err != nil {
@@ -310,7 +258,7 @@ func (c *Client) ListInstances() ([]Instance, error) {
 	return instances, nil
 }
 
-func (c *Client) ListTemplates() ([]Template, error) {
+func (c *Client) ListTemplates() ([]TemplateEntry, error) {
 	req, err := http.NewRequest("GET", c.baseURL+"/thunder-templates", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -338,18 +286,17 @@ func (c *Client) ListTemplates() ([]Template, error) {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	var rawResponse map[string]Template
+	var rawResponse thundertypes.ThunderTemplatesResponse
 	if err := json.Unmarshal(body, &rawResponse); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	templates := make([]Template, 0, len(rawResponse))
-	for key, template := range rawResponse {
-		template.Key = key
-		templates = append(templates, template)
+	entries := make([]TemplateEntry, 0, len(rawResponse))
+	for key, tmpl := range rawResponse {
+		entries = append(entries, TemplateEntry{Key: key, Template: tmpl})
 	}
 
-	return templates, nil
+	return entries, nil
 }
 
 func (c *Client) CreateInstance(req CreateInstanceRequest) (*CreateInstanceResponse, error) {

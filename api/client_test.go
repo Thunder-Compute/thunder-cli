@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/Thunder-Compute/thundernetes/services/pkg/thundertypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -135,29 +136,31 @@ func TestInstanceStruct(t *testing.T) {
 	assert.Equal(t, instance.Promoted, unmarshaled.Promoted)
 }
 
+func intPtr(v int) *int       { return &v }
+func strPtr(v string) *string { return &v }
+
 func TestTemplateStruct(t *testing.T) {
-	template := Template{
-		Key:                 "ubuntu-22.04",
+	template := thundertypes.EnvironmentTemplate{
 		DisplayName:         "Ubuntu 22.04",
 		ExtendedDescription: "Ubuntu 22.04 LTS with development tools",
 		AutomountFolders:    []string{"/workspace", "/data"},
 		CleanupCommands:     []string{"sudo apt update", "sudo apt upgrade"},
 		OpenPorts:           []int{8080, 3000, 22},
 		StartupCommands:     []string{"sudo systemctl start docker"},
-		StartupMinutes:      5,
-		Version:             1,
-		DefaultSpecs: TemplateDefaultSpecs{
-			Cores:   8,
-			GpuType: "a6000",
-			NumGpus: 1,
-			Storage: 100,
+		StartupMinutes:      intPtr(5),
+		Version:             intPtr(1),
+		DefaultSpecs: &thundertypes.TemplateDefaultSpecs{
+			Cores:   intPtr(8),
+			GpuType: strPtr("a6000"),
+			NumGpus: intPtr(1),
+			Storage: intPtr(100),
 		},
 	}
 
 	jsonData, err := json.Marshal(template)
 	require.NoError(t, err)
 
-	var unmarshaled Template
+	var unmarshaled thundertypes.EnvironmentTemplate
 	err = json.Unmarshal(jsonData, &unmarshaled)
 	require.NoError(t, err)
 
