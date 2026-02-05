@@ -191,7 +191,7 @@ func (m portsForwardModel) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case portsForwardStepSelectInstance:
 		m.selectedInstance = &m.instances[m.cursor]
-		m.currentPorts = m.selectedInstance.HttpPorts
+		m.currentPorts = m.selectedInstance.HTTPPorts
 		// Pre-populate input with current ports
 		if len(m.currentPorts) > 0 {
 			portStrs := make([]string, len(m.currentPorts))
@@ -361,9 +361,9 @@ func (m portsForwardModel) renderSelectInstanceStep() string {
 
 		// Format ports display
 		portsStr := "(none)"
-		if len(instance.HttpPorts) > 0 {
-			portStrs := make([]string, len(instance.HttpPorts))
-			for j, p := range instance.HttpPorts {
+		if len(instance.HTTPPorts) > 0 {
+			portStrs := make([]string, len(instance.HTTPPorts))
+			for j, p := range instance.HTTPPorts {
 				portStrs[j] = fmt.Sprintf("%d", p)
 			}
 			portsStr = strings.Join(portStrs, ", ")
@@ -431,7 +431,7 @@ func (m portsForwardModel) renderConfirmationStep() string {
 
 	panel.WriteString(m.styles.label.Render("Instance ID:") + "   " + valueStyle.Render(m.selectedInstance.ID))
 	panel.WriteString("\n")
-	panel.WriteString(m.styles.label.Render("Instance UUID:") + " " + valueStyle.Render(m.selectedInstance.Uuid))
+	panel.WriteString(m.styles.label.Render("Instance UUID:") + " " + valueStyle.Render(m.selectedInstance.UUID))
 
 	if len(m.removePorts) > 0 {
 		portStrs := make([]string, len(m.removePorts))
@@ -492,11 +492,11 @@ func (m portsForwardModel) renderCompleteStep() string {
 	lines = append(lines, successTitleStyle.Render("✓ Ports updated successfully!"))
 	lines = append(lines, "")
 	lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(m.resp.Identifier))
-	lines = append(lines, labelStyle.Render("Instance UUID:")+" "+valueStyle.Render(m.selectedInstance.Uuid))
+	lines = append(lines, labelStyle.Render("Instance UUID:")+" "+valueStyle.Render(m.selectedInstance.UUID))
 
-	if len(m.resp.HttpPorts) > 0 {
-		portStrs := make([]string, len(m.resp.HttpPorts))
-		for i, p := range m.resp.HttpPorts {
+	if len(m.resp.HTTPPorts) > 0 {
+		portStrs := make([]string, len(m.resp.HTTPPorts))
+		for i, p := range m.resp.HTTPPorts {
 			portStrs[i] = fmt.Sprintf("%d", p)
 		}
 		lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render(strings.Join(portStrs, ", ")))
@@ -506,8 +506,8 @@ func (m portsForwardModel) renderCompleteStep() string {
 
 	lines = append(lines, "")
 	lines = append(lines, headerStyle.Render("Access your services:"))
-	if len(m.resp.HttpPorts) > 0 {
-		lines = append(lines, labelStyle.Render(fmt.Sprintf("  • https://%s-<port>.thundercompute.net", m.selectedInstance.Uuid)))
+	if len(m.resp.HTTPPorts) > 0 {
+		lines = append(lines, labelStyle.Render(fmt.Sprintf("  • https://%s-<port>.thundercompute.net", m.selectedInstance.UUID)))
 	}
 	lines = append(lines, labelStyle.Render("  • Run 'tnr ports list' to see all forwarded ports"))
 

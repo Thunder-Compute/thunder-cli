@@ -92,7 +92,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 
 		// First try to find by ID or UUID
 		for i := range instances {
-			if instances[i].ID == instanceIdentifier || instances[i].Uuid == instanceIdentifier {
+			if instances[i].ID == instanceIdentifier || instances[i].UUID == instanceIdentifier {
 				selectedInstance = &instances[i]
 				break
 			}
@@ -186,7 +186,7 @@ func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api
 	}
 
 	if config.GPUChanged {
-		req.GpuType = &config.GPUType
+		req.GPUType = &config.GPUType
 	}
 
 	if config.ComputeChanged {
@@ -196,14 +196,14 @@ func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api
 		}
 
 		if effectiveMode == "prototyping" {
-			req.CpuCores = &config.VCPUs
+			req.CPUCores = &config.VCPUs
 		} else {
-			req.NumGpus = &config.NumGPUs
+			req.NumGPUs = &config.NumGPUs
 		}
 	}
 
 	if config.DiskChanged {
-		req.DiskSizeGb = &config.DiskSizeGB
+		req.DiskSizeGB = &config.DiskSizeGB
 	}
 
 	// Check if any changes were made
@@ -281,7 +281,7 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 			return req, fmt.Errorf("GPU type 'a6000' is not available in production mode (use a100xl or h100)")
 		}
 
-		req.GpuType = &normalizedGPU
+		req.GPUType = &normalizedGPU
 		hasChanges = true
 	}
 
@@ -298,7 +298,7 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 			return req, fmt.Errorf("production mode does not use --vcpus flag. Use --num-gpus instead (vCPUs auto-calculated)")
 		}
 
-		req.CpuCores = &vcpus
+		req.CPUCores = &vcpus
 		hasChanges = true
 	}
 
@@ -315,7 +315,7 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 			return req, fmt.Errorf("prototyping mode does not use --num-gpus flag (always 1 GPU). Use --vcpus instead")
 		}
 
-		req.NumGpus = &numGPUs
+		req.NumGPUs = &numGPUs
 		hasChanges = true
 	}
 
@@ -328,7 +328,7 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 		if diskSize > 1000 {
 			return req, fmt.Errorf("disk size must be between %d and 1000 GB", currentInstance.Storage)
 		}
-		req.DiskSizeGb = &diskSize
+		req.DiskSizeGB = &diskSize
 		hasChanges = true
 	}
 
@@ -441,11 +441,11 @@ func (m modifyProgressModel) View() string {
 		if m.resp.Mode != nil {
 			lines = append(lines, labelStyle.Render("New Mode:")+"      "+valueStyle.Render(*m.resp.Mode))
 		}
-		if m.resp.GpuType != nil {
-			lines = append(lines, labelStyle.Render("New GPU:")+"       "+valueStyle.Render(*m.resp.GpuType))
+		if m.resp.GPUType != nil {
+			lines = append(lines, labelStyle.Render("New GPU:")+"       "+valueStyle.Render(*m.resp.GPUType))
 		}
-		if m.resp.NumGpus != nil {
-			lines = append(lines, labelStyle.Render("New GPUs:")+"      "+valueStyle.Render(fmt.Sprintf("%d", *m.resp.NumGpus)))
+		if m.resp.NumGPUs != nil {
+			lines = append(lines, labelStyle.Render("New GPUs:")+"      "+valueStyle.Render(fmt.Sprintf("%d", *m.resp.NumGPUs)))
 		}
 
 		lines = append(lines, "")

@@ -99,7 +99,7 @@ func runDelete(args []string) error {
 		}
 
 		for i := range instances {
-			if instances[i].ID == instanceID || instances[i].Uuid == instanceID {
+			if instances[i].ID == instanceID || instances[i].UUID == instanceID {
 				selectedInstance = &instances[i]
 				break
 			}

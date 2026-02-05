@@ -91,7 +91,7 @@ func runSCP(sources []string, destination string) error {
 
 	var target *api.Instance
 	for i, inst := range instances {
-		if inst.ID == instanceID || inst.Uuid == instanceID {
+		if inst.ID == instanceID || inst.UUID == instanceID {
 			target = &instances[i]
 			break
 		}
@@ -103,18 +103,18 @@ func runSCP(sources []string, destination string) error {
 		return fmt.Errorf("instance '%s' is not running (status: %s)", instanceID, target.Status)
 	}
 
-	keyFile := utils.GetKeyFile(target.Uuid)
-	if !utils.KeyExists(target.Uuid) {
+	keyFile := utils.GetKeyFile(target.UUID)
+	if !utils.KeyExists(target.UUID) {
 		keyResp, err := client.AddSSHKey(target.ID)
 		if err != nil {
 			return fmt.Errorf("failed to add SSH key: %w", err)
 		}
 		if keyResp.Key != nil {
-			if err := utils.SavePrivateKey(target.Uuid, *keyResp.Key); err != nil {
+			if err := utils.SavePrivateKey(target.UUID, *keyResp.Key); err != nil {
 				return fmt.Errorf("failed to save private key: %w", err)
 			}
 		}
-		keyFile = utils.GetKeyFile(target.Uuid)
+		keyFile = utils.GetKeyFile(target.UUID)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

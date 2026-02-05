@@ -169,7 +169,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	} else {
 		var foundInstance *api.Instance
 		for i := range instances {
-			if instances[i].ID == instanceID || instances[i].Uuid == instanceID || instances[i].Name == instanceID {
+			if instances[i].ID == instanceID || instances[i].UUID == instanceID || instances[i].Name == instanceID {
 				foundInstance = &instances[i]
 				break
 			}
@@ -305,7 +305,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	var instance *api.Instance
 	for i := range instances {
-		if instances[i].ID == instanceID || instances[i].Uuid == instanceID || instances[i].Name == instanceID {
+		if instances[i].ID == instanceID || instances[i].UUID == instanceID || instances[i].Name == instanceID {
 			instance = &instances[i]
 			break
 		}
@@ -353,9 +353,9 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	phase3Start := time.Now()
 	tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Checking SSH keys...", 0)
 
-	keyFile := utils.GetKeyFile(instance.Uuid)
+	keyFile := utils.GetKeyFile(instance.UUID)
 	newKeyCreated := false
-	keyExists := utils.KeyExists(instance.Uuid)
+	keyExists := utils.KeyExists(instance.UUID)
 
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{
 		Category: "connect",
@@ -399,7 +399,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		}
 
 		if keyResp.Key != nil {
-			if err := utils.SavePrivateKey(instance.Uuid, *keyResp.Key); err != nil {
+			if err := utils.SavePrivateKey(instance.UUID, *keyResp.Key); err != nil {
 				sentry.AddBreadcrumb(&sentry.Breadcrumb{
 					Category: "connect",
 					Message:  "SSH key save failed",
@@ -554,7 +554,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		}
 
 		if keyResp.Key != nil {
-			if saveErr := utils.SavePrivateKey(instance.Uuid, *keyResp.Key); saveErr != nil {
+			if saveErr := utils.SavePrivateKey(instance.UUID, *keyResp.Key); saveErr != nil {
 				sentry.AddBreadcrumb(&sentry.Breadcrumb{
 					Category: "connect",
 					Message:  "key save failed after regeneration",
@@ -568,7 +568,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			}
 		}
 
-		keyFile = utils.GetKeyFile(instance.Uuid)
+		keyFile = utils.GetKeyFile(instance.UUID)
 		sentry.AddBreadcrumb(&sentry.Breadcrumb{
 			Category: "connect",
 			Message:  "key regenerated, retrying connection",
@@ -690,7 +690,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	// Update SSH config for easy reconnection via `ssh tnr-{instance_id}`
 	templatePorts := utils.GetTemplateOpenPorts(instance.Template)
-	_ = utils.UpdateSSHConfig(instanceID, instance.GetIP(), port, instance.Uuid, tunnelPorts, templatePorts)
+	_ = utils.UpdateSSHConfig(instanceID, instance.GetIP(), port, instance.UUID, tunnelPorts, templatePorts)
 
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{
 		Category: "connect",

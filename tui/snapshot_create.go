@@ -224,7 +224,7 @@ func (m snapshotCreateModel) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case snapshotCreateStepSelectInstance:
 		if m.cursor < len(m.runningInstances) {
-			m.config.InstanceID = m.runningInstances[m.cursor].Uuid
+			m.config.InstanceID = m.runningInstances[m.cursor].UUID
 			m.step = snapshotCreateStepEnterName
 			m.nameInput.Focus()
 		}
@@ -317,8 +317,8 @@ func (m snapshotCreateModel) View() string {
 				display := fmt.Sprintf("(%s) %s - %sx%s",
 					instance.ID,
 					instance.Name,
-					instance.NumGpus,
-					utils.FormatGPUType(instance.GpuType),
+					instance.NumGPUs,
+					utils.FormatGPUType(instance.GPUType),
 				)
 				if m.cursor == i {
 					display = m.styles.selected.Render(display)
@@ -344,7 +344,7 @@ func (m snapshotCreateModel) View() string {
 		// Find the instance details
 		var selectedInstance *api.Instance
 		for i := range m.runningInstances {
-			if m.runningInstances[i].Uuid == m.config.InstanceID {
+			if m.runningInstances[i].UUID == m.config.InstanceID {
 				selectedInstance = &m.runningInstances[i]
 				break
 			}

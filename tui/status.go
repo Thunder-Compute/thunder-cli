@@ -263,13 +263,13 @@ func (m StatusModel) renderTable() string {
 
 	for _, instance := range instances {
 		id := truncate(instance.ID, colWidths["ID"])
-		uuid := truncate(instance.Uuid, colWidths["UUID"])
+		uuid := truncate(instance.UUID, colWidths["UUID"])
 		status := m.formatStatus(instance.Status, colWidths["Status"])
 		address := truncate(instance.GetIP(), colWidths["Address"])
 		mode := truncate(utils.Capitalize(instance.Mode), colWidths["Mode"])
 		disk := truncate(fmt.Sprintf("%dGB", instance.Storage), colWidths["Disk"])
-		gpu := truncate(fmt.Sprintf("%sx%s", instance.NumGpus, utils.FormatGPUType(instance.GpuType)), colWidths["GPU"])
-		vcpus := truncate(instance.CpuCores, colWidths["vCPUs"])
+		gpu := truncate(fmt.Sprintf("%sx%s", instance.NumGPUs, utils.FormatGPUType(instance.GPUType)), colWidths["GPU"])
+		vcpus := truncate(instance.CPUCores, colWidths["vCPUs"])
 		ram := truncate(fmt.Sprintf("%sGB", instance.Memory), colWidths["RAM"])
 		template := truncate(utils.Capitalize(instance.Template), colWidths["Template"])
 
@@ -326,7 +326,7 @@ func (m *StatusModel) renderProvisioningSection() string {
 	instancesByGPU := make(map[string][]api.Instance)
 	for _, instance := range m.instances {
 		if instance.Status == "PROVISIONING" {
-			instancesByGPU[instance.GpuType] = append(instancesByGPU[instance.GpuType], instance)
+			instancesByGPU[instance.GPUType] = append(instancesByGPU[instance.GPUType], instance)
 		}
 	}
 

@@ -215,8 +215,8 @@ func (m deleteModel) View() string {
 			rest := fmt.Sprintf(" %s%s - %sx%s - %s",
 				statusText,
 				statusSuffix,
-				instance.NumGpus,
-				utils.FormatGPUType(instance.GpuType),
+				instance.NumGPUs,
+				utils.FormatGPUType(instance.GPUType),
 				utils.Capitalize(instance.Mode),
 			)
 
@@ -240,7 +240,7 @@ func (m deleteModel) View() string {
 		instanceInfo.WriteString(m.styles.label.Render("Name:         ") + m.selected.Name + "\n")
 		instanceInfo.WriteString(m.styles.label.Render("Status:       ") + m.selected.Status + "\n")
 		instanceInfo.WriteString(m.styles.label.Render("Mode:         ") + utils.Capitalize(m.selected.Mode) + "\n")
-		instanceInfo.WriteString(m.styles.label.Render("GPU:          ") + m.selected.NumGpus + "x" + utils.FormatGPUType(m.selected.GpuType) + "\n")
+		instanceInfo.WriteString(m.styles.label.Render("GPU:          ") + m.selected.NumGPUs + "x" + utils.FormatGPUType(m.selected.GPUType) + "\n")
 		instanceInfo.WriteString(m.styles.label.Render("Template:     ") + utils.Capitalize(m.selected.Template))
 
 		s.WriteString(m.styles.instanceBox.Render(instanceInfo.String()))

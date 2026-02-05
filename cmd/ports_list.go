@@ -123,7 +123,7 @@ func runPortsList() error {
 	// Render rows
 	for _, inst := range sortedInstances {
 		id := truncateStr(inst.ID, colWidths["ID"])
-		uuid := truncateStr(inst.Uuid, colWidths["UUID"])
+		uuid := truncateStr(inst.UUID, colWidths["UUID"])
 
 		// Format status with color
 		var statusStyled string
@@ -138,10 +138,10 @@ func runPortsList() error {
 
 		// Format ports
 		ports := "(none)"
-		if len(inst.HttpPorts) > 0 {
+		if len(inst.HTTPPorts) > 0 {
 			hasPortsConfigured = true
-			portStrs := make([]string, len(inst.HttpPorts))
-			for i, p := range inst.HttpPorts {
+			portStrs := make([]string, len(inst.HTTPPorts))
+			for i, p := range inst.HTTPPorts {
 				portStrs[i] = fmt.Sprintf("%d", p)
 			}
 			ports = strings.Join(portStrs, ", ")

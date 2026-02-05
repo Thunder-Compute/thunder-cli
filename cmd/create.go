@@ -265,11 +265,11 @@ func runCreate(cmd *cobra.Command) error {
 
 	req := api.CreateInstanceRequest{
 		Mode:       api.InstanceMode(createConfig.Mode),
-		GpuType:    createConfig.GPUType,
-		NumGpus:    createConfig.NumGPUs,
-		CpuCores:   createConfig.VCPUs,
+		GPUType:    createConfig.GPUType,
+		NumGPUs:    createConfig.NumGPUs,
+		CPUCores:   createConfig.VCPUs,
 		Template:   createConfig.Template,
-		DiskSizeGb: createConfig.DiskSizeGB,
+		DiskSizeGB: createConfig.DiskSizeGB,
 	}
 
 	progressModel := newCreateProgressModel(client, "Creating instance...", req)

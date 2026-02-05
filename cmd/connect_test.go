@@ -91,15 +91,15 @@ func (m *mockSSHClient) Close() error {
 func createTestInstance(id, uuid, name, ip, status, template, mode string, port int) api.Instance {
 	return api.Instance{
 		ID:       id,
-		Uuid:     uuid,
+		UUID:     uuid,
 		Name:     name,
-		Ip:       &ip,
+		IP:       &ip,
 		Status:   status,
 		Template: template,
 		Mode:     mode,
 		Port:     port,
-		NumGpus:  "1",
-		GpuType:  "a6000",
+		NumGPUs:  "1",
+		GPUType:  "a6000",
 	}
 }
 
@@ -511,7 +511,7 @@ func TestMockAPIClient_ListInstances(t *testing.T) {
 func TestMockAPIClient_AddSSHKey(t *testing.T) {
 	client := &mockAPIClient{
 		addSSHKeyResponse: &api.AddSSHKeyResponse{
-			Uuid: "uuid-1",
+			UUID: "uuid-1",
 			Key:  ptr("-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"),
 		},
 	}
@@ -519,7 +519,7 @@ func TestMockAPIClient_AddSSHKey(t *testing.T) {
 	ctx := context.Background()
 	resp, err := client.AddSSHKeyCtx(ctx, "inst-1")
 	require.NoError(t, err)
-	assert.Equal(t, "uuid-1", resp.Uuid)
+	assert.Equal(t, "uuid-1", resp.UUID)
 	assert.Equal(t, 1, client.addSSHKeyCalled)
 	assert.Contains(t, client.addSSHKeyInstanceIDs, "inst-1")
 }
@@ -547,7 +547,7 @@ func TestCreateTestInstance(t *testing.T) {
 	)
 
 	assert.Equal(t, "test-id", instance.ID)
-	assert.Equal(t, "test-uuid", instance.Uuid)
+	assert.Equal(t, "test-uuid", instance.UUID)
 	assert.Equal(t, "test-name", instance.Name)
 	assert.Equal(t, "10.0.0.1", instance.GetIP())
 	assert.Equal(t, "RUNNING", instance.Status)
@@ -648,7 +648,7 @@ func TestInstanceLookup_ByID(t *testing.T) {
 	var found *api.Instance
 	lookupID := "inst-1"
 	for i := range instances {
-		if instances[i].ID == lookupID || instances[i].Uuid == lookupID || instances[i].Name == lookupID {
+		if instances[i].ID == lookupID || instances[i].UUID == lookupID || instances[i].Name == lookupID {
 			found = &instances[i]
 			break
 		}
@@ -668,7 +668,7 @@ func TestInstanceLookup_ByUUID(t *testing.T) {
 	var found *api.Instance
 	lookupID := "uuid-2"
 	for i := range instances {
-		if instances[i].ID == lookupID || instances[i].Uuid == lookupID || instances[i].Name == lookupID {
+		if instances[i].ID == lookupID || instances[i].UUID == lookupID || instances[i].Name == lookupID {
 			found = &instances[i]
 			break
 		}
@@ -676,7 +676,7 @@ func TestInstanceLookup_ByUUID(t *testing.T) {
 
 	require.NotNil(t, found)
 	assert.Equal(t, "inst-2", found.ID)
-	assert.Equal(t, "uuid-2", found.Uuid)
+	assert.Equal(t, "uuid-2", found.UUID)
 }
 
 func TestInstanceLookup_ByName(t *testing.T) {
@@ -689,7 +689,7 @@ func TestInstanceLookup_ByName(t *testing.T) {
 	var found *api.Instance
 	lookupID := "training-server"
 	for i := range instances {
-		if instances[i].ID == lookupID || instances[i].Uuid == lookupID || instances[i].Name == lookupID {
+		if instances[i].ID == lookupID || instances[i].UUID == lookupID || instances[i].Name == lookupID {
 			found = &instances[i]
 			break
 		}

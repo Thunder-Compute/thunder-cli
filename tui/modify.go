@@ -222,7 +222,7 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 
 		m.config.GPUType = gpuValues[m.cursor]
 		// Case-insensitive comparison
-		m.config.GPUChanged = !strings.EqualFold(m.config.GPUType, m.currentInstance.GpuType)
+		m.config.GPUChanged = !strings.EqualFold(m.config.GPUType, m.currentInstance.GPUType)
 		m.step = modifyStepCompute
 		// Set cursor to current compute position for next step
 		m.cursor = m.getCurrentComputeCursorPosition()
@@ -237,12 +237,12 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		if effectiveMode == "prototyping" {
 			vcpuOptions := []int{4, 8, 16, 32}
 			m.config.VCPUs = vcpuOptions[m.cursor]
-			currentVCPUs, _ := strconv.Atoi(m.currentInstance.CpuCores)
+			currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
 			m.config.ComputeChanged = (m.config.VCPUs != currentVCPUs)
 		} else { // production
 			gpuOptions := []int{1, 2, 4}
 			m.config.NumGPUs = gpuOptions[m.cursor]
-			currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGpus)
+			currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
 			m.config.ComputeChanged = (m.config.NumGPUs != currentNumGPUs)
 		}
 		m.step = modifyStepDiskSize
@@ -302,7 +302,7 @@ func (m modifyModel) getCurrentGPUCursorPosition() int {
 		effectiveMode = m.config.Mode
 	}
 
-	currentGPU := strings.ToLower(m.currentInstance.GpuType)
+	currentGPU := strings.ToLower(m.currentInstance.GPUType)
 
 	if effectiveMode == "prototyping" {
 		if currentGPU == "a6000" {
@@ -330,7 +330,7 @@ func (m modifyModel) getCurrentComputeCursorPosition() int {
 	}
 
 	if effectiveMode == "prototyping" {
-		currentVCPUs, _ := strconv.Atoi(m.currentInstance.CpuCores)
+		currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
 		vcpuOptions := []int{4, 8, 16, 32}
 		for i, vcpus := range vcpuOptions {
 			if vcpus == currentVCPUs {
@@ -339,7 +339,7 @@ func (m modifyModel) getCurrentComputeCursorPosition() int {
 		}
 		return 0
 	}
-	currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGpus)
+	currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
 	gpuOptions := []int{1, 2, 4}
 	for i, gpus := range gpuOptions {
 		if gpus == currentNumGPUs {
@@ -484,7 +484,7 @@ func (m modifyModel) renderGPUStep() string {
 	for i, label := range optionLabels {
 		option := label
 		// Case-insensitive comparison for [current] marker
-		if strings.EqualFold(optionValues[i], m.currentInstance.GpuType) {
+		if strings.EqualFold(optionValues[i], m.currentInstance.GPUType) {
 			option += " [current]"
 		}
 
@@ -510,7 +510,7 @@ func (m modifyModel) renderComputeStep() string {
 	if effectiveMode == "prototyping" {
 		s.WriteString("Select vCPU count (8GB RAM per vCPU):\n\n")
 
-		currentVCPUs, _ := strconv.Atoi(m.currentInstance.CpuCores)
+		currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
 		vcpuOptions := []int{4, 8, 16, 32}
 		for i, vcpus := range vcpuOptions {
 			ram := vcpus * 8
@@ -530,7 +530,7 @@ func (m modifyModel) renderComputeStep() string {
 	} else { // production
 		s.WriteString("Select number of GPUs (18 vCPUs per GPU, 144GB RAM per GPU):\n\n")
 
-		currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGpus)
+		currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
 		gpuOptions := []int{1, 2, 4}
 		for i, gpus := range gpuOptions {
 			vcpus := gpus * 18
@@ -582,7 +582,7 @@ func (m modifyModel) renderConfirmationStep() string {
 	}
 
 	if m.config.GPUChanged {
-		currentGPU := m.formatGPUType(m.currentInstance.GpuType)
+		currentGPU := m.formatGPUType(m.currentInstance.GPUType)
 		newGPU := m.formatGPUType(m.config.GPUType)
 		panel.WriteString(m.styles.label.Render("GPU Type:   ") + fmt.Sprintf("%s → %s", currentGPU, newGPU) + "\n")
 	}
@@ -594,19 +594,19 @@ func (m modifyModel) renderConfirmationStep() string {
 		}
 
 		if effectiveMode == "prototyping" {
-			currentRAM, _ := strconv.Atoi(m.currentInstance.CpuCores)
+			currentRAM, _ := strconv.Atoi(m.currentInstance.CPUCores)
 			currentRAM *= 8
 			newRAM := m.config.VCPUs * 8
-			panel.WriteString(m.styles.label.Render("vCPUs:      ") + fmt.Sprintf("%s → %d", m.currentInstance.CpuCores, m.config.VCPUs) + "\n")
+			panel.WriteString(m.styles.label.Render("vCPUs:      ") + fmt.Sprintf("%s → %d", m.currentInstance.CPUCores, m.config.VCPUs) + "\n")
 			panel.WriteString(m.styles.label.Render("RAM:        ") + fmt.Sprintf("%d GB → %d GB", currentRAM, newRAM) + "\n")
 		} else {
-			currentVCPUs, _ := strconv.Atoi(m.currentInstance.NumGpus)
+			currentVCPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
 			currentVCPUs *= 18
 			newVCPUs := m.config.NumGPUs * 18
-			currentRAM, _ := strconv.Atoi(m.currentInstance.NumGpus)
+			currentRAM, _ := strconv.Atoi(m.currentInstance.NumGPUs)
 			currentRAM *= 144
 			newRAM := m.config.NumGPUs * 144
-			panel.WriteString(m.styles.label.Render("GPUs:       ") + fmt.Sprintf("%s → %d", m.currentInstance.NumGpus, m.config.NumGPUs) + "\n")
+			panel.WriteString(m.styles.label.Render("GPUs:       ") + fmt.Sprintf("%s → %d", m.currentInstance.NumGPUs, m.config.NumGPUs) + "\n")
 			panel.WriteString(m.styles.label.Render("vCPUs:      ") + fmt.Sprintf("%d → %d", currentVCPUs, newVCPUs) + "\n")
 			panel.WriteString(m.styles.label.Render("RAM:        ") + fmt.Sprintf("%d GB → %d GB", currentRAM, newRAM) + "\n")
 		}
@@ -782,8 +782,8 @@ func (m modifyInstanceSelectorModel) View() string {
 		rest := fmt.Sprintf(" %s%s - %sx%s - %s",
 			statusText,
 			statusSuffix,
-			instance.NumGpus,
-			instance.GpuType,
+			instance.NumGPUs,
+			instance.GPUType,
 			utils.Capitalize(instance.Mode),
 		)
 

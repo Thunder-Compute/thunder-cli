@@ -102,7 +102,7 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 
 	// Find instance by ID or UUID
 	for i := range instances {
-		if instances[i].ID == instanceIdentifier || instances[i].Uuid == instanceIdentifier {
+		if instances[i].ID == instanceIdentifier || instances[i].UUID == instanceIdentifier {
 			selectedInstance = &instances[i]
 			break
 		}
@@ -282,9 +282,9 @@ func (m portsForwardProgressModel) View() string {
 		lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(m.resp.Identifier))
 		lines = append(lines, labelStyle.Render("Instance UUID:")+" "+valueStyle.Render(m.resp.InstanceName))
 
-		if len(m.resp.HttpPorts) > 0 {
-			portStrs := make([]string, len(m.resp.HttpPorts))
-			for i, p := range m.resp.HttpPorts {
+		if len(m.resp.HTTPPorts) > 0 {
+			portStrs := make([]string, len(m.resp.HTTPPorts))
+			for i, p := range m.resp.HTTPPorts {
 				portStrs[i] = fmt.Sprintf("%d", p)
 			}
 			lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render(strings.Join(portStrs, ", ")))
@@ -294,7 +294,7 @@ func (m portsForwardProgressModel) View() string {
 
 		lines = append(lines, "")
 		lines = append(lines, headerStyle.Render("Access your services:"))
-		if len(m.resp.HttpPorts) > 0 {
+		if len(m.resp.HTTPPorts) > 0 {
 			lines = append(lines, labelStyle.Render(fmt.Sprintf("  https://%s-<port>.thundercompute.net", m.resp.InstanceName)))
 		}
 		lines = append(lines, labelStyle.Render("  • Run 'tnr ports list' to see all forwarded ports"))
