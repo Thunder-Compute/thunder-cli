@@ -10,7 +10,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Thunder-Compute/thundernetes/services/pkg/thundertypes"
+	"github.com/Thunder-Compute/thunder-cli/pkg/types"
 	"github.com/getsentry/sentry-go"
 )
 
@@ -286,7 +286,7 @@ func (c *Client) ListTemplates() ([]TemplateEntry, error) {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	var rawResponse thundertypes.ThunderTemplatesResponse
+	var rawResponse types.ThunderTemplatesResponse
 	if err := json.Unmarshal(body, &rawResponse); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}

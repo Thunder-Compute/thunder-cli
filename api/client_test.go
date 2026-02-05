@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/Thunder-Compute/thundernetes/services/pkg/thundertypes"
+	"github.com/Thunder-Compute/thunder-cli/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -140,7 +140,7 @@ func intPtr(v int) *int       { return &v }
 func strPtr(v string) *string { return &v }
 
 func TestTemplateStruct(t *testing.T) {
-	template := thundertypes.EnvironmentTemplate{
+	template := types.EnvironmentTemplate{
 		DisplayName:         "Ubuntu 22.04",
 		ExtendedDescription: "Ubuntu 22.04 LTS with development tools",
 		AutomountFolders:    []string{"/workspace", "/data"},
@@ -149,7 +149,7 @@ func TestTemplateStruct(t *testing.T) {
 		StartupCommands:     []string{"sudo systemctl start docker"},
 		StartupMinutes:      intPtr(5),
 		Version:             intPtr(1),
-		DefaultSpecs: &thundertypes.TemplateDefaultSpecs{
+		DefaultSpecs: &types.TemplateDefaultSpecs{
 			Cores:   intPtr(8),
 			GpuType: strPtr("a6000"),
 			NumGpus: intPtr(1),
@@ -160,7 +160,7 @@ func TestTemplateStruct(t *testing.T) {
 	jsonData, err := json.Marshal(template)
 	require.NoError(t, err)
 
-	var unmarshaled thundertypes.EnvironmentTemplate
+	var unmarshaled types.EnvironmentTemplate
 	err = json.Unmarshal(jsonData, &unmarshaled)
 	require.NoError(t, err)
 

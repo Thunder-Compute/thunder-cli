@@ -4,14 +4,14 @@ import (
 	"testing"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/pkg/types"
 	"github.com/Thunder-Compute/thunder-cli/tui"
-	"github.com/Thunder-Compute/thundernetes/services/pkg/thundertypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func tmplEntry(key, displayName string) api.TemplateEntry {
-	return api.TemplateEntry{Key: key, Template: thundertypes.EnvironmentTemplate{DisplayName: displayName}}
+	return api.TemplateEntry{Key: key, Template: types.EnvironmentTemplate{DisplayName: displayName}}
 }
 
 // TestValidateCreateConfig provides comprehensive validation testing for instance
