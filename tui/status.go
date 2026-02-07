@@ -270,13 +270,13 @@ func (m StatusModel) renderTable() string {
 
 	for _, instance := range instances {
 		id := truncate(instance.ID, colWidths["ID"])
-		uuid := truncate(instance.UUID, colWidths["UUID"])
+		uuid := truncate(instance.Uuid, colWidths["UUID"])
 		status := m.formatStatus(instance.Status, colWidths["Status"])
-		address := truncate(instance.IP, colWidths["Address"])
+		address := truncate(instance.GetIP(), colWidths["Address"])
 		mode := truncate(utils.Capitalize(instance.Mode), colWidths["Mode"])
 		disk := truncate(fmt.Sprintf("%dGB", instance.Storage), colWidths["Disk"])
-		gpu := truncate(fmt.Sprintf("%sx%s", instance.NumGPUs, utils.FormatGPUType(instance.GPUType)), colWidths["GPU"])
-		vcpus := truncate(instance.CPUCores, colWidths["vCPUs"])
+		gpu := truncate(fmt.Sprintf("%sx%s", instance.NumGpus, utils.FormatGPUType(instance.GpuType)), colWidths["GPU"])
+		vcpus := truncate(instance.CpuCores, colWidths["vCPUs"])
 		ram := truncate(fmt.Sprintf("%sGB", instance.Memory), colWidths["RAM"])
 		template := truncate(utils.Capitalize(instance.Template), colWidths["Template"])
 
@@ -333,7 +333,7 @@ func (m *StatusModel) renderProvisioningSection() string {
 	instancesByGPU := make(map[string][]api.Instance)
 	for _, instance := range m.instances {
 		if instance.Status == "PROVISIONING" && !instance.ProvisioningTime.IsZero() {
-			instancesByGPU[instance.GPUType] = append(instancesByGPU[instance.GPUType], instance)
+			instancesByGPU[instance.GpuType] = append(instancesByGPU[instance.GpuType], instance)
 		}
 	}
 
@@ -422,6 +422,7 @@ func (m *StatusModel) renderRestoringSection() string {
 		progressBar := m.progressBars[progressBarKey]
 
 		// Calculate progress using the GetProgress method
+		fmt.Printf("size: %d, %v\n", instance.SnapshotSize, instance.RestoringTime)
 		restoringExpectedDuration := utils.EstimateInstanceRestorationDuration(instance.SnapshotSize)
 		progressPercent := utils.GetProgress(instance.RestoringTime, restoringExpectedDuration)
 

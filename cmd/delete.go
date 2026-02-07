@@ -99,7 +99,7 @@ func runDelete(args []string) error {
 		}
 
 		for i := range instances {
-			if instances[i].ID == instanceID || instances[i].UUID == instanceID {
+			if instances[i].ID == instanceID || instances[i].Uuid == instanceID {
 				selectedInstance = &instances[i]
 				break
 			}
@@ -123,7 +123,7 @@ func runDelete(args []string) error {
 		PrintSuccessSimple(successMsg)
 	}
 
-	if err := cleanupSSHConfig(instanceID, selectedInstance.IP); err != nil {
+	if err := cleanupSSHConfig(instanceID, selectedInstance.GetIP()); err != nil {
 		PrintWarning(fmt.Sprintf("Failed to clean up SSH configuration: %v", err))
 	}
 

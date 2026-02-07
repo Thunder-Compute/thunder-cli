@@ -48,7 +48,7 @@ type createModel struct {
 	step             createStep
 	cursor           int
 	config           CreateConfig
-	templates        []api.Template
+	templates        []api.TemplateEntry
 	snapshots        []api.Snapshot
 	templatesLoaded  bool
 	snapshotsLoaded  bool
@@ -118,7 +118,7 @@ func NewCreateModel(client *api.Client) createModel {
 }
 
 type createTemplatesMsg struct {
-	templates []api.Template
+	templates []api.TemplateEntry
 	err       error
 }
 
@@ -127,18 +127,18 @@ type createSnapshotsMsg struct {
 	err       error
 }
 
-func sortTemplates(templates []api.Template) []api.Template {
-	sorted := make([]api.Template, 0, len(templates))
+func sortTemplates(templates []api.TemplateEntry) []api.TemplateEntry {
+	sorted := make([]api.TemplateEntry, 0, len(templates))
 
 	for _, t := range templates {
-		if t.Key == "base" || strings.EqualFold(t.Key, "base") {
+		if strings.EqualFold(t.Key, "base") {
 			sorted = append(sorted, t)
 			break
 		}
 	}
 
 	for _, t := range templates {
-		if t.Key != "base" && !strings.EqualFold(t.Key, "base") {
+		if !strings.EqualFold(t.Key, "base") {
 			sorted = append(sorted, t)
 		}
 	}
@@ -487,14 +487,14 @@ func (m createModel) View() string {
 		} else {
 			// Display templates first
 			s.WriteString(m.styles.label.Render("Templates:") + "\n")
-			for i, template := range m.templates {
+			for i, entry := range m.templates {
 				cursor := "  "
 				if m.cursor == i {
 					cursor = m.styles.cursor.Render("▶ ")
 				}
-				name := template.DisplayName
-				if template.ExtendedDescription != "" {
-					name += fmt.Sprintf(" - %s", template.ExtendedDescription)
+				name := entry.Template.DisplayName
+				if entry.Template.ExtendedDescription != "" {
+					name += fmt.Sprintf(" - %s", entry.Template.ExtendedDescription)
 				}
 				if m.cursor == i {
 					name = m.styles.selected.Render(name)

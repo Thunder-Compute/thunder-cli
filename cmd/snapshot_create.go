@@ -210,7 +210,7 @@ func runSnapshotCreate(cmd *cobra.Command) error {
 
 		var foundInstance *api.Instance
 		for i := range instances {
-			if instances[i].ID == instanceID || instances[i].UUID == instanceID {
+			if instances[i].ID == instanceID || instances[i].Uuid == instanceID {
 				foundInstance = &instances[i]
 				break
 			}
@@ -225,11 +225,11 @@ func runSnapshotCreate(cmd *cobra.Command) error {
 		}
 
 		// Use UUID for the API call
-		instanceID = foundInstance.UUID
+		instanceID = foundInstance.Uuid
 	}
 
 	req := api.CreateSnapshotRequest{
-		InstanceId: instanceID,
+		InstanceID: instanceID,
 		Name:       name,
 	}
 

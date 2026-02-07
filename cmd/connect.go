@@ -169,7 +169,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	} else {
 		var foundInstance *api.Instance
 		for i := range instances {
-			if instances[i].ID == instanceID || instances[i].UUID == instanceID || instances[i].Name == instanceID {
+			if instances[i].ID == instanceID || instances[i].Uuid == instanceID || instances[i].Name == instanceID {
 				foundInstance = &instances[i]
 				break
 			}
@@ -183,7 +183,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			return fmt.Errorf("instance '%s' is not running (status: %s)", instanceID, foundInstance.Status)
 		}
 
-		if foundInstance.IP == "" {
+		if foundInstance.GetIP() == "" {
 			return fmt.Errorf("instance '%s' has no IP address", instanceID)
 		}
 
@@ -305,7 +305,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	var instance *api.Instance
 	for i := range instances {
-		if instances[i].ID == instanceID || instances[i].UUID == instanceID || instances[i].Name == instanceID {
+		if instances[i].ID == instanceID || instances[i].Uuid == instanceID || instances[i].Name == instanceID {
 			instance = &instances[i]
 			break
 		}
@@ -323,7 +323,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		return err
 	}
 
-	if instance.IP == "" {
+	if instance.GetIP() == "" {
 		err := fmt.Errorf("instance %s has no IP address", instanceID)
 		shutdownTUI()
 		return err
@@ -340,7 +340,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		Data: map[string]interface{}{
 			"instance_id":   instanceID,
 			"instance_name": instance.Name,
-			"instance_ip":   instance.IP,
+			"instance_ip":   instance.GetIP(),
 			"instance_port": port,
 			"instance_mode": instance.Mode,
 		},
@@ -348,14 +348,14 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	})
 
 	phaseTimings["instance_validation"] = time.Since(phase2Start)
-	tui.SendPhaseUpdate(p, 1, tui.PhaseCompleted, fmt.Sprintf("Found: %s (%s)", instance.Name, instance.IP), phaseTimings["instance_validation"])
+	tui.SendPhaseUpdate(p, 1, tui.PhaseCompleted, fmt.Sprintf("Found: %s (%s)", instance.Name, instance.GetIP()), phaseTimings["instance_validation"])
 
 	phase3Start := time.Now()
 	tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Checking SSH keys...", 0)
 
-	keyFile := utils.GetKeyFile(instance.UUID)
+	keyFile := utils.GetKeyFile(instance.Uuid)
 	newKeyCreated := false
-	keyExists := utils.KeyExists(instance.UUID)
+	keyExists := utils.KeyExists(instance.Uuid)
 
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{
 		Category: "connect",
@@ -398,17 +398,19 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			return fmt.Errorf("failed to add SSH key: %w", err)
 		}
 
-		if err := utils.SavePrivateKey(instance.UUID, keyResp.Key); err != nil {
-			sentry.AddBreadcrumb(&sentry.Breadcrumb{
-				Category: "connect",
-				Message:  "SSH key save failed",
-				Data: map[string]interface{}{
-					"error": err.Error(),
-				},
-				Level: sentry.LevelError,
-			})
-			shutdownTUI()
-			return fmt.Errorf("failed to save private key: %w", err)
+		if keyResp.Key != nil {
+			if err := utils.SavePrivateKey(instance.Uuid, *keyResp.Key); err != nil {
+				sentry.AddBreadcrumb(&sentry.Breadcrumb{
+					Category: "connect",
+					Message:  "SSH key save failed",
+					Data: map[string]interface{}{
+						"error": err.Error(),
+					},
+					Level: sentry.LevelError,
+				})
+				shutdownTUI()
+				return fmt.Errorf("failed to save private key: %w", err)
+			}
 		}
 		newKeyCreated = true
 		sentry.AddBreadcrumb(&sentry.Breadcrumb{
@@ -422,13 +424,13 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	tui.SendPhaseComplete(p, 2, phaseTimings["ssh_key_management"])
 
 	phase4Start := time.Now()
-	tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Waiting for SSH service on %s:%d...", instance.IP, port), 0)
+	tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Waiting for SSH service on %s:%d...", instance.GetIP(), port), 0)
 
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{
 		Category: "connect",
 		Message:  "waiting for SSH port",
 		Data: map[string]interface{}{
-			"ip":   instance.IP,
+			"ip":   instance.GetIP(),
 			"port": port,
 		},
 		Level: sentry.LevelInfo,
@@ -437,7 +439,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	if checkCancelled() {
 		return nil
 	}
-	if err := utils.WaitForTCPPort(ctx, instance.IP, port, 120*time.Second); err != nil {
+	if err := utils.WaitForTCPPort(ctx, instance.GetIP(), port, 120*time.Second); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil
 		}
@@ -445,7 +447,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			Category: "connect",
 			Message:  "SSH port not available",
 			Data: map[string]interface{}{
-				"ip":    instance.IP,
+				"ip":    instance.GetIP(),
 				"port":  port,
 				"error": err.Error(),
 			},
@@ -459,7 +461,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		return nil
 	}
 
-	tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Connecting to %s:%d...", instance.IP, port), 0)
+	tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Connecting to %s:%d...", instance.GetIP(), port), 0)
 
 	var sshClient *utils.SSHClient
 	progressCallback := func(info utils.SSHRetryInfo) {
@@ -491,7 +493,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		Category: "connect",
 		Message:  "establishing SSH connection",
 		Data: map[string]interface{}{
-			"ip":              instance.IP,
+			"ip":              instance.GetIP(),
 			"port":            port,
 			"new_key_created": newKeyCreated,
 		},
@@ -501,13 +503,13 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	// Use different connection strategies for new keys vs reconnections
 	if newKeyCreated {
 		// New key: expect auth failures while key propagates, use longer timeout
-		sshClient, err = utils.RobustSSHConnectWithProgress(ctx, instance.IP, keyFile, port, 120, progressCallback)
+		sshClient, err = utils.RobustSSHConnectWithProgress(ctx, instance.GetIP(), keyFile, port, 120, progressCallback)
 	} else {
 		// Reconnecting: enable persistent auth failure detection (detects deleted ~/.ssh quickly)
 		sshConnectOpts := &utils.SSHConnectOptions{
 			DetectPersistentAuthFailure: true,
 		}
-		sshClient, err = utils.RobustSSHConnectWithOptions(ctx, instance.IP, keyFile, port, 60, progressCallback, sshConnectOpts)
+		sshClient, err = utils.RobustSSHConnectWithOptions(ctx, instance.GetIP(), keyFile, port, 60, progressCallback, sshConnectOpts)
 	}
 	if checkCancelled() {
 		return nil
@@ -551,27 +553,29 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			return fmt.Errorf("failed to generate new SSH key: %w", keyErr)
 		}
 
-		if saveErr := utils.SavePrivateKey(instance.UUID, keyResp.Key); saveErr != nil {
-			sentry.AddBreadcrumb(&sentry.Breadcrumb{
-				Category: "connect",
-				Message:  "key save failed after regeneration",
-				Data: map[string]interface{}{
-					"error": saveErr.Error(),
-				},
-				Level: sentry.LevelError,
-			})
-			shutdownTUI()
-			return fmt.Errorf("failed to save new private key: %w", saveErr)
+		if keyResp.Key != nil {
+			if saveErr := utils.SavePrivateKey(instance.Uuid, *keyResp.Key); saveErr != nil {
+				sentry.AddBreadcrumb(&sentry.Breadcrumb{
+					Category: "connect",
+					Message:  "key save failed after regeneration",
+					Data: map[string]interface{}{
+						"error": saveErr.Error(),
+					},
+					Level: sentry.LevelError,
+				})
+				shutdownTUI()
+				return fmt.Errorf("failed to save new private key: %w", saveErr)
+			}
 		}
 
-		keyFile = utils.GetKeyFile(instance.UUID)
+		keyFile = utils.GetKeyFile(instance.Uuid)
 		sentry.AddBreadcrumb(&sentry.Breadcrumb{
 			Category: "connect",
 			Message:  "key regenerated, retrying connection",
 			Level:    sentry.LevelInfo,
 		})
 
-		tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Retrying connection with new key to %s:%d...", instance.IP, port), 0)
+		tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Retrying connection with new key to %s:%d...", instance.GetIP(), port), 0)
 
 		retryCallback := func(info utils.SSHRetryInfo) {
 			switch info.Status {
@@ -587,7 +591,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		if checkCancelled() {
 			return nil
 		}
-		sshClient, err = utils.RobustSSHConnectWithProgress(ctx, instance.IP, keyFile, port, 120, retryCallback)
+		sshClient, err = utils.RobustSSHConnectWithProgress(ctx, instance.GetIP(), keyFile, port, 120, retryCallback)
 		if checkCancelled() {
 			return nil
 		}
@@ -686,7 +690,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	// Update SSH config for easy reconnection via `ssh tnr-{instance_id}`
 	templatePorts := utils.GetTemplateOpenPorts(instance.Template)
-	_ = utils.UpdateSSHConfig(instanceID, instance.IP, port, instance.UUID, tunnelPorts, templatePorts)
+	_ = utils.UpdateSSHConfig(instanceID, instance.GetIP(), port, instance.Uuid, tunnelPorts, templatePorts)
 
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{
 		Category: "connect",
@@ -752,7 +756,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		sshArgs = append(sshArgs, "-L", fmt.Sprintf("%d:localhost:%d", port, port))
 	}
 
-	sshArgs = append(sshArgs, fmt.Sprintf("ubuntu@%s", instance.IP))
+	sshArgs = append(sshArgs, fmt.Sprintf("ubuntu@%s", instance.GetIP()))
 
 	execCmd := resolveExecCommand(opts)
 	sshCmd := execCmd("ssh", sshArgs...)

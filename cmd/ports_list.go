@@ -123,7 +123,7 @@ func runPortsList() error {
 	// Render rows
 	for _, inst := range sortedInstances {
 		id := truncateStr(inst.ID, colWidths["ID"])
-		uuid := truncateStr(inst.UUID, colWidths["UUID"])
+		uuid := truncateStr(inst.Uuid, colWidths["UUID"])
 
 		// Format status with color
 		var statusStyled string

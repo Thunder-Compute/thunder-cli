@@ -431,7 +431,7 @@ func (m portsForwardModel) renderConfirmationStep() string {
 
 	panel.WriteString(m.styles.label.Render("Instance ID:") + "   " + valueStyle.Render(m.selectedInstance.ID))
 	panel.WriteString("\n")
-	panel.WriteString(m.styles.label.Render("Instance UUID:") + " " + valueStyle.Render(m.selectedInstance.UUID))
+	panel.WriteString(m.styles.label.Render("Instance UUID:") + " " + valueStyle.Render(m.selectedInstance.Uuid))
 
 	if len(m.removePorts) > 0 {
 		portStrs := make([]string, len(m.removePorts))
@@ -492,7 +492,7 @@ func (m portsForwardModel) renderCompleteStep() string {
 	lines = append(lines, successTitleStyle.Render("✓ Ports updated successfully!"))
 	lines = append(lines, "")
 	lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(m.resp.Identifier))
-	lines = append(lines, labelStyle.Render("Instance UUID:")+" "+valueStyle.Render(m.selectedInstance.UUID))
+	lines = append(lines, labelStyle.Render("Instance UUID:")+" "+valueStyle.Render(m.selectedInstance.Uuid))
 
 	if len(m.resp.HttpPorts) > 0 {
 		portStrs := make([]string, len(m.resp.HttpPorts))
@@ -507,7 +507,7 @@ func (m portsForwardModel) renderCompleteStep() string {
 	lines = append(lines, "")
 	lines = append(lines, headerStyle.Render("Access your services:"))
 	if len(m.resp.HttpPorts) > 0 {
-		lines = append(lines, labelStyle.Render(fmt.Sprintf("  • https://%s-<port>.thundercompute.net", m.selectedInstance.UUID)))
+		lines = append(lines, labelStyle.Render(fmt.Sprintf("  • https://%s-<port>.thundercompute.net", m.selectedInstance.Uuid)))
 	}
 	lines = append(lines, labelStyle.Render("  • Run 'tnr ports list' to see all forwarded ports"))
 

@@ -4,10 +4,15 @@ import (
 	"testing"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/pkg/types"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func tmplEntry(key, displayName string) api.TemplateEntry {
+	return api.TemplateEntry{Key: key, Template: types.EnvironmentTemplate{DisplayName: displayName}}
+}
 
 // TestValidateCreateConfig provides comprehensive validation testing for instance
 // creation configurations, covering both prototyping and production modes with
@@ -16,7 +21,7 @@ func TestValidateCreateConfig(t *testing.T) {
 	tests := []struct {
 		name          string
 		config        *tui.CreateConfig
-		templates     []api.Template
+		templates     []api.TemplateEntry
 		expectError   bool
 		errorContains string
 	}{
@@ -30,8 +35,8 @@ func TestValidateCreateConfig(t *testing.T) {
 				Template:   "ubuntu-22.04",
 				DiskSizeGB: 100,
 			},
-			templates: []api.Template{
-				{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
+			templates: []api.TemplateEntry{
+				tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 			},
 			expectError: false,
 		},
@@ -45,8 +50,8 @@ func TestValidateCreateConfig(t *testing.T) {
 				Template:   "pytorch",
 				DiskSizeGB: 500,
 			},
-			templates: []api.Template{
-				{Key: "pytorch", DisplayName: "PyTorch"},
+			templates: []api.TemplateEntry{
+				tmplEntry("pytorch", "PyTorch"),
 			},
 			expectError: false,
 		},
@@ -126,8 +131,8 @@ func TestValidateCreateConfig(t *testing.T) {
 				Template:   "pytorch",
 				DiskSizeGB: 500,
 			},
-			templates: []api.Template{
-				{Key: "pytorch", DisplayName: "PyTorch"},
+			templates: []api.TemplateEntry{
+				tmplEntry("pytorch", "PyTorch"),
 			},
 			expectError: false,
 		},
@@ -140,8 +145,8 @@ func TestValidateCreateConfig(t *testing.T) {
 				Template:   "ubuntu-22.04",
 				DiskSizeGB: 50,
 			},
-			templates: []api.Template{
-				{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
+			templates: []api.TemplateEntry{
+				tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 			},
 			expectError:   true,
 			errorContains: "disk size must be between 100 and 1000 GB",
@@ -166,8 +171,8 @@ func TestValidateCreateConfig(t *testing.T) {
 				Template:   "nonexistent",
 				DiskSizeGB: 100,
 			},
-			templates: []api.Template{
-				{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
+			templates: []api.TemplateEntry{
+				tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 			},
 			expectError:   true,
 			errorContains: "template 'nonexistent' not found",
@@ -200,27 +205,27 @@ func TestCreateInstanceRequest(t *testing.T) {
 		DiskSizeGB: 100,
 	}
 
-	templates := []api.Template{
-		{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
+	templates := []api.TemplateEntry{
+		tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 	}
 
 	require.NoError(t, validateCreateConfig(config, templates, []api.Snapshot{}, false))
 
 	req := api.CreateInstanceRequest{
-		Mode:       config.Mode,
-		GPUType:    config.GPUType,
-		NumGPUs:    config.NumGPUs,
-		CPUCores:   config.VCPUs,
+		Mode:       api.InstanceMode(config.Mode),
+		GpuType:    config.GPUType,
+		NumGpus:    config.NumGPUs,
+		CpuCores:   config.VCPUs,
 		Template:   config.Template,
-		DiskSizeGB: config.DiskSizeGB,
+		DiskSizeGb: config.DiskSizeGB,
 	}
 
-	assert.Equal(t, "prototyping", req.Mode)
-	assert.Equal(t, "a6000", req.GPUType)
-	assert.Equal(t, 1, req.NumGPUs)
-	assert.Equal(t, 8, req.CPUCores)
+	assert.Equal(t, api.InstanceMode("prototyping"), req.Mode)
+	assert.Equal(t, "a6000", req.GpuType)
+	assert.Equal(t, 1, req.NumGpus)
+	assert.Equal(t, 8, req.CpuCores)
 	assert.Equal(t, "ubuntu-22.04", req.Template)
-	assert.Equal(t, 100, req.DiskSizeGB)
+	assert.Equal(t, 100, req.DiskSizeGb)
 }
 
 func TestCreateInstanceRequestA100Alias(t *testing.T) {
@@ -232,24 +237,24 @@ func TestCreateInstanceRequestA100Alias(t *testing.T) {
 		DiskSizeGB: 100,
 	}
 
-	templates := []api.Template{
-		{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
+	templates := []api.TemplateEntry{
+		tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 	}
 
 	require.NoError(t, validateCreateConfig(config, templates, []api.Snapshot{}, false))
 
 	req := api.CreateInstanceRequest{
-		Mode:       config.Mode,
-		GPUType:    config.GPUType,
-		NumGPUs:    config.NumGPUs,
-		CPUCores:   config.VCPUs,
+		Mode:       api.InstanceMode(config.Mode),
+		GpuType:    config.GPUType,
+		NumGpus:    config.NumGPUs,
+		CpuCores:   config.VCPUs,
 		Template:   config.Template,
-		DiskSizeGB: config.DiskSizeGB,
+		DiskSizeGb: config.DiskSizeGB,
 	}
 
-	assert.Equal(t, "prototyping", req.Mode)
-	assert.Equal(t, "a100xl", req.GPUType)
-	assert.Equal(t, 1, req.NumGPUs)
+	assert.Equal(t, api.InstanceMode("prototyping"), req.Mode)
+	assert.Equal(t, "a100xl", req.GpuType)
+	assert.Equal(t, 1, req.NumGpus)
 }
 
 // TestCreateConfigVCPUsAutoSet verifies that VCPUs are automatically calculated
@@ -264,8 +269,8 @@ func TestCreateConfigVCPUsAutoSet(t *testing.T) {
 		DiskSizeGB: 100,
 	}
 
-	templates := []api.Template{
-		{Key: "pytorch", DisplayName: "PyTorch"},
+	templates := []api.TemplateEntry{
+		tmplEntry("pytorch", "PyTorch"),
 	}
 
 	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
@@ -285,8 +290,8 @@ func TestCreateConfigGPUTypeCaseInsensitive(t *testing.T) {
 		DiskSizeGB: 100,
 	}
 
-	templates := []api.Template{
-		{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
+	templates := []api.TemplateEntry{
+		tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 	}
 
 	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
@@ -304,8 +309,8 @@ func TestCreateConfigA100Alias(t *testing.T) {
 		DiskSizeGB: 100,
 	}
 
-	templates := []api.Template{
-		{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
+	templates := []api.TemplateEntry{
+		tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 	}
 
 	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
@@ -325,8 +330,8 @@ func TestCreateConfigTemplateCaseInsensitive(t *testing.T) {
 		DiskSizeGB: 100,
 	}
 
-	templates := []api.Template{
-		{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
+	templates := []api.TemplateEntry{
+		tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 	}
 
 	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
@@ -346,8 +351,8 @@ func TestCreateConfigTemplateByDisplayName(t *testing.T) {
 		DiskSizeGB: 100,
 	}
 
-	templates := []api.Template{
-		{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
+	templates := []api.TemplateEntry{
+		tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 	}
 
 	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
@@ -396,8 +401,8 @@ func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 				DiskSizeGB: tt.diskSizeGB,
 			}
 
-			templates := []api.Template{
-				{Key: "ubuntu-22.04", DisplayName: "Ubuntu 22.04"},
+			templates := []api.TemplateEntry{
+				tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 			}
 
 			err := validateCreateConfig(config, templates, []api.Snapshot{}, false)

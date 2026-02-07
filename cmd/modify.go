@@ -92,7 +92,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 
 		// First try to find by ID or UUID
 		for i := range instances {
-			if instances[i].ID == instanceIdentifier || instances[i].UUID == instanceIdentifier {
+			if instances[i].ID == instanceIdentifier || instances[i].Uuid == instanceIdentifier {
 				selectedInstance = &instances[i]
 				break
 			}
@@ -181,7 +181,8 @@ func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api
 	req := api.InstanceModifyRequest{}
 
 	if config.ModeChanged {
-		req.Mode = &config.Mode
+		mode := api.InstanceMode(config.Mode)
+		req.Mode = &mode
 	}
 
 	if config.GPUChanged {
@@ -244,14 +245,15 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 				return req, fmt.Errorf("switching to prototyping requires --vcpus flag (4, 8, 16, or 32)")
 			}
 		}
-		req.Mode = &mode
+		instanceMode := api.InstanceMode(mode)
+		req.Mode = &instanceMode
 		hasChanges = true
 	}
 
 	// Determine effective mode for GPU and compute validation
 	effectiveMode := currentInstance.Mode
 	if req.Mode != nil {
-		effectiveMode = *req.Mode
+		effectiveMode = string(*req.Mode)
 	}
 
 	// GPU type validation

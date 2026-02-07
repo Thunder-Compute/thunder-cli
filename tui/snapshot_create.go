@@ -224,7 +224,7 @@ func (m snapshotCreateModel) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case snapshotCreateStepSelectInstance:
 		if m.cursor < len(m.runningInstances) {
-			m.config.InstanceID = m.runningInstances[m.cursor].UUID
+			m.config.InstanceID = m.runningInstances[m.cursor].Uuid
 			m.step = snapshotCreateStepEnterName
 			m.nameInput.Focus()
 		}
@@ -317,8 +317,8 @@ func (m snapshotCreateModel) View() string {
 				display := fmt.Sprintf("(%s) %s - %sx%s",
 					instance.ID,
 					instance.Name,
-					instance.NumGPUs,
-					utils.FormatGPUType(instance.GPUType),
+					instance.NumGpus,
+					utils.FormatGPUType(instance.GpuType),
 				)
 				if m.cursor == i {
 					display = m.styles.selected.Render(display)
@@ -344,7 +344,7 @@ func (m snapshotCreateModel) View() string {
 		// Find the instance details
 		var selectedInstance *api.Instance
 		for i := range m.runningInstances {
-			if m.runningInstances[i].UUID == m.config.InstanceID {
+			if m.runningInstances[i].Uuid == m.config.InstanceID {
 				selectedInstance = &m.runningInstances[i]
 				break
 			}
@@ -353,7 +353,7 @@ func (m snapshotCreateModel) View() string {
 		if selectedInstance != nil {
 			panel.WriteString(m.styles.label.Render("Instance ID:   ") + selectedInstance.ID + "\n")
 			panel.WriteString(m.styles.label.Render("Instance Name: ") + selectedInstance.Name + "\n")
-			panel.WriteString(m.styles.label.Render("Instance IP:   ") + selectedInstance.IP + "\n")
+			panel.WriteString(m.styles.label.Render("Instance IP:   ") + selectedInstance.GetIP() + "\n")
 		}
 		panel.WriteString(m.styles.label.Render("Snapshot Name: ") + m.config.Name)
 

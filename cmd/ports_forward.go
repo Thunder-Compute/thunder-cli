@@ -102,7 +102,7 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 
 	// Find instance by ID or UUID
 	for i := range instances {
-		if instances[i].ID == instanceIdentifier || instances[i].UUID == instanceIdentifier {
+		if instances[i].ID == instanceIdentifier || instances[i].Uuid == instanceIdentifier {
 			selectedInstance = &instances[i]
 			break
 		}
