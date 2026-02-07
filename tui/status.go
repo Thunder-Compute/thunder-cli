@@ -422,7 +422,6 @@ func (m *StatusModel) renderRestoringSection() string {
 		progressBar := m.progressBars[progressBarKey]
 
 		// Calculate progress using the GetProgress method
-		fmt.Printf("size: %d, %v\n", instance.SnapshotSize, instance.RestoringTime)
 		restoringExpectedDuration := utils.EstimateInstanceRestorationDuration(instance.SnapshotSize)
 		progressPercent := utils.GetProgress(instance.RestoringTime, restoringExpectedDuration)
 
