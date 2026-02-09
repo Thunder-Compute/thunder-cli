@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,14 +18,16 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/internal/sshkeys"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
 var (
-	tunnelPorts []string
-	debugMode   bool
+	tunnelPorts        []string
+	debugMode          bool
+	connectSSHKeyName  string
 )
 
 // mocks for testing
@@ -32,6 +35,7 @@ type connectOptions struct {
 	client       api.ConnectClient
 	skipTTYCheck bool
 	skipTUI      bool
+	sshKeyName   string
 	sshConnector func(ctx context.Context, ip, keyFile string, port, maxWait int) (sshClient, error)
 	execCommand  func(name string, args ...string) *exec.Cmd
 	configLoader func() (*Config, error)
@@ -83,7 +87,7 @@ var connectCmd = &cobra.Command{
 		if len(args) > 0 {
 			instanceID = args[0]
 		}
-		return runConnect(instanceID, tunnelPorts, debugMode)
+		return runConnect(instanceID, tunnelPorts, debugMode, connectSSHKeyName)
 	},
 }
 
@@ -94,12 +98,13 @@ func init() {
 
 	rootCmd.AddCommand(connectCmd)
 	connectCmd.Flags().StringSliceVarP(&tunnelPorts, "tunnel", "t", []string{}, "Port forwarding (can specify multiple times: -t 8080 -t 3000)")
+	connectCmd.Flags().StringVar(&connectSSHKeyName, "ssh-key", "", "Name of a saved SSH key to use (see 'tnr ssh-keys list')")
 	connectCmd.Flags().BoolVar(&debugMode, "debug", false, "Show detailed timing breakdown")
 	_ = connectCmd.Flags().MarkHidden("debug") //nolint:errcheck // flag hiding failure is non-fatal
 }
 
-func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
-	return runConnectWithOptions(instanceID, tunnelPortsStr, debug, nil)
+func runConnect(instanceID string, tunnelPortsStr []string, debug bool, sshKeyName string) error {
+	return runConnectWithOptions(instanceID, tunnelPortsStr, debug, &connectOptions{sshKeyName: sshKeyName})
 }
 
 // runConnectWithOptions accepts options for testing. If opts is nil, default options are used.
@@ -353,71 +358,132 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	phase3Start := time.Now()
 	tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Checking SSH keys...", 0)
 
+	sshKeyName := ""
+	if opts != nil {
+		sshKeyName = opts.sshKeyName
+	}
+
 	keyFile := utils.GetKeyFile(instance.Uuid)
 	newKeyCreated := false
-	keyExists := utils.KeyExists(instance.Uuid)
-
-	sentry.AddBreadcrumb(&sentry.Breadcrumb{
-		Category: "connect",
-		Message:  "checking SSH keys",
-		Data: map[string]interface{}{
-			"key_exists": keyExists,
-			"key_file":   keyFile,
-		},
-		Level: sentry.LevelInfo,
-	})
+	usingSavedKey := sshKeyName != ""
 
 	if checkCancelled() {
 		return nil
 	}
-	if !keyExists {
+
+	if usingSavedKey {
+		// Saved key path: look up key by name, find local private key, push public key to instance
+		tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Looking up saved SSH key...", 0)
+
+		keys, err := client.ListSSHKeys()
+		if err != nil {
+			shutdownTUI()
+			return fmt.Errorf("failed to fetch SSH keys: %w", err)
+		}
+
+		var matchedKey *api.SSHKey
+		for i := range keys {
+			if strings.EqualFold(keys[i].Name, sshKeyName) {
+				matchedKey = &keys[i]
+				break
+			}
+		}
+
+		if matchedKey == nil {
+			shutdownTUI()
+			return fmt.Errorf("SSH key '%s' not found. Run 'tnr ssh-keys list' to see available keys", sshKeyName)
+		}
+
+		tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Finding local private key...", 0)
+
+		localPrivateKeyPath, err := sshkeys.FindPrivateKeyForPublicKey(matchedKey.PublicKey)
+		if err != nil {
+			shutdownTUI()
+			return fmt.Errorf("failed to find local private key for '%s': %w", sshKeyName, err)
+		}
+
+		tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Pushing key to instance...", 0)
+
+		if _, err := client.AddSSHKeyToInstanceWithPublicKey(instance.Uuid, matchedKey.PublicKey); err != nil {
+			shutdownTUI()
+			return fmt.Errorf("failed to add key to instance: %w", err)
+		}
+
+		keyFile = localPrivateKeyPath
+		newKeyCreated = true // Use longer timeout for key propagation
+
 		sentry.AddBreadcrumb(&sentry.Breadcrumb{
 			Category: "connect",
-			Message:  "generating new SSH key",
+			Message:  "saved SSH key attached to instance",
 			Data: map[string]interface{}{
-				"instance_id": instanceID,
+				"key_name":  sshKeyName,
+				"key_file":  localPrivateKeyPath,
+			},
+			Level: sentry.LevelInfo,
+		})
+	} else {
+		// Default path: auto-generate key if none exists locally
+		keyExists := utils.KeyExists(instance.Uuid)
+
+		sentry.AddBreadcrumb(&sentry.Breadcrumb{
+			Category: "connect",
+			Message:  "checking SSH keys",
+			Data: map[string]interface{}{
+				"key_exists": keyExists,
+				"key_file":   keyFile,
 			},
 			Level: sentry.LevelInfo,
 		})
 
-		tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Generating new SSH key...", 0)
-		keyResp, err := client.AddSSHKeyCtx(ctx, instanceID)
-		if checkCancelled() {
-			return nil
-		}
-		if err != nil {
+		if !keyExists {
 			sentry.AddBreadcrumb(&sentry.Breadcrumb{
 				Category: "connect",
-				Message:  "SSH key generation failed",
+				Message:  "generating new SSH key",
 				Data: map[string]interface{}{
-					"error": err.Error(),
+					"instance_id": instanceID,
 				},
-				Level: sentry.LevelError,
+				Level: sentry.LevelInfo,
 			})
-			shutdownTUI()
-			return fmt.Errorf("failed to add SSH key: %w", err)
-		}
 
-		if keyResp.Key != nil {
-			if err := utils.SavePrivateKey(instance.Uuid, *keyResp.Key); err != nil {
+			tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Generating new SSH key...", 0)
+			keyResp, err := client.AddSSHKeyCtx(ctx, instanceID)
+			if checkCancelled() {
+				return nil
+			}
+			if err != nil {
 				sentry.AddBreadcrumb(&sentry.Breadcrumb{
 					Category: "connect",
-					Message:  "SSH key save failed",
+					Message:  "SSH key generation failed",
 					Data: map[string]interface{}{
 						"error": err.Error(),
 					},
 					Level: sentry.LevelError,
 				})
 				shutdownTUI()
-				return fmt.Errorf("failed to save private key: %w", err)
+				return fmt.Errorf("failed to add SSH key: %w", err)
 			}
+
+			if keyResp.Key != nil {
+				if err := utils.SavePrivateKey(instance.Uuid, *keyResp.Key); err != nil {
+					sentry.AddBreadcrumb(&sentry.Breadcrumb{
+						Category: "connect",
+						Message:  "SSH key save failed",
+						Data: map[string]interface{}{
+							"error": err.Error(),
+						},
+						Level: sentry.LevelError,
+					})
+					shutdownTUI()
+					return fmt.Errorf("failed to save private key: %w", err)
+				}
+			}
+			newKeyCreated = true
+			sentry.AddBreadcrumb(&sentry.Breadcrumb{
+				Category: "connect",
+				Message:  "SSH key created successfully",
+				Level:    sentry.LevelInfo,
+			})
 		}
-		newKeyCreated = true
-		sentry.AddBreadcrumb(&sentry.Breadcrumb{
-			Category: "connect",
-			Message:  "SSH key created successfully",
-			Level:    sentry.LevelInfo,
-		})
 	}
 
 	phaseTimings["ssh_key_management"] = time.Since(phase3Start)
@@ -516,6 +582,12 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	}
 
 	// Handle persistent auth failure (likely deleted ~/.ssh on instance) or other auth errors
+	// When using a saved key, don't auto-regenerate on auth failure
+	if err != nil && usingSavedKey {
+		shutdownTUI()
+		return fmt.Errorf("SSH authentication failed with saved key '%s'. Verify the private key in ~/.ssh/ is correct", sshKeyName)
+	}
+
 	needsKeyRegeneration := err != nil && !newKeyCreated && (errors.Is(err, utils.ErrPersistentAuthFailure) || utils.IsAuthError(err) || utils.IsKeyParseError(err))
 	if needsKeyRegeneration {
 		sentry.AddBreadcrumb(&sentry.Breadcrumb{

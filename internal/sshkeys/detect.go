@@ -1,6 +1,7 @@
 package sshkeys
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -75,6 +76,39 @@ func DetectLocalKeys() ([]DetectedKey, error) {
 	})
 
 	return keys, nil
+}
+
+// normalizePublicKey extracts the first two space-separated fields (type + base64 data),
+// stripping any trailing comment or whitespace for comparison purposes.
+func normalizePublicKey(key string) string {
+	parts := strings.Fields(strings.TrimSpace(key))
+	if len(parts) >= 2 {
+		return parts[0] + " " + parts[1]
+	}
+	return strings.TrimSpace(key)
+}
+
+// FindPrivateKeyForPublicKey scans ~/.ssh/*.pub for a key matching the given public key,
+// then returns the path to the corresponding private key file.
+func FindPrivateKeyForPublicKey(targetPublicKey string) (string, error) {
+	keys, err := DetectLocalKeys()
+	if err != nil {
+		return "", fmt.Errorf("failed to scan local SSH keys: %w", err)
+	}
+
+	normalizedTarget := normalizePublicKey(targetPublicKey)
+
+	for _, key := range keys {
+		if normalizePublicKey(key.PublicKey) == normalizedTarget {
+			privateKeyPath := strings.TrimSuffix(key.Path, ".pub")
+			if _, err := os.Stat(privateKeyPath); err != nil {
+				return "", fmt.Errorf("found matching public key at %s but no private key exists at %s", key.Path, privateKeyPath)
+			}
+			return privateKeyPath, nil
+		}
+	}
+
+	return "", fmt.Errorf("no local private key found matching the saved key — ensure the corresponding private key exists in ~/.ssh/")
 }
 
 func isValidSSHPublicKey(key string) bool {
