@@ -22,6 +22,7 @@ var (
 	vcpus      int
 	template   string
 	diskSizeGB int
+	sshKeyName string
 )
 
 var createCmd = &cobra.Command{
@@ -57,6 +58,7 @@ func init() {
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): 4, 8, 16, or 32")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (100-1000)")
+	createCmd.Flags().StringVar(&sshKeyName, "ssh-key", "", "Name of a saved SSH key to attach to the instance")
 }
 
 type createProgressModel struct {
@@ -293,6 +295,40 @@ func runCreate(cmd *cobra.Command) error {
 		return fmt.Errorf("failed to create instance: %w", result.err)
 	}
 
+	// Post-creation: attach saved SSH key if --ssh-key was provided
+	if sshKeyName != "" {
+		if err := attachSSHKeyToInstance(client, result.resp.Uuid, sshKeyName); err != nil {
+			PrintWarning(fmt.Sprintf("Instance created but failed to attach SSH key: %v", err))
+		}
+	}
+
+	return nil
+}
+
+func attachSSHKeyToInstance(client *api.Client, instanceUUID, keyName string) error {
+	keys, err := client.ListSSHKeys()
+	if err != nil {
+		return fmt.Errorf("failed to fetch SSH keys: %w", err)
+	}
+
+	var matchedKey *api.SSHKey
+	for i := range keys {
+		if strings.EqualFold(keys[i].Name, keyName) {
+			matchedKey = &keys[i]
+			break
+		}
+	}
+
+	if matchedKey == nil {
+		return fmt.Errorf("SSH key '%s' not found. Run 'tnr ssh-keys list' to see available keys", keyName)
+	}
+
+	_, err = client.AddSSHKeyToInstanceWithPublicKey(instanceUUID, matchedKey.PublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to add key to instance: %w", err)
+	}
+
+	PrintSuccessSimple(fmt.Sprintf("SSH key '%s' attached to instance", keyName))
 	return nil
 }
 
