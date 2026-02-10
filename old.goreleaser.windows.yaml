@@ -71,7 +71,6 @@ blobs:
       - glob: "dist/*.msi"
 
 # GitHub release configuration
-
 # extra_files needed here to include MSI installers in GitHub releases
 release:
   disable: false
@@ -81,7 +80,6 @@ release:
     - glob: "dist/*.msi"
 
 # Changelog generation settings
-
 changelog:
   use: github
   sort: asc
@@ -96,7 +94,6 @@ changelog:
 scoops:
   - name: tnr
     ids: [archive]
-    url_template: "https://storage.googleapis.com/thunder-cli/tnr/releases/{{ .Version }}/windows/{{ .ArtifactName }}"
     homepage: "https://github.com/Thunder-Compute/thunder-cli"
     description: "Thunder Compute CLI"
     license: MIT
