@@ -152,8 +152,8 @@ func TestTemplateStruct(t *testing.T) {
 		Version:             intPtr(1),
 		DefaultSpecs: &types.TemplateDefaultSpecs{
 			Cores:   intPtr(8),
-			GpuType: strPtr("a6000"),
-			NumGpus: intPtr(1),
+			GPUType: strPtr("a6000"),
+			NumGPUs: intPtr(1),
 			Storage: intPtr(100),
 		},
 	}
