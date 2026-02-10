@@ -77,13 +77,6 @@ func RenderConnectHelp(cmd *cobra.Command) {
 	output.WriteString(CommandTextStyle.Render("tnr connect 0 --debug"))
 	output.WriteString("\n\n")
 
-	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Connect using a saved SSH key"))
-	output.WriteString("\n")
-	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr connect 0 --ssh-key mykey"))
-	output.WriteString("\n\n")
-
 	// Flags Section
 	output.WriteString(SectionStyle.Render("● FLAGS"))
 	output.WriteString("\n\n")
@@ -92,12 +85,6 @@ func RenderConnectHelp(cmd *cobra.Command) {
 	output.WriteString(FlagStyle.Render("--tunnel, -t"))
 	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Port forwarding (can specify multiple times: -t 8080 -t 3000)"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(FlagStyle.Render("--ssh-key"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Name of a saved SSH key to use (see 'tnr ssh-keys list')"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

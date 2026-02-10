@@ -117,6 +117,7 @@ type InstanceCreateRequest struct {
 	GpuType    string       `json:"gpu_type"`
 	NumGpus    int          `json:"num_gpus"`
 	DiskSizeGb int          `json:"disk_size_gb"`
+	PublicKey  string       `json:"public_key,omitempty"`
 }
 
 // InstanceCreateResponse represents the response from creating an instance.
