@@ -18,6 +18,11 @@ type (
 	CreateSnapshotResponse = types.CreateSnapshotResponse
 	Snapshot               = types.Snapshot
 	ListSnapshotsResponse  = types.ListSnapshotsResponse
+	SSHKey                 = types.SSHKey
+	SSHKeyAddRequest       = types.SSHKeyAddRequest
+	SSHKeyAddResponse      = types.SSHKeyAddResponse
+	SSHKeyListResponse     = types.SSHKeyListResponse
+	SSHKeyDeleteResponse   = types.SSHKeyDeleteResponse
 )
 
 // TemplateEntry represents a template with its key, used for ordered iteration.
@@ -38,4 +43,6 @@ type ConnectClient interface {
 	ListInstances() ([]Instance, error)
 	ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, error)
 	AddSSHKeyCtx(ctx context.Context, instanceID string) (*AddSSHKeyResponse, error)
+	ListSSHKeys() (SSHKeyListResponse, error)
+	AddSSHKeyToInstanceWithPublicKey(instanceID, publicKey string) (*AddSSHKeyResponse, error)
 }

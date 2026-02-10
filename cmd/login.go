@@ -16,15 +16,17 @@ import (
 	"runtime"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/cobra"
+
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/spf13/cobra"
 )
 
 const (
-	authURL     = "https://console.thundercompute.com/login/vscode"
+	// authURL     = "https://console.thundercompute.com/login/vscode"
+	authURL     = "http://localhost:3000/login/vscode"
 	callbackURL = "http://127.0.0.1"
 )
 
@@ -476,7 +478,7 @@ func saveConfig(authResp AuthResponse) error {
 	}
 
 	configDir := filepath.Join(homeDir, ".thunder")
-	if err := os.MkdirAll(configDir, 0700); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		return err
 	}
 
@@ -496,7 +498,7 @@ func saveConfig(authResp AuthResponse) error {
 		return err
 	}
 
-	return os.WriteFile(configPath, data, 0600)
+	return os.WriteFile(configPath, data, 0o600)
 }
 
 // .thunder.json config

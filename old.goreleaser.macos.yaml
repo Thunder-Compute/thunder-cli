@@ -80,7 +80,7 @@ builds:
               --issuer "$MACOS_NOTARY_ISSUER_ID" \
               --wait \
               --timeout 20m; then
-              
+
               # Staple the notarization ticket to the package
               xcrun stapler staple "$PKG_SIGNED" || true
             else
@@ -142,7 +142,6 @@ blobs:
       - glob: "dist/*.pkg"
 
 # GitHub release configuration
-
 # extra_files needed here to include .pkg installers in GitHub releases
 release:
   disable: false
@@ -152,7 +151,6 @@ release:
     - glob: "dist/*.pkg"
 
 # Changelog generation settings
-
 changelog:
   use: github
   sort: asc
