@@ -3,24 +3,28 @@ package api
 import (
 	"context"
 
-	"github.com/Thunder-Compute/thundernetes/services/pkg/thundertypes"
+	"github.com/Thunder-Compute/thunder-cli/pkg/types"
 )
 
 type (
-	Instance               = thundertypes.InstanceListItem
-	Template               = thundertypes.Template
-	TemplateDefaultSpecs   = thundertypes.TemplateDefaultSpecs
-	InstanceMode           = thundertypes.InstanceMode
-	CreateInstanceRequest  = thundertypes.InstanceCreateRequest
-	CreateInstanceResponse = thundertypes.InstanceCreateResponse
-	InstanceModifyRequest  = thundertypes.InstanceModifyRequest
-	InstanceModifyResponse = thundertypes.InstanceModifyResponse
-	AddSSHKeyResponse      = thundertypes.InstanceAddKeyResponse
-	CreateSnapshotRequest  = thundertypes.CreateSnapshotRequest
-	CreateSnapshotResponse = thundertypes.CreateSnapshotResponse
-	Snapshot               = thundertypes.Snapshot
-	ListSnapshotsResponse  = thundertypes.ListSnapshotsResponse
+	Instance               = types.InstanceListItem
+	InstanceMode           = types.InstanceMode
+	CreateInstanceRequest  = types.InstanceCreateRequest
+	CreateInstanceResponse = types.InstanceCreateResponse
+	InstanceModifyRequest  = types.InstanceModifyRequest
+	InstanceModifyResponse = types.InstanceModifyResponse
+	AddSSHKeyResponse      = types.InstanceAddKeyResponse
+	CreateSnapshotRequest  = types.CreateSnapshotRequest
+	CreateSnapshotResponse = types.CreateSnapshotResponse
+	Snapshot               = types.Snapshot
+	ListSnapshotsResponse  = types.ListSnapshotsResponse
 )
+
+// TemplateEntry represents a template with its key, used for ordered iteration.
+type TemplateEntry struct {
+	Key      string
+	Template types.EnvironmentTemplate
+}
 
 // DeleteInstanceResponse is CLI-specific (constructed by client, not from API).
 type DeleteInstanceResponse struct {

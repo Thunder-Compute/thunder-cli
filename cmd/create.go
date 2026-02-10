@@ -296,7 +296,7 @@ func runCreate(cmd *cobra.Command) error {
 	return nil
 }
 
-func validateCreateConfig(config *tui.CreateConfig, templates []api.Template, snapshots []api.Snapshot, diskSizeWasSet bool) error {
+func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntry, snapshots []api.Snapshot, diskSizeWasSet bool) error {
 	config.Mode = strings.ToLower(config.Mode)
 	config.GPUType = strings.ToLower(config.GPUType)
 
@@ -363,7 +363,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.Template, sn
 
 	// First check templates
 	for _, t := range templates {
-		if t.Key == config.Template || strings.EqualFold(t.DisplayName, config.Template) {
+		if t.Key == config.Template || strings.EqualFold(t.Template.DisplayName, config.Template) {
 			config.Template = t.Key
 			templateFound = true
 			break

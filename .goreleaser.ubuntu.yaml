@@ -87,18 +87,24 @@ blobs:
       - glob: "dist/*.apk"
 
 # GitHub release configuration
+# Releases are created on the public thunder-cli repo (not the monorepo)
 # NOTE: Do NOT add extra_files here for .deb/.rpm/.apk - they're auto-included from nfpms
 # Adding them causes "422 already_exists" errors
 release:
+  github:
+    owner: Thunder-Compute
+    name: thunder-cli
   disable: false
   draft: false
   prerelease: auto
 
 # Changelog generation settings
+# Uses git (not github) since monorepo GitHub commits would be noisy/irrelevant
 changelog:
-  use: github
+  use: git
   sort: asc
   filters:
     exclude:
       - "^docs:"
       - "^test:"
+      - "Merge pull request"

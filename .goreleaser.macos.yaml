@@ -142,8 +142,12 @@ blobs:
       - glob: "dist/*.pkg"
 
 # GitHub release configuration
+# Releases are created on the public thunder-cli repo (not the monorepo)
 # extra_files needed here to include .pkg installers in GitHub releases
 release:
+  github:
+    owner: Thunder-Compute
+    name: thunder-cli
   disable: false
   draft: false
   prerelease: auto
@@ -151,13 +155,15 @@ release:
     - glob: "dist/*.pkg"
 
 # Changelog generation settings
+# Uses git (not github) since monorepo GitHub commits would be noisy/irrelevant
 changelog:
-  use: github
+  use: git
   sort: asc
   filters:
     exclude:
       - "^docs:"
       - "^test:"
+      - "Merge pull request"
 
 # Homebrew tap integration
 # Automatically updates the Homebrew tap with new releases
@@ -165,6 +171,7 @@ changelog:
 brews:
   - name: tnr
     ids: [archive]
+    url_template: "https://storage.googleapis.com/thunder-cli/tnr/releases/{{ .Version }}/macos/{{ .ArtifactName }}"
     repository:
       owner: Thunder-Compute
       name: homebrew-tnr

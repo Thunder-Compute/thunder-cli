@@ -2,11 +2,8 @@ module github.com/Thunder-Compute/thunder-cli
 
 go 1.25.3
 
-replace github.com/Thunder-Compute/thundernetes => ../
-
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/Thunder-Compute/thundernetes v0.0.0
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
