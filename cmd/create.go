@@ -58,7 +58,7 @@ func init() {
 	createCmd.Flags().StringVar(&mode, "mode", "", "Instance mode: prototyping or production")
 	createCmd.Flags().StringVar(&gpuType, "gpu", "", "GPU type (prototyping: a6000 or a100, production: a100 or h100)")
 	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs (production only): 1, 2, 4, or 8")
-	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): 4, 8, 16, or 32")
+	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): 4, 8, or 16")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (100-1000)")
 	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-key", "", "Name of a saved SSH key to attach (see 'tnr ssh-keys list')")
@@ -368,10 +368,10 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 		config.NumGPUs = 1
 
 		if config.VCPUs == 0 {
-			return fmt.Errorf("prototyping mode requires --vcpus flag (4, 8, 16, or 32)")
+			return fmt.Errorf("prototyping mode requires --vcpus flag (4, 8, or 16)")
 		}
 
-		validVCPUs := []int{4, 8, 16, 32}
+		validVCPUs := []int{4, 8, 16}
 		valid := false
 		for _, v := range validVCPUs {
 			if config.VCPUs == v {
@@ -380,7 +380,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 			}
 		}
 		if !valid {
-			return fmt.Errorf("vcpus must be one of: 4, 8, 16, or 32")
+			return fmt.Errorf("vcpus must be one of: 4, 8, or 16")
 		}
 	} else {
 		canonical, ok := productionGPUMap[config.GPUType]
