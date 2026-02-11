@@ -9,7 +9,7 @@ export const QuickstartCard = ({ title, icon, href, children, selected }) => {
   const enter = e => { if (selected) return; const el = e.currentTarget; el.style.borderColor = '#555'; el.querySelector('[data-title]').style.color = '#fff'; el.querySelector('[data-sub]').style.opacity = '0.7'; el.querySelector('[data-icon]').style.opacity = '0.7'; };
   const leave = e => { if (selected) return; const el = e.currentTarget; el.style.borderColor = '#333'; el.querySelector('[data-title]').style.color = ''; el.querySelector('[data-sub]').style.opacity = '0.5'; el.querySelector('[data-icon]').style.opacity = '0.35'; };
   return (
-  <a href={href} className="group" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+  <a href={href} className="group" style={{ textDecoration: 'none', borderBottom: 'none', color: 'inherit', display: 'block' }}>
     <div className="border rounded-xl p-5 transition-all duration-150 border-zinc-200 dark:border-zinc-800" style={{
       minHeight: '8rem',
       height: '100%',
