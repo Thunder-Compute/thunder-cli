@@ -38,108 +38,48 @@ export const QuickstartCard = ({ title, icon, href, children, selected }) => {
   </QuickstartCard>
 </Columns>
 
-<br />
+## Installation
 
 <Tabs>
   <Tab title="Windows">
-    ### Installation
-
     Download the installer for x64 from [here (most common)](https://storage.googleapis.com/thunder-cli/tnr/releases/latest/windows/tnr_windows_amd64.msi) or for ARM64 from [here](https://storage.googleapis.com/thunder-cli/tnr/releases/latest/windows/tnr_windows_arm64.msi) and run the .msi file.
-
-    ### Authentication
-
-    Run the following command to log in to the CLI (from powershell)
-
-    ```powershell
-    tnr login
-    ```
-
-    Your browser will open automatically to complete authentication.
-
-    ### Add a Payment Method
-
-    Visit the console to [add a payment method](https://console.thundercompute.com/settings/billing) to your account.
-
-    ### Using Thunder Compute
-
-    ```powershell
-    # Create an instance
-    tnr create
-
-    # Check on your instance
-    tnr status
-
-    # Connect to a running instance
-    tnr connect 0
-    ```
   </Tab>
   <Tab title="MacOS">
-    ### Installation
-
     Download the installer for Apple Silicon (ARM64) from [here (most common)](https://storage.googleapis.com/thunder-cli/tnr/releases/latest/macos/tnr_darwin_arm64.pkg) or the Intel x64 from [here](https://storage.googleapis.com/thunder-cli/tnr/releases/latest/macos/tnr_darwin_amd64.pkg) and run the .pkg file.
-
-    ### Authentication
-
-    Run the following command to log in to the CLI (from your terminal):
-
-    ```bash
-    tnr login
-    ```
-
-    Your browser will open automatically to complete authentication.
-
-    ### Add a Payment Method
-
-    Visit the console to [add a payment method](https://console.thundercompute.com/settings/billing) to your account.
-
-    ### Using Thunder Compute
-
-    ```bash
-    # Create an instance
-    tnr create
-
-    # Check on your instance
-    tnr status
-
-    # Connect to a running instance
-    tnr connect 0
-    ```
   </Tab>
   <Tab title="Linux">
-    ### Installation
-
     ```bash
     curl -fsSL https://raw.githubusercontent.com/Thunder-Compute/thunder-cli/main/scripts/install.sh | bash
-    ```
-
-    ### Authentication
-
-    ```bash
-    tnr login
-    ```
-
-    Your browser will open automatically to complete authentication.
-
-    ### Add a Payment Method
-
-    Visit the console to [add a payment method](https://console.thundercompute.com/settings/billing) to your account.
-
-    ### Using Thunder Compute
-
-    ```bash
-    # Create an instance
-    tnr create
-
-    # Check on your instance
-    tnr status
-
-    # Connect to a running instance
-    tnr connect 0
     ```
   </Tab>
 </Tabs>
 
-That's it\! You're now ready to use Thunder Compute.
+## Authentication
+
+Run the following command to log in to the CLI:
+
+```bash
+tnr login
+```
+
+Your browser will open automatically to complete authentication.
+
+## Add a Payment Method
+
+Visit the console to [add a payment method](https://console.thundercompute.com/settings/billing) to your account.
+
+## Using Thunder Compute
+
+```bash
+# Create an instance
+tnr create
+
+# Check on your instance
+tnr status
+
+# Connect to a running instance
+tnr connect 0
+```
 
 ## Next Steps
 

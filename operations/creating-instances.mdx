@@ -38,7 +38,7 @@ export const QuickstartCard = ({ title, icon, href, children, selected }) => {
   </QuickstartCard>
 </Columns>
 
-Create a new Thunder Compute instance to start running GPU workloads. You can configure the mode, GPU type, CPU count, disk size, and template.
+## Create an Instance
 
 ### Interactive Mode
 
@@ -58,7 +58,7 @@ Specify all options in a single command:
 tnr create --mode prototyping --gpu a6000 --vcpus 8 --template base --disk-size-gb 100
 ```
 
-### Configuration Options
+## Configuration Options
 
 | Flag           | Description                                                                                                  |
 | -------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -103,7 +103,7 @@ See [Prototyping vs Production](/prototyping-vs-production) for details on each 
   By default, 4 vCPUs and 32GB of memory are included with prototyping instances. Additional vCPUs are billed hourly at the rates shown on the [pricing page](https://www.thundercompute.com/pricing).
 </Note>
 
-### Templates
+## Templates
 
 Templates pre-configure your instance for common AI workflows:
 
@@ -123,7 +123,7 @@ start-ollama      # or start-comfy-ui, etc.
 
 See [Using Instance Templates](/guides/using-instance-templates) for more details.
 
-### Restore from Snapshot
+## Restore from Snapshot
 
 Your snapshots appear alongside templates in the selection menu. Select a snapshot to create an instance with your previously saved state.
 

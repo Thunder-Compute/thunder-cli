@@ -38,9 +38,9 @@ export const QuickstartCard = ({ title, icon, href, children, selected }) => {
   </QuickstartCard>
 </Columns>
 
-Connect to your running instances via SSH. Thunder Compute handles key management automatically, so you can connect with a single command.
+## Connect to an Instance
 
-### Interactive Connection
+### Interactive
 
 Run the connect command to see a list of your instances:
 
@@ -50,7 +50,7 @@ tnr connect
 
 Select an instance from the menu to connect.
 
-### Direct Connection
+### Direct
 
 Connect directly using the instance ID:
 
@@ -60,7 +60,7 @@ tnr connect 0
 
 Use `tnr status` to see instance IDs. The default ID is `0`.
 
-### Exposing Services
+## Exposing Services
 
 To expose web servers, Jupyter notebooks, or other services running on your instance, use a [Cloudflare Tunnel](/technical-specs#port-access).
 
