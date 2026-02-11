@@ -24,12 +24,22 @@
     <Feature Id="Complete" Level="1">
       <ComponentRef Id="MainExecutable"/>
       <ComponentRef Id="PathEnv"/>
+      <ComponentRef Id="WelcomeBat"/>
     </Feature>
+
+    <!-- Open welcome terminal after install (not on uninstall) -->
+    <CustomAction Id="LaunchWelcome" Directory="INSTALLFOLDER" ExeCommand="cmd.exe /c start &quot;&quot; &quot;[INSTALLFOLDER]welcome.bat&quot;" Execute="deferred" Impersonate="yes" Return="asyncNoWait"/>
+    <InstallExecuteSequence>
+      <Custom Action="LaunchWelcome" After="InstallFinalize"><![CDATA[NOT REMOVE~="ALL"]]></Custom>
+    </InstallExecuteSequence>
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="{{ .ProjectName }}">
         <Component Id="MainExecutable" Guid="ABCDDCBA-83F1-4F22-985B-FDB3C8ABD474">
           <File Id="{{ .Binary }}Exe" Name="{{ .Binary }}.exe" Source="{{ .Binary }}.exe" KeyPath="yes"/>
+        </Component>
+        <Component Id="WelcomeBat" Guid="ABCDDCBA-83F1-4F22-985B-FDB3C8ABD475">
+          <File Id="WelcomeBatFile" Name="welcome.bat" Source="welcome.bat" KeyPath="yes"/>
         </Component>
         <Component Id="PathEnv" Guid="*">
           <!-- Store install dir in registry as the component KeyPath -->
