@@ -172,6 +172,9 @@ func (m createProgressModel) View() string {
 		if m.sshKeyName != "" {
 			lines = append(lines, labelStyle.Render("SSH Key:")+" "+valueStyle.Render(fmt.Sprintf("'%s' linked for auto-connect", m.sshKeyName)))
 			lines = append(lines, "")
+		} else {
+			lines = append(lines, labelStyle.Render("SSH Key:")+" "+valueStyle.Render("Thunder-managed"))
+			lines = append(lines, "")
 		}
 		lines = append(lines, headerStyle.Render("Next steps:"))
 		lines = append(lines, cmdStyle.Render("  • Run 'tnr status' to monitor provisioning progress"))
