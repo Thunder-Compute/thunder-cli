@@ -69,6 +69,10 @@ func (m *mockAPIClient) AddSSHKeyCtx(ctx context.Context, instanceID string) (*a
 	return m.addSSHKeyResponse, m.addSSHKeyErr
 }
 
+func (m *mockAPIClient) AddSSHKeyToInstanceWithPublicKey(instanceID, publicKey string) (*api.AddSSHKeyResponse, error) {
+	return nil, nil
+}
+
 // =============================================================================
 // Mock SSH Client
 // =============================================================================
@@ -202,7 +206,7 @@ func TestRunConnect_InstanceNotFound(t *testing.T) {
 		configLoader: mockConfigLoader("test-token"),
 	}
 
-	err := runConnectWithOptions("nonexistent", []string{}, false, opts)
+	err := runConnectWithOptions("nonexistent", []string{}, opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 
@@ -228,7 +232,7 @@ func TestRunConnect_InstanceNotRunning(t *testing.T) {
 		configLoader: mockConfigLoader("test-token"),
 	}
 
-	err := runConnectWithOptions("inst-1", []string{}, false, opts)
+	err := runConnectWithOptions("inst-1", []string{}, opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not running")
 
@@ -252,7 +256,7 @@ func TestRunConnect_InstanceNoIP(t *testing.T) {
 		configLoader: mockConfigLoader("test-token"),
 	}
 
-	err := runConnectWithOptions("inst-1", []string{}, false, opts)
+	err := runConnectWithOptions("inst-1", []string{}, opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no IP address")
 
@@ -276,7 +280,7 @@ func TestRunConnect_NoInstances(t *testing.T) {
 
 	// When no instanceID is provided and no instances exist, should return nil (no error)
 	// but with empty instances list
-	err := runConnectWithOptions("", []string{}, false, opts)
+	err := runConnectWithOptions("", []string{}, opts)
 	// Should not error but exit gracefully
 	assert.NoError(t, err)
 
@@ -300,7 +304,7 @@ func TestRunConnect_InvalidPort(t *testing.T) {
 		configLoader: mockConfigLoader("test-token"),
 	}
 
-	err := runConnectWithOptions("inst-1", []string{"not-a-port"}, false, opts)
+	err := runConnectWithOptions("inst-1", []string{"not-a-port"}, opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid port")
 
@@ -319,7 +323,7 @@ func TestRunConnect_NoAuthToken(t *testing.T) {
 		},
 	}
 
-	err := runConnectWithOptions("inst-1", []string{}, false, opts)
+	err := runConnectWithOptions("inst-1", []string{}, opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no authentication token")
 
@@ -338,7 +342,7 @@ func TestRunConnect_ConfigLoadError(t *testing.T) {
 		},
 	}
 
-	err := runConnectWithOptions("inst-1", []string{}, false, opts)
+	err := runConnectWithOptions("inst-1", []string{}, opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not authenticated")
 
@@ -360,7 +364,7 @@ func TestRunConnect_ListInstancesError(t *testing.T) {
 		configLoader: mockConfigLoader("test-token"),
 	}
 
-	err := runConnectWithOptions("inst-1", []string{}, false, opts)
+	err := runConnectWithOptions("inst-1", []string{}, opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to list instances")
 

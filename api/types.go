@@ -43,6 +43,5 @@ type ConnectClient interface {
 	ListInstances() ([]Instance, error)
 	ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, error)
 	AddSSHKeyCtx(ctx context.Context, instanceID string) (*AddSSHKeyResponse, error)
-	ListSSHKeys() (SSHKeyListResponse, error)
 	AddSSHKeyToInstanceWithPublicKey(instanceID, publicKey string) (*AddSSHKeyResponse, error)
 }

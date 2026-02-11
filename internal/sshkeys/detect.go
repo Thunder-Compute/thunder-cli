@@ -78,9 +78,9 @@ func DetectLocalKeys() ([]DetectedKey, error) {
 	return keys, nil
 }
 
-// normalizePublicKey extracts the first two space-separated fields (type + base64 data),
+// NormalizePublicKey extracts the first two space-separated fields (type + base64 data),
 // stripping any trailing comment or whitespace for comparison purposes.
-func normalizePublicKey(key string) string {
+func NormalizePublicKey(key string) string {
 	parts := strings.Fields(strings.TrimSpace(key))
 	if len(parts) >= 2 {
 		return parts[0] + " " + parts[1]
@@ -96,10 +96,10 @@ func FindPrivateKeyForPublicKey(targetPublicKey string) (string, error) {
 		return "", fmt.Errorf("failed to scan local SSH keys: %w", err)
 	}
 
-	normalizedTarget := normalizePublicKey(targetPublicKey)
+	normalizedTarget := NormalizePublicKey(targetPublicKey)
 
 	for _, key := range keys {
-		if normalizePublicKey(key.PublicKey) == normalizedTarget {
+		if NormalizePublicKey(key.PublicKey) == normalizedTarget {
 			privateKeyPath := strings.TrimSuffix(key.Path, ".pub")
 			if _, err := os.Stat(privateKeyPath); err != nil {
 				return "", fmt.Errorf("found matching public key at %s but no private key exists at %s", key.Path, privateKeyPath)

@@ -8,7 +8,7 @@ import (
 )
 
 // UpdateSSHConfig updates the ~/.ssh/config file with the instance connection details
-func UpdateSSHConfig(instanceID, ip string, port int, uuid string, tunnelPorts []int, templatePorts []int) error {
+func UpdateSSHConfig(instanceID, ip string, port int, keyFile string, tunnelPorts []int, templatePorts []int) error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %w", err)
@@ -54,7 +54,6 @@ func UpdateSSHConfig(instanceID, ip string, port int, uuid string, tunnelPorts [
 	}
 
 	// Build new SSH config entry
-	keyFile := GetKeyFile(uuid)
 	var configLines []string
 	configLines = append(configLines, fmt.Sprintf("Host %s", hostName))
 	configLines = append(configLines, fmt.Sprintf("    HostName %s", ip))

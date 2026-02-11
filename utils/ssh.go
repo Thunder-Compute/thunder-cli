@@ -44,6 +44,7 @@ type SSHProgressCallback func(info SSHRetryInfo)
 
 type SSHConnectOptions struct {
 	DetectPersistentAuthFailure bool
+	Passphrase                  []byte
 }
 
 type SSHClient struct {
@@ -61,13 +62,16 @@ func (s *SSHClient) Close() error {
 	return nil
 }
 
-func newSSHConfig(user, keyFile string) (*ssh.ClientConfig, error) {
+func newSSHConfig(user, keyFile string, passphrase []byte) (*ssh.ClientConfig, error) {
 	keyData, err := os.ReadFile(keyFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key: %w", err)
 	}
 
 	signer, err := ssh.ParsePrivateKey(keyData)
+	if err != nil && len(passphrase) > 0 {
+		signer, err = ssh.ParsePrivateKeyWithPassphrase(keyData, passphrase)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
@@ -97,7 +101,11 @@ func RobustSSHConnectWithProgress(ctx context.Context, ip, keyFile string, port 
 }
 
 func RobustSSHConnectWithOptions(ctx context.Context, ip, keyFile string, port int, maxWait int, callback SSHProgressCallback, opts *SSHConnectOptions) (*SSHClient, error) {
-	config, err := newSSHConfig("ubuntu", keyFile)
+	var passphrase []byte
+	if opts != nil {
+		passphrase = opts.Passphrase
+	}
+	config, err := newSSHConfig("ubuntu", keyFile, passphrase)
 	if err != nil {
 		if callback != nil {
 			callback(SSHRetryInfo{
@@ -599,6 +607,15 @@ func IsKeyParseError(err error) bool {
 		"asn1:",
 		"illegal base64",
 	)
+}
+
+// IsPassphraseError checks if the error is due to a passphrase-protected private key
+func IsPassphraseError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return messageContainsAny(msg, "passphrase protected", "encrypted")
 }
 
 // IsNetworkError checks if the error is a network connectivity issue
