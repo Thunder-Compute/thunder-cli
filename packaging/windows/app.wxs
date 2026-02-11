@@ -28,9 +28,9 @@
     </Feature>
 
     <!-- Open welcome terminal after install (not on uninstall) -->
-    <CustomAction Id="LaunchWelcome" Directory="INSTALLFOLDER" ExeCommand="cmd.exe /c start &quot;&quot; &quot;[INSTALLFOLDER]welcome.bat&quot;" Execute="deferred" Impersonate="yes" Return="asyncNoWait"/>
+    <CustomAction Id="LaunchWelcome" Directory="INSTALLFOLDER" ExeCommand="cmd.exe /c start &quot;&quot; &quot;[INSTALLFOLDER]welcome.bat&quot;" Execute="immediate" Return="asyncNoWait"/>
     <InstallExecuteSequence>
-      <Custom Action="LaunchWelcome" After="InstallFinalize"><![CDATA[NOT REMOVE~="ALL"]]></Custom>
+      <Custom Action="LaunchWelcome" After="InstallFinalize" Condition="NOT REMOVE~=&quot;ALL&quot;"/>
     </InstallExecuteSequence>
 
     <StandardDirectory Id="ProgramFiles64Folder">
