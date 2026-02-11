@@ -5,63 +5,64 @@ icon: "file-import"
 iconType: "solid"
 ---
 
+export const QuickstartCard = ({ title, icon, href, children, selected }) => {
+  const enter = e => { if (selected) return; const el = e.currentTarget; el.style.borderColor = '#555'; el.querySelector('[data-title]').style.color = '#fff'; el.querySelector('[data-sub]').style.opacity = '0.7'; el.querySelector('[data-icon]').style.opacity = '0.7'; };
+  const leave = e => { if (selected) return; const el = e.currentTarget; el.style.borderColor = '#333'; el.querySelector('[data-title]').style.color = ''; el.querySelector('[data-sub]').style.opacity = '0.5'; el.querySelector('[data-icon]').style.opacity = '0.35'; };
+  return (
+  <a href={href} className="group" style={{ textDecoration: 'none', borderBottom: 'none', color: 'inherit', display: 'block' }}>
+    <div className="border rounded-xl p-5 transition-all duration-150 border-zinc-200 dark:border-zinc-800" style={{
+      minHeight: '8rem',
+      height: '100%',
+      borderWidth: '1.5px',
+      borderColor: selected ? '#95c5ea' : '#333',
+    }} onMouseEnter={enter} onMouseLeave={leave}>
+      <div data-icon style={{ marginBottom: '0.75rem', opacity: selected ? 1 : 0.35, transition: 'opacity 0.15s ease' }}>
+        <Icon icon={icon} size={24} color="#95c5ea" />
+      </div>
+      <div data-title style={{ fontWeight: 600, fontSize: '1.05rem', marginBottom: '0.25rem', color: selected ? '#fff' : undefined, transition: 'color 0.15s ease' }}>{title}</div>
+      <div data-sub style={{ fontSize: '0.9rem', opacity: selected ? 0.7 : 0.5, transition: 'opacity 0.15s ease' }}>{children}</div>
+    </div>
+  </a>
+  );
+};
+
 <Columns cols={3}>
-  <Card title="VSCode / Cursor" icon="window" color="#3a6289" href="/vscode/operations/file-transfers">
+  <QuickstartCard title="VS Code" icon="window" href="/vscode/operations/file-transfers">
     Editor extension
-  </Card>
-  <Card title="CLI" icon="terminal" color="#95c5ea" href="/cli/operations/file-transfers">
+  </QuickstartCard>
+  <QuickstartCard title="CLI" icon="terminal" href="/cli/operations/file-transfers" selected={true}>
     Command line
-  </Card>
-  <Card title="Console" icon="browser" color="#3a6289" href="/console/operations/file-transfers">
+  </QuickstartCard>
+  <QuickstartCard title="Console" icon="browser" href="/console/operations/file-transfers">
     Web interface
-  </Card>
+  </QuickstartCard>
 </Columns>
 
-Transfer files between your local machine and Thunder Compute instances. You can upload files to an instance or download files from it.
-
-Use the `scp` command to transfer files:
+## Transfer Files
 
 ```bash
-tnr scp <source_path> <destination_path>
+tnr scp <source> <destination>
 ```
 
-### Path Format
-
-- **Remote paths**: `instance_id:path` (e.g., `0:/home/user/data`)
-- **Local paths**: Standard paths (e.g., `./data` or `/home/user/file.txt`)
-
-Each transfer must include exactly one remote path and one local path.
-
-### Upload to Instance
+Prefix a path with `instance_id:` to indicate it's remote.
 
 ```bash
-tnr scp ./local_file.txt 0:/home/user/
+# Upload: local → remote
+tnr scp ./data.csv 0:/home/user/
+
+# Download: remote → local
+tnr scp 0:/home/user/results.csv ./
 ```
 
-### Download from Instance
-
-```bash
-tnr scp 0:/home/user/results.csv ./downloads/
-```
-
-### Transfer Directories
-
-To transfer entire directories, use the recursive flag:
-
-```bash
-# Upload a directory
-tnr scp -r ./my_project 0:/home/user/
-
-# Download a directory
-tnr scp -r 0:/home/user/outputs ./local_outputs/
-```
+<Info>
+  Directories are transferred recursively. SSH keys and `~/` expansion are handled automatically.
+</Info>
 
 <Note>
-  File transfers have a 60-second connection timeout. SSH key setup, compression, and `~/` expansion are handled automatically.
+  Uses `rsync` on Linux and macOS for better performance and progress display. Falls back to `scp` if rsync is unavailable. On Windows/WSL, uses `scp`.
 </Note>
 
 ## Best Practices
 
 - **Compress large transfers**: Zip files before transferring to reduce time
 - **Use cloud storage for big files**: For datasets over a few GB, upload to cloud storage and download directly to your instance
-- **Back up important outputs**: Always download critical results before deleting an instance
