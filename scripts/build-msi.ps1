@@ -59,6 +59,16 @@ try {
     $InstallMeta | Set-Content -Path $InstallMetaPath -Encoding UTF8
     Write-Host "[OK] Wrote install metadata: $InstallMetaPath"
 
+    # Copy welcome.bat to temp directory (WiX expects it alongside the binary)
+    $WelcomeBatSource = Join-Path $RepoRoot "packaging/windows/welcome.bat"
+    $WelcomeBatDest = Join-Path $TempDir "welcome.bat"
+    if (Test-Path $WelcomeBatSource) {
+        Copy-Item $WelcomeBatSource -Destination $WelcomeBatDest -Force
+        Write-Host "[OK] Copied welcome.bat to: $WelcomeBatDest"
+    } else {
+        Write-Warning "welcome.bat not found at $WelcomeBatSource"
+    }
+
     # Read and process WiX template (replace GoReleaser template variables)
     $WxsContent = Get-Content $WxsTemplate -Raw
     $WxsContent = $WxsContent -replace '\{\{\s*\.ProjectName\s*\}\}', $ProjectName

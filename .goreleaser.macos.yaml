@@ -53,13 +53,28 @@ builds:
           /bin/mkdir -p "$PKGROOT/usr/local/bin";
           /usr/bin/install -m 0755 "$BIN" "$PKGROOT/usr/local/bin/${NAME}";
 
-          PKG_UNSIGNED="dist/${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg";
-          PKG_SIGNED="dist/${NAME}_${VERSION}_darwin_${ARCH}.pkg";
-
+          # Build component .pkg (no scripts)
+          COMPONENT_PKG="$WORK/component.pkg";
           /usr/bin/pkgbuild --root "$PKGROOT" \
             --identifier "com.thundercompute.${NAME}" \
             --version "$VERSION" \
             --install-location "/" \
+            "$COMPONENT_PKG";
+
+          # Prepare resources for productbuild (conclusion panel)
+          MACOS_PKG_DIR="packaging/macos";
+          RESOURCES="$WORK/resources";
+          /bin/mkdir -p "$RESOURCES";
+          /bin/cp "$MACOS_PKG_DIR/conclusion.html" "$RESOURCES/conclusion.html";
+
+          # Build distribution .pkg with conclusion panel
+          PKG_UNSIGNED="dist/${NAME}_${VERSION}_darwin_${ARCH}_unsigned.pkg";
+          PKG_SIGNED="dist/${NAME}_${VERSION}_darwin_${ARCH}.pkg";
+
+          /usr/bin/productbuild \
+            --distribution "$MACOS_PKG_DIR/distribution.xml" \
+            --resources "$RESOURCES" \
+            --package-path "$WORK" \
             "$PKG_UNSIGNED";
 
           if [ -n "${DEVELOPER_ID_INSTALLER:-}" ]; then
