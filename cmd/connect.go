@@ -7,28 +7,25 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"strconv"
-	"strings"
-	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	termx "github.com/charmbracelet/x/term"
 	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh"
-	"golang.org/x/term"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/internal/sshkeys"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
-var tunnelPorts []string
+var (
+	tunnelPorts []string
+	debugMode   bool
+)
 
 // mocks for testing
 type connectOptions struct {
@@ -86,7 +83,7 @@ var connectCmd = &cobra.Command{
 		if len(args) > 0 {
 			instanceID = args[0]
 		}
-		return runConnect(instanceID, tunnelPorts)
+		return runConnect(instanceID, tunnelPorts, debugMode)
 	},
 }
 
@@ -97,22 +94,16 @@ func init() {
 
 	rootCmd.AddCommand(connectCmd)
 	connectCmd.Flags().StringSliceVarP(&tunnelPorts, "tunnel", "t", []string{}, "Port forwarding (can specify multiple times: -t 8080 -t 3000)")
+	connectCmd.Flags().BoolVar(&debugMode, "debug", false, "Show detailed timing breakdown")
+	_ = connectCmd.Flags().MarkHidden("debug") //nolint:errcheck // flag hiding failure is non-fatal
 }
 
-func runConnect(instanceID string, tunnelPortsStr []string) error {
-	return runConnectWithOptions(instanceID, tunnelPortsStr, nil)
+func runConnect(instanceID string, tunnelPortsStr []string, debug bool) error {
+	return runConnectWithOptions(instanceID, tunnelPortsStr, debug, nil)
 }
 
 // runConnectWithOptions accepts options for testing. If opts is nil, default options are used.
-// symlinkKey creates a symlink from privPath to keyFile, creating parent dirs as needed.
-// Returns true if the symlink was created successfully.
-func symlinkKey(privPath, keyFile string) bool {
-	_ = os.MkdirAll(filepath.Dir(keyFile), 0o700)
-	_ = os.Remove(keyFile)
-	return os.Symlink(privPath, keyFile) == nil
-}
-
-func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *connectOptions) error {
+func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug bool, opts *connectOptions) error {
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{
 		Category: "connect",
 		Message:  "starting connection",
@@ -362,25 +353,9 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 	phase3Start := time.Now()
 	tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Checking SSH keys...", 0)
 
-	thunderKeyFile := utils.GetKeyFile(instance.Uuid) // always ~/.thunder/keys/{uuid}
-	keyFile := thunderKeyFile                         // may be updated to original user key path
+	keyFile := utils.GetKeyFile(instance.Uuid)
 	newKeyCreated := false
 	keyExists := utils.KeyExists(instance.Uuid)
-	keySource := ""            // tracks how the key was resolved for debug output
-	keyIsUserProvided := false // true when key comes from user's ~/.ssh (symlinked)
-	keyIsSymlink := false      // true when the key file at thunderKeyFile is a symlink
-	keyJustPushed := false     // true when we just pushed a public key to the instance (needs propagation time)
-	userProvidedPubKey := ""   // derived public key for user-provided keys (for push-on-auth-failure)
-
-	// Detect if existing key file is a symlink (from a prior org-key match)
-	if keyExists {
-		if target, err := os.Readlink(keyFile); err == nil {
-			keyIsUserProvided = true
-			keyIsSymlink = true
-			keyFile = target
-			keySource = fmt.Sprintf("Using %s", target)
-		}
-	}
 
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{
 		Category: "connect",
@@ -395,44 +370,6 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 	if checkCancelled() {
 		return nil
 	}
-	// Step 2: Match instance's SSH public keys to local private keys
-	if !keyExists && len(instance.SSHPublicKeys) > 0 {
-		tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Matching instance SSH keys...", 0)
-
-		for _, instancePubKey := range instance.SSHPublicKeys {
-			privPath, findErr := sshkeys.FindPrivateKeyForPublicKey(instancePubKey)
-			if findErr != nil || privPath == "" {
-				continue
-			}
-
-			if symlinkKey(privPath, keyFile) {
-				keyIsUserProvided = true
-				keyIsSymlink = true
-				keyFile = privPath
-				keySource = fmt.Sprintf("Linked from %s", privPath)
-				userProvidedPubKey = instancePubKey
-
-				sentry.AddBreadcrumb(&sentry.Breadcrumb{
-					Category: "connect",
-					Message:  "matched instance SSH key to local key",
-					Data:     map[string]interface{}{"priv_path": privPath},
-					Level:    sentry.LevelInfo,
-				})
-				break
-			}
-		}
-
-		if !utils.KeyExists(instance.Uuid) {
-			sentry.AddBreadcrumb(&sentry.Breadcrumb{
-				Category: "connect",
-				Message:  "no instance key matched local files",
-				Data:     map[string]interface{}{"key_count": len(instance.SSHPublicKeys)},
-				Level:    sentry.LevelWarning,
-			})
-		}
-		keyExists = utils.KeyExists(instance.Uuid)
-	}
-
 	if !keyExists {
 		sentry.AddBreadcrumb(&sentry.Breadcrumb{
 			Category: "connect",
@@ -476,7 +413,6 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 			}
 		}
 		newKeyCreated = true
-		keySource = fmt.Sprintf("Generated %s", keyFile)
 		sentry.AddBreadcrumb(&sentry.Breadcrumb{
 			Category: "connect",
 			Message:  "SSH key created successfully",
@@ -484,60 +420,11 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 		})
 	}
 
-	if keySource == "" {
-		// Key already existed locally from a previous connection
-		keySource = fmt.Sprintf("Using %s", keyFile)
-	}
 	phaseTimings["ssh_key_management"] = time.Since(phase3Start)
-	tui.SendPhaseUpdate(p, 2, tui.PhaseCompleted, keySource, phaseTimings["ssh_key_management"])
-
-	// Detect passphrase-protected keys before attempting SSH connection
-	// TODO: think of a better way to handle this
-	var passphrase []byte
-	passphraseMode := false
-	if keyExists && !newKeyCreated {
-		keyData, readErr := os.ReadFile(keyFile)
-		if readErr == nil {
-			_, parseErr := ssh.ParsePrivateKey(keyData)
-			if parseErr != nil && utils.IsPassphraseError(parseErr) {
-				// Stop the TUI so we can prompt on the terminal
-				p.Kill()
-				select {
-				case <-tuiDone:
-				case <-time.After(500 * time.Millisecond):
-				}
-				passphraseMode = true
-
-				fmt.Fprintf(os.Stderr, "\nKey %s is passphrase-protected.\n", keyFile)
-				fmt.Fprintf(os.Stderr, "Enter passphrase: ")
-				pw, pwErr := term.ReadPassword(int(syscall.Stdin))
-				fmt.Fprintf(os.Stderr, "\n")
-				if pwErr != nil {
-					return fmt.Errorf("failed to read passphrase: %w", pwErr)
-				}
-
-				// Verify passphrase immediately
-				signer, verifyErr := ssh.ParsePrivateKeyWithPassphrase(keyData, pw)
-				if verifyErr != nil {
-					return fmt.Errorf("incorrect passphrase for %s", keyFile)
-				}
-				passphrase = pw
-
-				// Ensure the public key is on the instance
-				pubKey := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey())))
-				if _, pushErr := client.AddSSHKeyToInstanceWithPublicKey(instanceID, pubKey); pushErr != nil {
-					// Non-fatal: key may already be on the instance
-				}
-			}
-		}
-	}
+	tui.SendPhaseComplete(p, 2, phaseTimings["ssh_key_management"])
 
 	phase4Start := time.Now()
-	if passphraseMode {
-		fmt.Fprintf(os.Stderr, "  Establishing SSH connection to %s:%d...\n", instance.GetIP(), port)
-	} else {
-		tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Waiting for SSH service on %s:%d...", instance.GetIP(), port), 0)
-	}
+	tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Waiting for SSH service on %s:%d...", instance.GetIP(), port), 0)
 
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{
 		Category: "connect",
@@ -566,9 +453,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 			},
 			Level: sentry.LevelError,
 		})
-		if !passphraseMode {
-			shutdownTUI()
-		}
+		shutdownTUI()
 		return fmt.Errorf("SSH service not available: %w", err)
 	}
 
@@ -576,15 +461,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 		return nil
 	}
 
-	if !passphraseMode {
-		tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Connecting to %s:%d...", instance.GetIP(), port), 0)
-	}
+	tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, fmt.Sprintf("Connecting to %s:%d...", instance.GetIP(), port), 0)
 
 	var sshClient *utils.SSHClient
 	progressCallback := func(info utils.SSHRetryInfo) {
-		if passphraseMode {
-			return // In passphrase mode, we already printed the status
-		}
 		switch info.Status {
 		case utils.SSHStatusDialing:
 			tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Establishing SSH connection...", 0)
@@ -621,14 +501,13 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 	})
 
 	// Use different connection strategies for new keys vs reconnections
-	if newKeyCreated || keyJustPushed {
-		// New or freshly-pushed key: expect auth failures while key propagates, use longer timeout
+	if newKeyCreated {
+		// New key: expect auth failures while key propagates, use longer timeout
 		sshClient, err = utils.RobustSSHConnectWithProgress(ctx, instance.GetIP(), keyFile, port, 120, progressCallback)
 	} else {
 		// Reconnecting: enable persistent auth failure detection (detects deleted ~/.ssh quickly)
 		sshConnectOpts := &utils.SSHConnectOptions{
 			DetectPersistentAuthFailure: true,
-			Passphrase:                  passphrase,
 		}
 		sshClient, err = utils.RobustSSHConnectWithOptions(ctx, instance.GetIP(), keyFile, port, 60, progressCallback, sshConnectOpts)
 	}
@@ -637,11 +516,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 	}
 
 	// Handle persistent auth failure (likely deleted ~/.ssh on instance) or other auth errors
-	// Symlinked keys are safe to regenerate (we remove the symlink first, user's original key is untouched)
-	// Never regenerate passphrase-protected keys
-	needsKeyRegeneration := err != nil && !newKeyCreated &&
-		(!keyIsUserProvided || keyIsSymlink) && !passphraseMode &&
-		(errors.Is(err, utils.ErrPersistentAuthFailure) || utils.IsAuthError(err) || utils.IsKeyParseError(err))
+	needsKeyRegeneration := err != nil && !newKeyCreated && (errors.Is(err, utils.ErrPersistentAuthFailure) || utils.IsAuthError(err) || utils.IsKeyParseError(err))
 	if needsKeyRegeneration {
 		sentry.AddBreadcrumb(&sentry.Breadcrumb{
 			Category: "connect",
@@ -655,12 +530,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 			Level: sentry.LevelWarning,
 		})
 
-		if keyIsSymlink {
-			tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "Matched key not on instance, generating new key...", 0)
-		} else if errors.Is(err, utils.ErrPersistentAuthFailure) {
+		if errors.Is(err, utils.ErrPersistentAuthFailure) {
 			tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH keys on instance appear to be missing. Reconfiguring access...", 0)
 		} else {
-			tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH key not found on instance...", 0)
+			tui.SendPhaseUpdate(p, 3, tui.PhaseWarning, "SSH key not found on instance. This typically occurs when your node crashes due to OOM, low disk space, or other reasons.", 0)
 		}
 
 		keyResp, keyErr := client.AddSSHKeyCtx(ctx, instanceID)
@@ -681,11 +554,6 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 		}
 
 		if keyResp.Key != nil {
-			// Remove symlink to prevent os.WriteFile from following it
-			// and overwriting the user's original key in ~/.ssh/.
-			if keyIsSymlink {
-				_ = os.Remove(thunderKeyFile)
-			}
 			if saveErr := utils.SavePrivateKey(instance.Uuid, *keyResp.Key); saveErr != nil {
 				sentry.AddBreadcrumb(&sentry.Breadcrumb{
 					Category: "connect",
@@ -700,7 +568,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 			}
 		}
 
-		keyFile = thunderKeyFile
+		keyFile = utils.GetKeyFile(instance.Uuid)
 		sentry.AddBreadcrumb(&sentry.Breadcrumb{
 			Category: "connect",
 			Message:  "key regenerated, retrying connection",
@@ -739,56 +607,18 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 			shutdownTUI()
 			return fmt.Errorf("failed to establish SSH connection after key regeneration: %w", err)
 		}
-	} else if err != nil && keyIsUserProvided && !keyIsSymlink && userProvidedPubKey != "" &&
-		(utils.IsAuthError(err) || errors.Is(err, utils.ErrPersistentAuthFailure)) {
-		// User-provided key auth failed — key likely not on instance yet.
-		// Push the public key and retry before giving up.
-		tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Key not on instance, pushing and retrying...", 0)
-
-		if _, pushErr := client.AddSSHKeyToInstanceWithPublicKey(instanceID, userProvidedPubKey); pushErr != nil {
-			if !passphraseMode {
-				shutdownTUI()
-			}
-			return fmt.Errorf("SSH authentication failed and could not push key to instance: %w", pushErr)
-		}
-		keyJustPushed = true
-
-		retryCallback := func(info utils.SSHRetryInfo) {
-			switch info.Status {
-			case utils.SSHStatusDialing:
-				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Establishing SSH connection...", 0)
-			case utils.SSHStatusHandshake, utils.SSHStatusAuth:
-				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "Waiting for key to propagate...", 0)
-			case utils.SSHStatusSuccess:
-				tui.SendPhaseUpdate(p, 3, tui.PhaseInProgress, "SSH connection established", 0)
-			}
-		}
-
-		sshClient, err = utils.RobustSSHConnectWithProgress(ctx, instance.GetIP(), keyFile, port, 120, retryCallback)
-		if checkCancelled() {
-			return nil
-		}
-		if err != nil {
-			if !passphraseMode {
-				shutdownTUI()
-			}
-			return fmt.Errorf("SSH authentication failed using your key (%s).\n\nTroubleshooting:\n  - Ensure the public key is added to this instance\n  - Check ~/.ssh/authorized_keys on the instance\n  - Try removing %s and reconnecting to generate a fresh key", keyFile, thunderKeyFile)
-		}
 	} else if err != nil {
 		sentry.AddBreadcrumb(&sentry.Breadcrumb{
 			Category: "connect",
 			Message:  "SSH connection failed",
 			Data: map[string]interface{}{
-				"error":                err.Error(),
-				"error_type":           string(utils.ClassifySSHError(err)),
-				"is_auth_error":        utils.IsAuthError(err),
-				"key_is_user_provided": keyIsUserProvided,
+				"error":         err.Error(),
+				"error_type":    string(utils.ClassifySSHError(err)),
+				"is_auth_error": utils.IsAuthError(err),
 			},
 			Level: sentry.LevelError,
 		})
-		if !passphraseMode {
-			shutdownTUI()
-		}
+		shutdownTUI()
 		return fmt.Errorf("failed to establish SSH connection: %w", err)
 	}
 
@@ -802,18 +632,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 	})
 
 	phaseTimings["ssh_connection"] = time.Since(phase4Start)
-	if passphraseMode {
-		fmt.Fprintf(os.Stderr, "  ✓ SSH connection established\n")
-	} else {
-		tui.SendPhaseComplete(p, 3, phaseTimings["ssh_connection"])
-	}
+	tui.SendPhaseComplete(p, 3, phaseTimings["ssh_connection"])
 
 	phase5Start := time.Now()
-	if passphraseMode {
-		fmt.Fprintf(os.Stderr, "  Setting up instance...\n")
-	} else {
-		tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Setting up instance...", 0)
-	}
+	tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Setting up instance...", 0)
 
 	if checkCancelled() {
 		return nil
@@ -830,9 +652,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 
 	// Set up token on the instance (binary is now managed by the instance itself)
 	if instance.Mode == "production" {
-		if !passphraseMode {
-			tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Production mode detected, setting up token...", 0)
-		}
+		tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Production mode detected, setting up token...", 0)
 		if err := utils.RemoveThunderVirtualization(sshClient, config.Token); err != nil {
 			sentry.AddBreadcrumb(&sentry.Breadcrumb{
 				Category: "connect",
@@ -842,15 +662,11 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 				},
 				Level: sentry.LevelError,
 			})
-			if !passphraseMode {
-				shutdownTUI()
-			}
+			shutdownTUI()
 			return fmt.Errorf("failed to set up token: %w", err)
 		}
 	} else {
-		if !passphraseMode {
-			tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Setting up token...", 0)
-		}
+		tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Setting up token...", 0)
 		if err := utils.SetupToken(sshClient, config.Token); err != nil {
 			sentry.AddBreadcrumb(&sentry.Breadcrumb{
 				Category: "connect",
@@ -860,9 +676,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 				},
 				Level: sentry.LevelError,
 			})
-			if !passphraseMode {
-				shutdownTUI()
-			}
+			shutdownTUI()
 			return fmt.Errorf("failed to set up token: %w", err)
 		}
 	}
@@ -872,15 +686,11 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 	}
 
 	phaseTimings["instance_setup"] = time.Since(phase5Start)
-	if passphraseMode {
-		fmt.Fprintf(os.Stderr, "  ✓ Connection established successfully\n")
-	} else {
-		tui.SendPhaseComplete(p, 4, phaseTimings["instance_setup"])
-	}
+	tui.SendPhaseComplete(p, 4, phaseTimings["instance_setup"])
 
 	// Update SSH config for easy reconnection via `ssh tnr-{instance_id}`
 	templatePorts := utils.GetTemplateOpenPorts(instance.Template)
-	_ = utils.UpdateSSHConfig(instanceID, instance.GetIP(), port, thunderKeyFile, tunnelPorts, templatePorts)
+	_ = utils.UpdateSSHConfig(instanceID, instance.GetIP(), port, instance.Uuid, tunnelPorts, templatePorts)
 
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{
 		Category: "connect",
@@ -893,28 +703,26 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 		Level: sentry.LevelInfo,
 	})
 
-	if !passphraseMode {
-		tui.SendConnectComplete(p)
+	tui.SendConnectComplete(p)
 
-		if checkCancelled() {
-			return nil
+	if checkCancelled() {
+		return nil
+	}
+
+	select {
+	case err := <-tuiDone:
+		if err != nil {
+			if checkCancelled() {
+				return nil
+			}
+			return fmt.Errorf("TUI error: %w", err)
 		}
-
-		select {
-		case err := <-tuiDone:
-			if err != nil {
-				if checkCancelled() {
-					return nil
-				}
-				return fmt.Errorf("TUI error: %w", err)
+	default:
+		if err := <-tuiDone; err != nil {
+			if checkCancelled() {
+				return nil
 			}
-		default:
-			if err := <-tuiDone; err != nil {
-				if checkCancelled() {
-					return nil
-				}
-				return fmt.Errorf("TUI error: %w", err)
-			}
+			return fmt.Errorf("TUI error: %w", err)
 		}
 	}
 
@@ -931,8 +739,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, opts *con
 		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "IdentitiesOnly=yes",
 		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "PreferredAuthentications=publickey",
-		"-i", thunderKeyFile,
+		"-i", keyFile,
 		"-p", fmt.Sprintf("%d", port),
 		"-t",
 	}
