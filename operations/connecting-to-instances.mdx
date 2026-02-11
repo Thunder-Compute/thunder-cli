@@ -5,42 +5,21 @@ icon: "plug"
 iconType: "solid"
 ---
 
-export const QuickstartCard = ({ title, icon, href, children, selected }) => {
-  const enter = e => { if (selected) return; const el = e.currentTarget; el.style.borderColor = '#555'; el.querySelector('[data-title]').style.color = '#fff'; el.querySelector('[data-sub]').style.opacity = '0.7'; el.querySelector('[data-icon]').style.opacity = '0.7'; };
-  const leave = e => { if (selected) return; const el = e.currentTarget; el.style.borderColor = '#333'; el.querySelector('[data-title]').style.color = ''; el.querySelector('[data-sub]').style.opacity = '0.5'; el.querySelector('[data-icon]').style.opacity = '0.35'; };
-  return (
-  <a href={href} className="group" style={{ textDecoration: 'none', borderBottom: 'none', color: 'inherit', display: 'block' }}>
-    <div className="border rounded-xl p-5 transition-all duration-150 border-zinc-200 dark:border-zinc-800" style={{
-      minHeight: '8rem',
-      height: '100%',
-      borderWidth: '1.5px',
-      borderColor: selected ? '#95c5ea' : '#333',
-    }} onMouseEnter={enter} onMouseLeave={leave}>
-      <div data-icon style={{ marginBottom: '0.75rem', opacity: selected ? 1 : 0.35, transition: 'opacity 0.15s ease' }}>
-        <Icon icon={icon} size={24} color="#95c5ea" />
-      </div>
-      <div data-title style={{ fontWeight: 600, fontSize: '1.05rem', marginBottom: '0.25rem', color: selected ? '#fff' : undefined, transition: 'color 0.15s ease' }}>{title}</div>
-      <div data-sub style={{ fontSize: '0.9rem', opacity: selected ? 0.7 : 0.5, transition: 'opacity 0.15s ease' }}>{children}</div>
-    </div>
-  </a>
-  );
-};
-
 <Columns cols={3}>
-  <QuickstartCard title="VS Code" icon="window" href="/vscode/operations/connecting-to-instances">
+  <Card title="VSCode / Cursor" icon="window" color="#3a6289" href="/vscode/operations/connecting-to-instances">
     Editor extension
-  </QuickstartCard>
-  <QuickstartCard title="CLI" icon="terminal" href="/cli/operations/connecting-to-instances" selected={true}>
+  </Card>
+  <Card title="CLI" icon="terminal" color="#95c5ea" href="/cli/operations/connecting-to-instances">
     Command line
-  </QuickstartCard>
-  <QuickstartCard title="Console" icon="browser" href="/console/operations/connecting-to-instances">
+  </Card>
+  <Card title="Console" icon="browser" color="#3a6289" href="/console/operations/connecting-to-instances">
     Web interface
-  </QuickstartCard>
+  </Card>
 </Columns>
 
-## Connect to an Instance
+Connect to your running instances via SSH. Thunder Compute handles key management automatically, so you can connect with a single command.
 
-### Interactive
+### Interactive Connection
 
 Run the connect command to see a list of your instances:
 
@@ -50,7 +29,7 @@ tnr connect
 
 Select an instance from the menu to connect.
 
-### Direct
+### Direct Connection
 
 Connect directly using the instance ID:
 
@@ -60,7 +39,7 @@ tnr connect 0
 
 Use `tnr status` to see instance IDs. The default ID is `0`.
 
-## Exposing Services
+### Exposing Services
 
 To expose web servers, Jupyter notebooks, or other services running on your instance, use a [Cloudflare Tunnel](/technical-specs#port-access).
 
