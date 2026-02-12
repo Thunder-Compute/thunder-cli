@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func RenderSnapshotHelp(cmd *cobra.Command) {
+func RenderSSHKeysListHelp(cmd *cobra.Command) {
 	InitHelpStyles(os.Stdout)
 
 	var output strings.Builder
@@ -16,45 +16,36 @@ func RenderSnapshotHelp(cmd *cobra.Command) {
 	header := `
 ╭─────────────────────────────────────────────────────────────────────────────╮
 │                                                                             │
-│                              SNAPSHOT COMMAND                               │
-│                     Manage Thunder Compute snapshots                        │
+│                          SSH KEYS LIST COMMAND                              │
+│                        List all saved SSH keys                              │
 │                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────╯
 	`
 
 	output.WriteString(HeaderStyle.Render(header))
 
-	// Usage Section
 	output.WriteString(SectionStyle.Render("● USAGE"))
 	output.WriteString("\n\n")
 	output.WriteString("  ")
-	output.WriteString(DescStyle.Render("tnr snapshot <command>"))
+	output.WriteString(DescStyle.Render("tnr ssh-keys list"))
 	output.WriteString("\n\n")
 
-	// Commands Section
-	output.WriteString(SectionStyle.Render("● COMMANDS"))
+	output.WriteString(SectionStyle.Render("● OUTPUT"))
 	output.WriteString("\n\n")
-
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("create"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Create a snapshot from a running instance"))
+	output.WriteString(DescStyle.Render("Displays a table with the following columns:"))
 	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("list"))
-	output.WriteString("     ")
-	output.WriteString(DescStyle.Render("List all snapshots"))
+	output.WriteString("    ")
+	output.WriteString(DescStyle.Render("• Name: Key name"))
 	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("delete"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Delete a snapshot"))
-	output.WriteString("\n\n")
-
-	output.WriteString("  ")
-	output.WriteString(DescStyle.Render("Run 'tnr snapshot <command> --help' for details on a specific command."))
+	output.WriteString("    ")
+	output.WriteString(DescStyle.Render("• Fingerprint: SHA256 fingerprint"))
+	output.WriteString("\n")
+	output.WriteString("    ")
+	output.WriteString(DescStyle.Render("• Key Type: Algorithm (e.g. ssh-ed25519)"))
+	output.WriteString("\n")
+	output.WriteString("    ")
+	output.WriteString(DescStyle.Render("• Created: Date the key was added"))
 	output.WriteString("\n\n")
 
 	fmt.Fprint(os.Stdout, output.String())

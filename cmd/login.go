@@ -25,8 +25,7 @@ import (
 )
 
 const (
-	// authURL     = "https://console.thundercompute.com/login/vscode"
-	authURL     = "http://localhost:3000/login/vscode"
+	authURL = "https://console.thundercompute.com/login/vscode"
 	callbackURL = "http://127.0.0.1"
 )
 

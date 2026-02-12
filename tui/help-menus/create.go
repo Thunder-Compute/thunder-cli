@@ -119,7 +119,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--ssh-key"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Name of a saved SSH key to attach (see 'tnr ssh-keys list')"))
+	output.WriteString(DescStyle.Render("[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')"))
 	output.WriteString("\n\n")
 
 	fmt.Fprint(os.Stdout, output.String())
