@@ -151,11 +151,11 @@ type InstanceModifyRequest struct {
 // InstanceModifyResponse represents the response from modifying an instance.
 type InstanceModifyResponse struct {
 	Identifier   string  `json:"identifier"`
-	InstanceName string  `json:"instanceName"`
+	InstanceName string  `json:"instance_name"`
 	Mode         *string `json:"mode,omitempty"`
-	GPUType      *string `json:"gpuType,omitempty"`
-	NumGPUs      *int    `json:"numGpus,omitempty"`
-	HTTPPorts    []int   `json:"httpPorts,omitempty"`
+	GPUType      *string `json:"gpu_type,omitempty"`
+	NumGPUs      *int    `json:"num_gpus,omitempty"`
+	HTTPPorts    []int   `json:"http_ports,omitempty"`
 }
 
 // CreateSnapshotRequest represents the request to create a snapshot.
@@ -211,10 +211,10 @@ type ThunderTemplatesResponse map[string]EnvironmentTemplate
 type SSHKey struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
-	PublicKey   string `json:"publicKey"`
+	PublicKey   string `json:"public_key"`
 	Fingerprint string `json:"fingerprint"`
-	KeyType     string `json:"keyType"`
-	CreatedAt   int64  `json:"createdAt"`
+	KeyType     string `json:"key_type"`
+	CreatedAt   int64  `json:"created_at"`
 }
 
 // SSHKeyAddRequest is the request body for adding an SSH key.
