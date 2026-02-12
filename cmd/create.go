@@ -3,25 +3,30 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
-	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/tui"
-	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
-	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+
+	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/internal/sshkeys"
+	"github.com/Thunder-Compute/thunder-cli/tui"
+	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
 var (
-	mode       string
-	gpuType    string
-	numGPUs    int
-	vcpus      int
-	template   string
-	diskSizeGB int
+	mode             string
+	gpuType          string
+	numGPUs          int
+	vcpus            int
+	template         string
+	diskSizeGB       int
+	createSSHKeyName string
 )
 
 var createCmd = &cobra.Command{
@@ -54,17 +59,19 @@ func init() {
 	createCmd.Flags().StringVar(&mode, "mode", "", "Instance mode: prototyping or production")
 	createCmd.Flags().StringVar(&gpuType, "gpu", "", "GPU type (prototyping: a6000 or a100, production: a100 or h100)")
 	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs (production only): 1, 2, 4, or 8")
-	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): 4, 8, 16, or 32")
+	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): 4, 8, or 16")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (100-1000)")
+	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-key", "", "Name of a saved SSH key to attach (see 'tnr ssh-keys list')")
 }
 
 type createProgressModel struct {
 	spinner spinner.Model
 	message string
 
-	client *api.Client
-	req    api.CreateInstanceRequest
+	client     *api.Client
+	req        api.CreateInstanceRequest
+	sshKeyName string
 
 	done      bool
 	err       error
@@ -163,6 +170,13 @@ func (m createProgressModel) View() string {
 		lines = append(lines, "")
 		lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(fmt.Sprintf("%d", m.resp.Identifier)))
 		lines = append(lines, "")
+		if m.sshKeyName != "" {
+			lines = append(lines, labelStyle.Render("SSH Key:")+" "+valueStyle.Render(fmt.Sprintf("'%s' linked for auto-connect", m.sshKeyName)))
+			lines = append(lines, "")
+		} else {
+			lines = append(lines, labelStyle.Render("SSH Key:")+" "+valueStyle.Render("Thunder-managed"))
+			lines = append(lines, "")
+		}
 		lines = append(lines, headerStyle.Render("Next steps:"))
 		lines = append(lines, cmdStyle.Render("  • Run 'tnr status' to monitor provisioning progress"))
 		lines = append(lines, cmdStyle.Render(fmt.Sprintf("  • Run 'tnr connect %d' once the instance is RUNNING", m.resp.Identifier)))
@@ -263,6 +277,36 @@ func runCreate(cmd *cobra.Command) error {
 		}
 	}
 
+	// Resolve SSH key if --ssh-key flag was provided
+	var resolvedPublicKey string
+	var privateKeyPath string
+	if createSSHKeyName != "" {
+		keys, err := client.ListSSHKeys()
+		if err != nil {
+			return fmt.Errorf("failed to fetch SSH keys: %w", err)
+		}
+
+		var matchedKey *api.SSHKey
+		for i := range keys {
+			if strings.EqualFold(keys[i].Name, createSSHKeyName) {
+				matchedKey = &keys[i]
+				break
+			}
+		}
+
+		if matchedKey == nil {
+			return fmt.Errorf("SSH key '%s' not found. Run 'tnr ssh-keys list' to see available keys", createSSHKeyName)
+		}
+
+		// Verify local private key exists so user can connect later
+		privateKeyPath, err = sshkeys.FindPrivateKeyForPublicKey(matchedKey.PublicKey)
+		if err != nil {
+			return fmt.Errorf("failed to find local private key for '%s': %w", createSSHKeyName, err)
+		}
+
+		resolvedPublicKey = matchedKey.PublicKey
+	}
+
 	req := api.CreateInstanceRequest{
 		Mode:       api.InstanceMode(createConfig.Mode),
 		GPUType:    createConfig.GPUType,
@@ -270,9 +314,11 @@ func runCreate(cmd *cobra.Command) error {
 		CPUCores:   createConfig.VCPUs,
 		Template:   createConfig.Template,
 		DiskSizeGB: createConfig.DiskSizeGB,
+		PublicKey:  resolvedPublicKey,
 	}
 
 	progressModel := newCreateProgressModel(client, "Creating instance...", req)
+	progressModel.sshKeyName = createSSHKeyName
 	program := tea.NewProgram(progressModel)
 	finalModel, runErr := program.Run()
 	if runErr != nil {
@@ -291,6 +337,16 @@ func runCreate(cmd *cobra.Command) error {
 
 	if result.err != nil {
 		return fmt.Errorf("failed to create instance: %w", result.err)
+	}
+
+	// Symlink user's private key so `tnr connect` finds it automatically
+	if privateKeyPath != "" && result.resp != nil {
+		keyFile := utils.GetKeyFile(result.resp.Uuid)
+		_ = os.MkdirAll(filepath.Dir(keyFile), 0o700)
+		_ = os.Remove(keyFile)
+		if err := os.Symlink(privateKeyPath, keyFile); err != nil {
+			PrintWarningSimple(fmt.Sprintf("Could not link SSH key for auto-connect: %v", err))
+		}
 	}
 
 	return nil
@@ -313,10 +369,10 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 		config.NumGPUs = 1
 
 		if config.VCPUs == 0 {
-			return fmt.Errorf("prototyping mode requires --vcpus flag (4, 8, 16, or 32)")
+			return fmt.Errorf("prototyping mode requires --vcpus flag (4, 8, or 16)")
 		}
 
-		validVCPUs := []int{4, 8, 16, 32}
+		validVCPUs := []int{4, 8, 16}
 		valid := false
 		for _, v := range validVCPUs {
 			if config.VCPUs == v {
@@ -325,7 +381,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 			}
 		}
 		if !valid {
-			return fmt.Errorf("vcpus must be one of: 4, 8, 16, or 32")
+			return fmt.Errorf("vcpus must be one of: 4, 8, or 16")
 		}
 	} else {
 		canonical, ok := productionGPUMap[config.GPUType]
