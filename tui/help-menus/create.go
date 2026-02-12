@@ -69,6 +69,13 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString(CommandTextStyle.Render("tnr create --mode production --gpu a100 --num-gpus 2 --template base --disk-size-gb 500"))
 	output.WriteString("\n\n")
 
+	output.WriteString("  ")
+	output.WriteString(ExampleStyle.Render("# Attach a saved SSH key during creation"))
+	output.WriteString("\n")
+	output.WriteString("  ")
+	output.WriteString(CommandTextStyle.Render("tnr create --mode prototyping --gpu a6000 --vcpus 4 --template base --ssh-key my-key"))
+	output.WriteString("\n\n")
+
 	// Flags Section
 	output.WriteString(SectionStyle.Render("● FLAGS"))
 	output.WriteString("\n\n")
@@ -94,7 +101,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--vcpus"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("CPU cores (prototyping only): 4, 8, 16, or 32, RAM: 8GB per vCPU. Production: 18 per GPU, RAM: 90GB per GPU"))
+	output.WriteString(DescStyle.Render("CPU cores (prototyping only): 4, 8, or 16, RAM: 8GB per vCPU. Production: 18 per GPU, RAM: 90GB per GPU"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
@@ -107,6 +114,12 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString(FlagStyle.Render("--disk-size-gb"))
 	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Disk storage in GB: 100-400 (prototyping), 100-1000 (production)"))
+	output.WriteString("\n")
+
+	output.WriteString("  ")
+	output.WriteString(FlagStyle.Render("--ssh-key"))
+	output.WriteString("   ")
+	output.WriteString(DescStyle.Render("Name of a saved SSH key to attach (see 'tnr ssh-keys list')"))
 	output.WriteString("\n\n")
 
 	fmt.Fprint(os.Stdout, output.String())
