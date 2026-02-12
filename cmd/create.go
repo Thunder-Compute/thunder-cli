@@ -341,7 +341,7 @@ func runCreate(cmd *cobra.Command) error {
 
 	// Symlink user's private key so `tnr connect` finds it automatically
 	if privateKeyPath != "" && result.resp != nil {
-		keyFile := utils.GetKeyFile(result.resp.Uuid)
+		keyFile := utils.GetKeyFile(result.resp.UUID)
 		_ = os.MkdirAll(filepath.Dir(keyFile), 0o700)
 		_ = os.Remove(keyFile)
 		if err := os.Symlink(privateKeyPath, keyFile); err != nil {

@@ -52,22 +52,22 @@ type InstanceListItem struct {
 	IP               *string   `json:"ip,omitempty"`
 	Name             string    `json:"name"`
 	Status           string    `json:"status"`
-	CreatedAt        string    `json:"created_at"`
+	CreatedAt        string    `json:"createdAt"`
 	UUID             string    `json:"uuid"`
 	Storage          int       `json:"storage"`
-	CPUCores         string    `json:"cpu_cores"`
+	CPUCores         string    `json:"cpuCores"`
 	Template         string    `json:"template"`
-	GPUType          string    `json:"gpu_type"`
-	NumGPUs          string    `json:"num_gpus"`
+	GPUType          string    `json:"gpuType"`
+	NumGPUs          string    `json:"numGpus"`
 	Memory           string    `json:"memory"`
 	Promoted         bool      `json:"promoted"`
 	Mode             string    `json:"mode"`
 	Port             int       `json:"port"`
-	HTTPPorts        []int     `json:"http_ports,omitempty"`
+	HTTPPorts        []int     `json:"httpPorts,omitempty"`
 	K8s              bool      `json:"k8s"`
-	ProvisioningTime time.Time `json:"provisioning_time,omitempty"`
-	RestoringTime    time.Time `json:"restoring_time,omitempty"`
-	SnapshotSize     int64     `json:"snapshot_size,omitempty"`
+	ProvisioningTime time.Time `json:"provisioningTime,omitempty"`
+	RestoringTime    time.Time `json:"restoringTime,omitempty"`
+	SnapshotSize     int64     `json:"snapshotSize,omitempty"`
 }
 
 // GetIP returns the IP address or empty string if nil.
@@ -79,47 +79,18 @@ func (i InstanceListItem) GetIP() string {
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling for InstanceListItem
-// to handle CPUCores field that can be either int or string, and supports
-// both snake_case (primary) and camelCase (legacy) field names.
+// to handle CPUCores field that can be either int or string.
 func (i *InstanceListItem) UnmarshalJSON(data []byte) error {
-	// Unmarshal into raw map to check for legacy camelCase keys
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-
-	// Fallback legacy camelCase keys to snake_case
-	camelToSnake := map[string]string{
-		"createdAt":        "created_at",
-		"cpuCores":         "cpu_cores",
-		"gpuType":          "gpu_type",
-		"numGpus":          "num_gpus",
-		"httpPorts":        "http_ports",
-		"provisioningTime": "provisioning_time",
-	}
-	for camel, snake := range camelToSnake {
-		if _, has := raw[snake]; !has {
-			if val, hasCamel := raw[camel]; hasCamel {
-				raw[snake] = val
-			}
-		}
-	}
-
-	patched, err := json.Marshal(raw)
-	if err != nil {
-		return err
-	}
-
 	// Define a temporary struct with CPUCores as interface{} to handle both types
 	type Alias InstanceListItem
 	temp := struct {
 		*Alias
-		CPUCores interface{} `json:"cpu_cores"`
+		CPUCores interface{} `json:"cpuCores"`
 	}{
 		Alias: (*Alias)(i),
 	}
 
-	if err := json.Unmarshal(patched, &temp); err != nil {
+	if err := json.Unmarshal(data, &temp); err != nil {
 		return err
 	}
 
@@ -134,7 +105,7 @@ func (i *InstanceListItem) UnmarshalJSON(data []byte) error {
 	case nil:
 		i.CPUCores = ""
 	default:
-		return fmt.Errorf("unexpected type for cpu_cores field: %T", v)
+		return fmt.Errorf("unexpected type for cpuCores field: %T", v)
 	}
 
 	return nil
@@ -180,16 +151,16 @@ type InstanceModifyRequest struct {
 // InstanceModifyResponse represents the response from modifying an instance.
 type InstanceModifyResponse struct {
 	Identifier   string  `json:"identifier"`
-	InstanceName string  `json:"instance_name"`
+	InstanceName string  `json:"instanceName"`
 	Mode         *string `json:"mode,omitempty"`
-	GPUType      *string `json:"gpu_type,omitempty"`
-	NumGPUs      *int    `json:"num_gpus,omitempty"`
-	HTTPPorts    []int   `json:"http_ports,omitempty"`
+	GPUType      *string `json:"gpuType,omitempty"`
+	NumGPUs      *int    `json:"numGpus,omitempty"`
+	HTTPPorts    []int   `json:"httpPorts,omitempty"`
 }
 
 // CreateSnapshotRequest represents the request to create a snapshot.
 type CreateSnapshotRequest struct {
-	InstanceID string `json:"instance_id"`
+	InstanceID string `json:"instanceId"`
 	Name       string `json:"name"`
 }
 
@@ -202,9 +173,9 @@ type CreateSnapshotResponse struct {
 type Snapshot struct {
 	ID                string `json:"id"`
 	Name              string `json:"name"`
-	MinimumDiskSizeGB int    `json:"minimum_disk_size_gb"`
+	MinimumDiskSizeGB int    `json:"minimumDiskSizeGb"`
 	Status            string `json:"status"`
-	CreatedAt         int64  `json:"created_at"`
+	CreatedAt         int64  `json:"createdAt"`
 }
 
 // ListSnapshotsResponse is the list of user snapshots.
@@ -221,15 +192,15 @@ type TemplateDefaultSpecs struct {
 
 // EnvironmentTemplate represents a thunder template for instance creation.
 type EnvironmentTemplate struct {
-	DisplayName         string                `json:"display_name"`
-	ExtendedDescription string                `json:"extended_description,omitempty"`
-	AutomountFolders    []string              `json:"automount_folders"`
-	CleanupCommands     []string              `json:"cleanup_commands"`
-	OpenPorts           []int                 `json:"open_ports"`
-	StartupCommands     []string              `json:"startup_commands"`
-	StartupMinutes      *int                  `json:"startup_minutes,omitempty"`
+	DisplayName         string                `json:"displayName"`
+	ExtendedDescription string                `json:"extendedDescription,omitempty"`
+	AutomountFolders    []string              `json:"automountFolders"`
+	CleanupCommands     []string              `json:"cleanupCommands"`
+	OpenPorts           []int                 `json:"openPorts"`
+	StartupCommands     []string              `json:"startupCommands"`
+	StartupMinutes      *int                  `json:"startupMinutes,omitempty"`
 	Version             *int                  `json:"version,omitempty"`
-	DefaultSpecs        *TemplateDefaultSpecs `json:"default_specs,omitempty"`
+	DefaultSpecs        *TemplateDefaultSpecs `json:"defaultSpecs,omitempty"`
 	Default             *bool                 `json:"default,omitempty"`
 }
 
@@ -240,10 +211,10 @@ type ThunderTemplatesResponse map[string]EnvironmentTemplate
 type SSHKey struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
-	PublicKey   string `json:"public_key"`
+	PublicKey   string `json:"publicKey"`
 	Fingerprint string `json:"fingerprint"`
-	KeyType     string `json:"key_type"`
-	CreatedAt   int64  `json:"created_at"`
+	KeyType     string `json:"keyType"`
+	CreatedAt   int64  `json:"createdAt"`
 }
 
 // SSHKeyAddRequest is the request body for adding an SSH key.
