@@ -20,7 +20,7 @@ import (
 var sshKeysCmd = &cobra.Command{
 	Use:     "ssh-keys",
 	Aliases: []string{"ssh-key", "keys"},
-	Short:   "Manage SSH keys",
+	Short:   "Add external keys to Thunder Compute instances",
 	Long:    "Manage saved SSH public keys for your organization.",
 	Run: func(cmd *cobra.Command, args []string) {
 		_ = cmd.Help()
