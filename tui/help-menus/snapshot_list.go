@@ -31,6 +31,16 @@ func RenderSnapshotListHelp(cmd *cobra.Command) {
 	output.WriteString(DescStyle.Render("tnr snapshot list"))
 	output.WriteString("\n\n")
 
+	// Options Section
+	output.WriteString(SectionStyle.Render("● OPTIONS"))
+	output.WriteString("\n\n")
+	output.WriteString("  ")
+	output.WriteString(FlagStyle.Render("--no-wait"))
+	output.WriteString("\n")
+	output.WriteString("    ")
+	output.WriteString(DescStyle.Render("Display once and exit without monitoring"))
+	output.WriteString("\n\n")
+
 	// Examples Section
 	output.WriteString(SectionStyle.Render("● EXAMPLES"))
 	output.WriteString("\n\n")
@@ -58,6 +68,9 @@ func RenderSnapshotListHelp(cmd *cobra.Command) {
 	output.WriteString("\n")
 	output.WriteString("    ")
 	output.WriteString(DescStyle.Render("• Created: Snapshot creation date"))
+	output.WriteString("\n\n")
+	output.WriteString("  ")
+	output.WriteString(DescStyle.Render("When monitoring, press 'Q' to stop watching."))
 	output.WriteString("\n\n")
 
 	fmt.Fprint(os.Stdout, output.String())
