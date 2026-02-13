@@ -36,14 +36,14 @@ func init() {
 	// ── list ────────────────────────────────────────────────────────────
 
 	sshKeysListCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSSHKeysHelp(cmd)
+		helpmenus.RenderSSHKeysListHelp(cmd)
 	})
 	sshKeysCmd.AddCommand(sshKeysListCmd)
 
 	// ── add ─────────────────────────────────────────────────────────────
 
 	sshKeysAddCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSSHKeysHelp(cmd)
+		helpmenus.RenderSSHKeysAddHelp(cmd)
 	})
 	sshKeysAddCmd.Flags().StringVar(&sshKeyAddName, "name", "", "Name for the SSH key")
 	sshKeysAddCmd.Flags().StringVar(&sshKeyAddKeyFile, "key-file", "", "Path to SSH public key file")
@@ -53,7 +53,7 @@ func init() {
 	// ── delete ──────────────────────────────────────────────────────────
 
 	sshKeysDeleteCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSSHKeysHelp(cmd)
+		helpmenus.RenderSSHKeysDeleteHelp(cmd)
 	})
 	sshKeysCmd.AddCommand(sshKeysDeleteCmd)
 }

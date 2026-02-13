@@ -68,6 +68,7 @@ type InstanceListItem struct {
 	ProvisioningTime time.Time `json:"provisioningTime,omitempty"`
 	RestoringTime    time.Time `json:"restoringTime,omitempty"`
 	SnapshotSize     int64     `json:"snapshotSize,omitempty"`
+	SSHPublicKeys    []string  `json:"sshPublicKeys,omitempty"`
 }
 
 // GetIP returns the IP address or empty string if nil.

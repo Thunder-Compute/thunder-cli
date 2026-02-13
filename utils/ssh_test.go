@@ -432,7 +432,7 @@ func TestVerifySSHConnectionCtxRespectsContext(t *testing.T) {
 
 func TestNewSSHConfigErrors(t *testing.T) {
 	t.Run("missing key file", func(t *testing.T) {
-		_, err := newSSHConfig("ubuntu", filepath.Join(t.TempDir(), "missing"))
+		_, err := newSSHConfig("ubuntu", filepath.Join(t.TempDir(), "missing"), nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to read private key")
 	})
@@ -441,7 +441,7 @@ func TestNewSSHConfigErrors(t *testing.T) {
 		dir := t.TempDir()
 		keyPath := filepath.Join(dir, "bad_key")
 		require.NoError(t, os.WriteFile(keyPath, []byte("not a key"), 0600))
-		_, err := newSSHConfig("ubuntu", keyPath)
+		_, err := newSSHConfig("ubuntu", keyPath, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse private key")
 	})

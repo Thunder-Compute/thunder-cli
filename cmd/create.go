@@ -62,7 +62,7 @@ func init() {
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): 4, 8, or 16")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (100-1000)")
-	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-key", "", "Name of a saved SSH key to attach (see 'tnr ssh-keys list')")
+	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-key", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
 }
 
 type createProgressModel struct {
@@ -170,13 +170,6 @@ func (m createProgressModel) View() string {
 		lines = append(lines, "")
 		lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(fmt.Sprintf("%d", m.resp.Identifier)))
 		lines = append(lines, "")
-		if m.sshKeyName != "" {
-			lines = append(lines, labelStyle.Render("SSH Key:")+" "+valueStyle.Render(fmt.Sprintf("'%s' linked for auto-connect", m.sshKeyName)))
-			lines = append(lines, "")
-		} else {
-			lines = append(lines, labelStyle.Render("SSH Key:")+" "+valueStyle.Render("Thunder-managed"))
-			lines = append(lines, "")
-		}
 		lines = append(lines, headerStyle.Render("Next steps:"))
 		lines = append(lines, cmdStyle.Render("  • Run 'tnr status' to monitor provisioning progress"))
 		lines = append(lines, cmdStyle.Render(fmt.Sprintf("  • Run 'tnr connect %d' once the instance is RUNNING", m.resp.Identifier)))
