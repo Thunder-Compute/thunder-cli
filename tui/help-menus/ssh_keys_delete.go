@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func RenderSnapshotHelp(cmd *cobra.Command) {
+func RenderSSHKeysDeleteHelp(cmd *cobra.Command) {
 	InitHelpStyles(os.Stdout)
 
 	var output strings.Builder
@@ -16,45 +16,40 @@ func RenderSnapshotHelp(cmd *cobra.Command) {
 	header := `
 ╭─────────────────────────────────────────────────────────────────────────────╮
 │                                                                             │
-│                              SNAPSHOT COMMAND                               │
-│                     Manage Thunder Compute snapshots                        │
+│                         SSH KEYS DELETE COMMAND                             │
+│                         Delete an SSH key                                   │
 │                                                                             │
 ╰─────────────────────────────────────────────────────────────────────────────╯
 	`
 
 	output.WriteString(HeaderStyle.Render(header))
 
-	// Usage Section
 	output.WriteString(SectionStyle.Render("● USAGE"))
 	output.WriteString("\n\n")
 	output.WriteString("  ")
-	output.WriteString(DescStyle.Render("tnr snapshot <command>"))
-	output.WriteString("\n\n")
-
-	// Commands Section
-	output.WriteString(SectionStyle.Render("● COMMANDS"))
-	output.WriteString("\n\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("create"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Create a snapshot from a running instance"))
+	output.WriteString(CommandStyle.Render("Interactive"))
+	output.WriteString("        ")
+	output.WriteString(DescStyle.Render("tnr ssh-keys delete"))
 	output.WriteString("\n")
-
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("list"))
-	output.WriteString("     ")
-	output.WriteString(DescStyle.Render("List all snapshots"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("delete"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Delete a snapshot"))
+	output.WriteString(CommandStyle.Render("Non-interactive"))
+	output.WriteString("    ")
+	output.WriteString(DescStyle.Render("tnr ssh-keys delete <key_name_or_id>"))
 	output.WriteString("\n\n")
 
+	output.WriteString(SectionStyle.Render("● EXAMPLES"))
+	output.WriteString("\n\n")
 	output.WriteString("  ")
-	output.WriteString(DescStyle.Render("Run 'tnr snapshot <command> --help' for details on a specific command."))
+	output.WriteString(ExampleStyle.Render("# Interactive mode"))
+	output.WriteString("\n")
+	output.WriteString("  ")
+	output.WriteString(CommandTextStyle.Render("tnr ssh-keys delete"))
+	output.WriteString("\n\n")
+	output.WriteString("  ")
+	output.WriteString(ExampleStyle.Render("# Delete by name"))
+	output.WriteString("\n")
+	output.WriteString("  ")
+	output.WriteString(CommandTextStyle.Render("tnr ssh-keys delete my-key"))
 	output.WriteString("\n\n")
 
 	fmt.Fprint(os.Stdout, output.String())

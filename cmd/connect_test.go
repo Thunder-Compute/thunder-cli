@@ -69,6 +69,14 @@ func (m *mockAPIClient) AddSSHKeyCtx(ctx context.Context, instanceID string) (*a
 	return m.addSSHKeyResponse, m.addSSHKeyErr
 }
 
+func (m *mockAPIClient) ListSSHKeys() (api.SSHKeyListResponse, error) {
+	return api.SSHKeyListResponse{}, nil
+}
+
+func (m *mockAPIClient) AddSSHKeyToInstanceWithPublicKey(instanceID, publicKey string) (*api.AddSSHKeyResponse, error) {
+	return m.addSSHKeyResponse, m.addSSHKeyErr
+}
+
 // =============================================================================
 // Mock SSH Client
 // =============================================================================
