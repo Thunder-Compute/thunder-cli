@@ -9,13 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
 type SnapshotListModel struct {
@@ -26,8 +24,7 @@ type SnapshotListModel struct {
 	quitting     bool
 	spinner      spinner.Model
 	err          error
-	cancelled    bool
-	progressBars map[string]progress.Model
+	cancelled bool
 }
 
 type snapshotsMsg struct {
@@ -43,28 +40,20 @@ func NewSnapshotListModel(client *api.Client, monitoring bool, snapshots api.Lis
 		monitoring:   monitoring,
 		snapshots:    snapshots,
 		lastUpdate:   time.Now(),
-		spinner:      s,
-		progressBars: make(map[string]progress.Model),
+		spinner: s,
 	}
 }
 
 func (m SnapshotListModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.spinner.Tick}
 	if m.monitoring {
-		cmds = append(cmds, snapshotsTickCmd(m.snapshots))
+		cmds = append(cmds, snapshotsTickCmd())
 	}
 	return tea.Batch(cmds...)
 }
 
-func snapshotsTickCmd(snapshots api.ListSnapshotsResponse) tea.Cmd {
-	interval := 10 * time.Second
-	for _, snapshot := range snapshots {
-		if snapshot.Status == "CREATING" {
-			interval = 5 * time.Second
-			break
-		}
-	}
-	return tea.Tick(interval, func(t time.Time) tea.Msg {
+func snapshotsTickCmd() tea.Cmd {
+	return tea.Tick(30*time.Second, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -96,7 +85,7 @@ func (m SnapshotListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		if m.monitoring {
-			return m, tea.Batch(snapshotsTickCmd(m.snapshots), fetchSnapshotsCmd(m.client))
+			return m, fetchSnapshotsCmd(m.client)
 		}
 
 	case spinner.TickMsg:
@@ -113,16 +102,12 @@ func (m SnapshotListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.snapshots = msg.snapshots
 		m.lastUpdate = time.Now()
 
-		if len(m.snapshots) == 0 {
-			m.monitoring = false
-			m.quitting = true
-			return m, deferQuit()
+		if m.monitoring {
+			return m, snapshotsTickCmd()
 		}
 
-		if !m.monitoring {
-			m.quitting = true
-			return m, deferQuit()
-		}
+		m.quitting = true
+		return m, deferQuit()
 	}
 
 	return m, nil
@@ -137,11 +122,6 @@ func (m SnapshotListModel) View() string {
 
 	b.WriteString(m.renderTable())
 	b.WriteString("\n")
-
-	creatingSection := m.renderCreatingSection()
-	if creatingSection != "" {
-		b.WriteString(creatingSection)
-	}
 
 	if m.quitting {
 		timestamp := m.lastUpdate.Format("15:04:05")
@@ -249,69 +229,6 @@ func (m SnapshotListModel) formatStatus(status string, width int) string {
 		style = lipgloss.NewStyle()
 	}
 	return style.Render(truncate(status, width))
-}
-
-func (m *SnapshotListModel) ensureProgressBar(snapshotID string) {
-	if _, exists := m.progressBars[snapshotID]; !exists {
-		p := progress.New(
-			progress.WithSolidFill("#FFA500"),
-			progress.WithWidth(70),
-		)
-		m.progressBars[snapshotID] = p
-	}
-}
-
-func (m *SnapshotListModel) renderCreatingSection() string {
-	var creatingSnapshots []api.Snapshot
-	for _, snapshot := range m.snapshots {
-		if snapshot.Status == "CREATING" {
-			creatingSnapshots = append(creatingSnapshots, snapshot)
-		}
-	}
-
-	if len(creatingSnapshots) == 0 {
-		return ""
-	}
-
-	var b strings.Builder
-	b.WriteString("\n")
-	b.WriteString(primaryStyle.Bold(true).Render("Creating Snapshots:"))
-	b.WriteString("\n\n")
-
-	for _, snapshot := range creatingSnapshots {
-		startTime := time.Unix(snapshot.CreatedAt, 0)
-		if snapshot.CreatedAt <= 0 {
-			startTime = time.Now()
-		}
-
-		progressBarKey := "snapshot-" + snapshot.ID
-		m.ensureProgressBar(progressBarKey)
-		progressBar := m.progressBars[progressBarKey]
-
-		snapshotCreationExpectedDuration := utils.EstimateInstanceRestorationDuration(int64(snapshot.MinimumDiskSizeGB) * 1024 * 1024 * 1024)
-		progressPercent := utils.GetProgress(startTime, snapshotCreationExpectedDuration)
-
-		elapsed := time.Since(startTime)
-		remaining := snapshotCreationExpectedDuration - elapsed
-		if remaining < 0 {
-			remaining = 0
-		}
-		remainingMinutes := int(remaining.Minutes())
-		if remainingMinutes < 1 {
-			remainingMinutes = 1
-		}
-
-		b.WriteString(fmt.Sprintf("  %s\n", SubtleTextStyle().Render(snapshot.Name)))
-		b.WriteString(fmt.Sprintf("  %s\n", progressBar.ViewAs(progressPercent)))
-		message := fmt.Sprintf("  ~%d min total, ~%d min remaining",
-			int(snapshotCreationExpectedDuration.Minutes()),
-			remainingMinutes,
-		)
-		b.WriteString(timestampStyle.Render(message))
-		b.WriteString("\n\n")
-	}
-
-	return b.String()
 }
 
 var (
