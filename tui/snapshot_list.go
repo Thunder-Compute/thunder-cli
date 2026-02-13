@@ -123,6 +123,13 @@ func (m SnapshotListModel) View() string {
 	b.WriteString(m.renderTable())
 	b.WriteString("\n")
 
+	if m.hasCreatingSnapshots() {
+		b.WriteString(primaryStyle.Render("Snapshot creation can take anywhere from 10 to 90 minutes."))
+		b.WriteString("\n")
+		b.WriteString(primaryStyle.Render("You can delete your instance and snapshotting will continue in the background."))
+		b.WriteString("\n\n")
+	}
+
 	if m.quitting {
 		timestamp := m.lastUpdate.Format("15:04:05")
 		b.WriteString(timestampStyle.Render(fmt.Sprintf("Last updated: %s", timestamp)))
@@ -214,6 +221,15 @@ func (m SnapshotListModel) renderTable() string {
 	}
 
 	return b.String()
+}
+
+func (m SnapshotListModel) hasCreatingSnapshots() bool {
+	for _, s := range m.snapshots {
+		if s.Status == "CREATING" {
+			return true
+		}
+	}
+	return false
 }
 
 func (m SnapshotListModel) formatStatus(status string, width int) string {
