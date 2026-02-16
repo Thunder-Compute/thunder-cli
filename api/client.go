@@ -50,7 +50,7 @@ func (c *Client) ValidateToken(ctx context.Context) error {
 		Level:    sentry.LevelInfo,
 	})
 
-	req, err := http.NewRequest("GET", c.baseURL+"/v1/auth/validate", nil)
+	req, err := http.NewRequest("GET", c.baseURL+"/auth/validate", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -340,7 +340,7 @@ func (c *Client) CreateInstance(req CreateInstanceRequest) (*CreateInstanceRespo
 }
 
 func (c *Client) DeleteInstance(instanceID string) (*DeleteInstanceResponse, error) {
-	url := fmt.Sprintf("%s/v1/instances/%s/delete", c.baseURL, instanceID)
+	url := fmt.Sprintf("%s/instances/%s/delete", c.baseURL, instanceID)
 
 	httpReq, err := http.NewRequest("POST", url, nil)
 	if err != nil {
@@ -381,7 +381,7 @@ func (c *Client) ModifyInstance(instanceID string, req InstanceModifyRequest) (*
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/v1/instances/%s/modify", c.baseURL, instanceID)
+	url := fmt.Sprintf("%s/instances/%s/modify", c.baseURL, instanceID)
 	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -435,7 +435,7 @@ func (c *Client) CreateSnapshot(req CreateSnapshotRequest) (*CreateSnapshotRespo
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", c.baseURL+"/v1/snapshots/create", bytes.NewBuffer(jsonData))
+	httpReq, err := http.NewRequest("POST", c.baseURL+"/snapshots/create", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -471,7 +471,7 @@ func (c *Client) CreateSnapshot(req CreateSnapshotRequest) (*CreateSnapshotRespo
 
 // ListSnapshots retrieves all snapshots for the authenticated user
 func (c *Client) ListSnapshots() (ListSnapshotsResponse, error) {
-	req, err := http.NewRequest("GET", c.baseURL+"/v1/snapshots/list", nil)
+	req, err := http.NewRequest("GET", c.baseURL+"/snapshots/list", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -508,7 +508,7 @@ func (c *Client) ListSnapshots() (ListSnapshotsResponse, error) {
 
 // DeleteSnapshot deletes a snapshot by ID
 func (c *Client) DeleteSnapshot(snapshotID string) error {
-	url := fmt.Sprintf("%s/v1/snapshots/%s", c.baseURL, snapshotID)
+	url := fmt.Sprintf("%s/snapshots/%s", c.baseURL, snapshotID)
 
 	httpReq, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
