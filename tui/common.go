@@ -123,6 +123,20 @@ func HelpStyle() lipgloss.Style {
 	return helpStyleTUI
 }
 
+func ResetLine(out io.Writer) {
+	if out == nil {
+		return
+	}
+	_, _ = io.WriteString(out, "\r\x1b[2K")
+}
+
+func ShowCursor(out io.Writer) {
+	if out == nil {
+		return
+	}
+	_, _ = io.WriteString(out, "\x1b[?25h")
+}
+
 func WarningStyle() lipgloss.Style {
 	return warningStyleTUI
 }
