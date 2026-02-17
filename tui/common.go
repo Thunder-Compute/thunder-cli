@@ -5,6 +5,7 @@ import (
 
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -135,6 +136,20 @@ func ShowCursor(out io.Writer) {
 		return
 	}
 	_, _ = io.WriteString(out, "\x1b[?25h")
+}
+
+// ShutdownProgram requests a Bubble Tea program to quit and waits for it to exit
+// before restoring cursor state. The done channel should be closed by the
+// goroutine running p.Run().
+func ShutdownProgram(p *tea.Program, done <-chan error, out io.Writer) {
+	if p != nil {
+		go p.Quit()
+	}
+	if done != nil {
+		<-done
+	}
+	ResetLine(out)
+	ShowCursor(out)
 }
 
 func WarningStyle() lipgloss.Style {
