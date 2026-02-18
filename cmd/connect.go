@@ -240,14 +240,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	shutdownTUI := func() {
 		stop()
-		// Don't block on tuiDone if context is already cancelled
-		select {
-		case <-tuiDone:
-		case <-ctx.Done():
-			// Context cancelled, don't wait for TUI
-		case <-time.After(100 * time.Millisecond):
-			// Short timeout to avoid hanging
-		}
+		tui.ShutdownProgram(p, tuiDone, os.Stdout)
 	}
 
 	checkCancelled := func() bool {
@@ -273,6 +266,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	if runtime.GOOS == "windows" {
 		if err := checkWindowsOpenSSH(); err != nil {
+			shutdownTUI()
 			return err
 		}
 	}
@@ -715,6 +709,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			if checkCancelled() {
 				return nil
 			}
+			shutdownTUI()
 			return fmt.Errorf("TUI error: %w", err)
 		}
 	default:
@@ -722,6 +717,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			if checkCancelled() {
 				return nil
 			}
+			shutdownTUI()
 			return fmt.Errorf("TUI error: %w", err)
 		}
 	}
