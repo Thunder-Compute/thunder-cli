@@ -149,6 +149,16 @@ type InstanceModifyRequest struct {
 	RemovePorts []int         `json:"remove_ports,omitempty"`
 }
 
+// InstanceStopResponse represents the response from stopping an instance.
+type InstanceStopResponse struct {
+	Message string `json:"message"`
+}
+
+// InstanceStartResponse represents the response from starting an instance.
+type InstanceStartResponse struct {
+	Message string `json:"message"`
+}
+
 // InstanceModifyResponse represents the response from modifying an instance.
 type InstanceModifyResponse struct {
 	Identifier   string  `json:"identifier"`
