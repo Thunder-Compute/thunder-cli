@@ -30,41 +30,37 @@ func init() {
 
 func runStop(args []string) error {
 	config, err := LoadConfig()
-	if err != nil {
+	if err != nil || config.Token == "" {
 		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
-	}
-
-	if config.Token == "" {
-		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
 	}
 
 	client := api.NewClient(config.Token, config.APIURL)
 
-	var instanceID string
+	// Fetch instances
+	busy := tui.NewBusyModel("Fetching instances...")
+	bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
+	busyDone := make(chan struct{})
+	go func() {
+		_, _ = bp.Run()
+		close(busyDone)
+	}()
+
+	instances, err := client.ListInstances()
+	bp.Send(tui.BusyDoneMsg{})
+	<-busyDone
+
+	if err != nil {
+		return fmt.Errorf("failed to fetch instances: %w", err)
+	}
+
+	if len(instances) == 0 {
+		PrintWarningSimple("No instances found. Use 'tnr create' to create a Thunder Compute instance.")
+		return nil
+	}
+
+	// Determine which instance to stop
 	var selectedInstance *api.Instance
-
 	if len(args) == 0 {
-		busy := tui.NewBusyModel("Fetching instances...")
-		bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
-		busyDone := make(chan struct{})
-		go func() {
-			_, _ = bp.Run()
-			close(busyDone)
-		}()
-
-		instances, err := client.ListInstances()
-		bp.Send(tui.BusyDoneMsg{})
-		<-busyDone
-
-		if err != nil {
-			return fmt.Errorf("failed to fetch instances: %w", err)
-		}
-
-		if len(instances) == 0 {
-			PrintWarningSimple("No instances found. Use 'tnr create' to create a Thunder Compute instance.")
-			return nil
-		}
-
 		selectedInstance, err = tui.RunStopInteractive(client, instances)
 		if err != nil {
 			if _, ok := err.(*tui.CancellationError); ok {
@@ -73,47 +69,28 @@ func runStop(args []string) error {
 			}
 			return err
 		}
-		instanceID = selectedInstance.ID
 	} else {
-		instanceID = args[0]
-
-		busy := tui.NewBusyModel("Fetching instances...")
-		bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
-		busyDone := make(chan struct{})
-		go func() {
-			_, _ = bp.Run()
-			close(busyDone)
-		}()
-
-		instances, err := client.ListInstances()
-		bp.Send(tui.BusyDoneMsg{})
-		<-busyDone
-
-		if err != nil {
-			return fmt.Errorf("failed to fetch instances: %w", err)
-		}
-
+		instanceID := args[0]
 		for i := range instances {
 			if instances[i].ID == instanceID || instances[i].UUID == instanceID {
 				selectedInstance = &instances[i]
 				break
 			}
 		}
-
 		if selectedInstance == nil {
 			return fmt.Errorf("instance '%s' not found", instanceID)
 		}
 	}
 
+	// Validate instance state
 	if selectedInstance.Status == "STOPPING" {
-		return fmt.Errorf("instance '%s' is already being stopped", instanceID)
+		return fmt.Errorf("instance '%s' is already being stopped", selectedInstance.ID)
 	}
-
 	if selectedInstance.Status == "STOPPED" {
-		return fmt.Errorf("instance '%s' is already stopped", instanceID)
+		return fmt.Errorf("instance '%s' is already stopped", selectedInstance.ID)
 	}
 
-	successMsg, err := tui.RunStopProgress(client, instanceID)
+	successMsg, err := tui.RunStopProgress(client, selectedInstance.ID)
 	if err != nil {
 		return fmt.Errorf("failed to stop instance: %w", err)
 	}
