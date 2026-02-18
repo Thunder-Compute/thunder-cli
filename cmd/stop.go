@@ -12,9 +12,10 @@ import (
 )
 
 var stopCmd = &cobra.Command{
-	Use:   "stop [instance_id]",
-	Short: "Stop a running Thunder Compute instance",
-	Args:  cobra.MaximumNArgs(1),
+	Use:    "stop [instance_id]",
+	Short:  "Stop a running Thunder Compute instance",
+	Hidden: true, // TODO: Remove when stop/start is ready for public release
+	Args:   cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runStop(args)
 	},
