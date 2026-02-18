@@ -374,6 +374,92 @@ func (c *Client) DeleteInstance(instanceID string) (*DeleteInstanceResponse, err
 	}, nil
 }
 
+// StopInstance stops a running instance
+func (c *Client) StopInstance(instanceID string) (*InstanceStopResponse, error) {
+	url := fmt.Sprintf("%s/instances/%s/stop", c.baseURL, instanceID)
+
+	httpReq, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	c.setHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	switch resp.StatusCode {
+	case 401:
+		return nil, fmt.Errorf("authentication failed: invalid token")
+	case 404:
+		return nil, fmt.Errorf("instance not found: %s", string(body))
+	case 400:
+		return nil, fmt.Errorf("instance cannot be stopped: %s", string(body))
+	case 200, 202:
+		// Success
+	default:
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var stopResp InstanceStopResponse
+	if err := json.Unmarshal(body, &stopResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &stopResp, nil
+}
+
+// StartInstance starts a stopped instance
+func (c *Client) StartInstance(instanceID string) (*InstanceStartResponse, error) {
+	url := fmt.Sprintf("%s/instances/%s/start", c.baseURL, instanceID)
+
+	httpReq, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	c.setHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	switch resp.StatusCode {
+	case 401:
+		return nil, fmt.Errorf("authentication failed: invalid token")
+	case 404:
+		return nil, fmt.Errorf("instance not found: %s", string(body))
+	case 400:
+		return nil, fmt.Errorf("instance cannot be started: %s", string(body))
+	case 200, 202:
+		// Success
+	default:
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var startResp InstanceStartResponse
+	if err := json.Unmarshal(body, &startResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &startResp, nil
+}
+
 // ModifyInstance modifies an existing instance configuration
 func (c *Client) ModifyInstance(instanceID string, req InstanceModifyRequest) (*InstanceModifyResponse, error) {
 	jsonData, err := json.Marshal(req)
