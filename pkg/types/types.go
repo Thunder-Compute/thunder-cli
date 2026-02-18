@@ -16,7 +16,6 @@ const (
 	InstanceStatus_Queued       InstanceStatus = "QUEUED"
 	InstanceStatus_Starting     InstanceStatus = "STARTING"
 	InstanceStatus_Running      InstanceStatus = "RUNNING"
-	InstanceStatus_Stopping     InstanceStatus = "STOPPING"
 	InstanceStatus_Stopped      InstanceStatus = "STOPPED"
 	InstanceStatus_Pending      InstanceStatus = "PENDING"
 	InstanceStatus_Unknown      InstanceStatus = "UNKNOWN"
