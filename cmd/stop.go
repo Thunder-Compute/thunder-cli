@@ -115,7 +115,7 @@ func runStop(args []string) error {
 
 	successMsg, err := tui.RunStopProgress(client, instanceID)
 	if err != nil {
-		return fmt.Errorf("failed to stop instance: %w\n\nPossible reasons:\n• Instance may not be in a running state\n• Server error occurred\n\nTry running 'tnr status' to check the instance state", err)
+		return fmt.Errorf("failed to stop instance: %w", err)
 	}
 
 	if successMsg != "" {
