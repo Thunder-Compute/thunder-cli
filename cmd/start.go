@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"os"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/cobra"
+
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/spf13/cobra"
 )
 
 var startCmd = &cobra.Command{
@@ -30,6 +31,9 @@ func init() {
 }
 
 func runStart(args []string) error {
+	// TODO: Remove when stop/start is ready for public release
+	return fmt.Errorf("start is not yet available. Stay tuned!")
+
 	config, err := LoadConfig()
 	if err != nil || config.Token == "" {
 		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
