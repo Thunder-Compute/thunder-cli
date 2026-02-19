@@ -195,9 +195,6 @@ func (m stopModel) View() string {
 			switch instance.Status {
 			case "RUNNING":
 				statusStyle = SuccessStyle()
-			case "STOPPING":
-				statusStyle = WarningStyle()
-				statusSuffix = " (already stopping)"
 			case "STOPPED":
 				statusStyle = ErrorStyle()
 				statusSuffix = " (already stopped)"

@@ -88,9 +88,6 @@ func runStop(args []string) error {
 	}
 
 	// Validate instance state
-	if selectedInstance.Status == "STOPPING" {
-		return fmt.Errorf("instance '%s' is already being stopped", selectedInstance.ID)
-	}
 	if selectedInstance.Status == "STOPPED" {
 		return fmt.Errorf("instance '%s' is already stopped", selectedInstance.ID)
 	}
