@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -496,10 +495,7 @@ func RunStatus(client *api.Client, monitoring bool, instances []api.Instance) er
 	)
 
 	if monitoring {
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			signal.Reset(syscall.SIGWINCH)
-		}()
+		disableResizeSignal()
 	}
 
 	if _, err := p.Run(); err != nil {
