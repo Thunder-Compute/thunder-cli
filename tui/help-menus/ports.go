@@ -72,6 +72,13 @@ func RenderPortsHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
+	output.WriteString(ExampleStyle.Render("# Add a range of ports to instance 1"))
+	output.WriteString("\n")
+	output.WriteString("  ")
+	output.WriteString(CommandTextStyle.Render("tnr ports forward 1 --add 9000-9005"))
+	output.WriteString("\n\n")
+
+	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Remove a port from instance 1"))
 	output.WriteString("\n")
 	output.WriteString("  ")
@@ -130,12 +137,12 @@ func RenderPortsForwardHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--add"))
 	output.WriteString("      ")
-	output.WriteString(DescStyle.Render("Ports to add (comma-separated)"))
+	output.WriteString(DescStyle.Render("Ports to add (comma-separated or ranges like 8000-8005)"))
 	output.WriteString("\n")
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--remove"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Ports to remove (comma-separated)"))
+	output.WriteString(DescStyle.Render("Ports to remove (comma-separated or ranges like 8000-8005)"))
 	output.WriteString("\n\n")
 
 	// Examples Section
@@ -153,6 +160,13 @@ func RenderPortsForwardHelp(cmd *cobra.Command) {
 	output.WriteString("\n")
 	output.WriteString("  ")
 	output.WriteString(CommandTextStyle.Render("tnr ports forward 1 --add 8080,3000"))
+	output.WriteString("\n\n")
+
+	output.WriteString("  ")
+	output.WriteString(ExampleStyle.Render("# Add a range of ports to instance 1"))
+	output.WriteString("\n")
+	output.WriteString("  ")
+	output.WriteString(CommandTextStyle.Render("tnr ports forward 1 --add 9000-9005"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")

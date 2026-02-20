@@ -10,6 +10,7 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -140,11 +141,7 @@ func runPortsList() error {
 		ports := "(none)"
 		if len(inst.HTTPPorts) > 0 {
 			hasPortsConfigured = true
-			portStrs := make([]string, len(inst.HTTPPorts))
-			for i, p := range inst.HTTPPorts {
-				portStrs[i] = fmt.Sprintf("%d", p)
-			}
-			ports = strings.Join(portStrs, ", ")
+			ports = utils.FormatPorts(inst.HTTPPorts)
 		}
 
 		row := []string{

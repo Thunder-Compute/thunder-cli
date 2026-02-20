@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -31,6 +31,7 @@ var portsForwardCmd = &cobra.Command{
 Examples:
   tnr ports forward              # Interactive mode
   tnr ports forward 1 --add 8080,3000
+  tnr ports forward 1 --add 9000-9010
   tnr ports fwd 1 --add 8080 --remove 443`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := runPortsForward(cmd, args); err != nil {
@@ -41,8 +42,8 @@ Examples:
 }
 
 func init() {
-	portsForwardCmd.Flags().StringVar(&addPortsFlag, "add", "", "Ports to add (comma-separated)")
-	portsForwardCmd.Flags().StringVar(&removePortsFlag, "remove", "", "Ports to remove (comma-separated)")
+	portsForwardCmd.Flags().StringVar(&addPortsFlag, "add", "", "Ports to add (comma-separated or ranges like 8000-8005)")
+	portsForwardCmd.Flags().StringVar(&removePortsFlag, "remove", "", "Ports to remove (comma-separated or ranges like 8000-8005)")
 	portsForwardCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		helpmenus.RenderPortsForwardHelp(cmd)
 	})
@@ -122,12 +123,12 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 	}
 
 	// Parse ports from flags
-	add, err := parsePorts(addPortsFlag)
+	add, err := utils.ParsePorts(addPortsFlag)
 	if err != nil {
 		return fmt.Errorf("invalid --add ports: %w", err)
 	}
 
-	remove, err := parsePorts(removePortsFlag)
+	remove, err := utils.ParsePorts(removePortsFlag)
 	if err != nil {
 		return fmt.Errorf("invalid --remove ports: %w", err)
 	}
@@ -160,28 +161,6 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-func parsePorts(portsStr string) ([]int, error) {
-	if portsStr == "" {
-		return nil, nil
-	}
-	parts := strings.Split(portsStr, ",")
-	ports := make([]int, 0, len(parts))
-	for _, p := range parts {
-		port, err := strconv.Atoi(strings.TrimSpace(p))
-		if err != nil {
-			return nil, fmt.Errorf("invalid port: %s", p)
-		}
-		if port < 1 || port > 65535 {
-			return nil, fmt.Errorf("port %d out of range (1-65535)", port)
-		}
-		if port == 22 {
-			return nil, fmt.Errorf("port 22 is reserved for SSH")
-		}
-		ports = append(ports, port)
-	}
-	return ports, nil
 }
 
 // Progress model for port forward operation
@@ -283,11 +262,7 @@ func (m portsForwardProgressModel) View() string {
 		lines = append(lines, labelStyle.Render("Instance UUID:")+" "+valueStyle.Render(m.resp.InstanceName))
 
 		if len(m.resp.HTTPPorts) > 0 {
-			portStrs := make([]string, len(m.resp.HTTPPorts))
-			for i, p := range m.resp.HTTPPorts {
-				portStrs[i] = fmt.Sprintf("%d", p)
-			}
-			lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render(strings.Join(portStrs, ", ")))
+			lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render(utils.FormatPorts(m.resp.HTTPPorts)))
 		} else {
 			lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render("(none)"))
 		}

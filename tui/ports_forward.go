@@ -3,11 +3,11 @@ package tui
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -76,7 +76,7 @@ func NewPortsForwardModel(client *api.Client, instances []api.Instance) tea.Mode
 	styles := newPortsForwardStyles()
 
 	ti := textinput.New()
-	ti.Placeholder = "e.g., 8080, 3000, 8443"
+	ti.Placeholder = "e.g., 8080, 3000, 9000-9005"
 	ti.CharLimit = 100
 	ti.Width = 40
 	ti.Prompt = "▶ "
@@ -194,11 +194,7 @@ func (m portsForwardModel) handleEnter() (tea.Model, tea.Cmd) {
 		m.currentPorts = m.selectedInstance.HTTPPorts
 		// Pre-populate input with current ports
 		if len(m.currentPorts) > 0 {
-			portStrs := make([]string, len(m.currentPorts))
-			for i, p := range m.currentPorts {
-				portStrs[i] = fmt.Sprintf("%d", p)
-			}
-			m.portInput.SetValue(strings.Join(portStrs, ", "))
+			m.portInput.SetValue(utils.FormatPorts(m.currentPorts))
 		}
 		m.step = portsForwardStepEditPorts
 		m.cursor = 0
@@ -207,7 +203,7 @@ func (m portsForwardModel) handleEnter() (tea.Model, tea.Cmd) {
 
 	case portsForwardStepEditPorts:
 		// Parse the new ports
-		newPorts, err := parsePortsInput(m.portInput.Value())
+		newPorts, err := utils.ParsePorts(m.portInput.Value())
 		if err != nil {
 			m.validationErr = err
 			return m, nil
@@ -241,39 +237,6 @@ func (m portsForwardModel) handleEnter() (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
-}
-
-func parsePortsInput(input string) ([]int, error) {
-	if strings.TrimSpace(input) == "" {
-		return []int{}, nil
-	}
-
-	parts := strings.Split(input, ",")
-	ports := make([]int, 0, len(parts))
-	seen := make(map[int]bool)
-
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		port, err := strconv.Atoi(p)
-		if err != nil {
-			return nil, fmt.Errorf("invalid port: %s", p)
-		}
-		if port < 1 || port > 65535 {
-			return nil, fmt.Errorf("port %d out of range (1-65535)", port)
-		}
-		if port == 22 {
-			return nil, fmt.Errorf("port 22 is reserved for SSH")
-		}
-		if !seen[port] {
-			ports = append(ports, port)
-			seen[port] = true
-		}
-	}
-
-	return ports, nil
 }
 
 func calculatePortChanges(current, desired []int) (add, remove []int) {
@@ -362,11 +325,7 @@ func (m portsForwardModel) renderSelectInstanceStep() string {
 		// Format ports display
 		portsStr := "(none)"
 		if len(instance.HTTPPorts) > 0 {
-			portStrs := make([]string, len(instance.HTTPPorts))
-			for j, p := range instance.HTTPPorts {
-				portStrs[j] = fmt.Sprintf("%d", p)
-			}
-			portsStr = strings.Join(portStrs, ", ")
+			portsStr = utils.FormatPorts(instance.HTTPPorts)
 		}
 
 		idAndName := fmt.Sprintf("(%s) %s", instance.ID, instance.Name)
@@ -405,7 +364,7 @@ func (m portsForwardModel) renderEditPortsStep() string {
 	s.WriteString(m.styles.label.Render(fmt.Sprintf("Instance: (%s) %s", m.selectedInstance.ID, m.selectedInstance.Name)))
 	s.WriteString("\n\n")
 
-	s.WriteString("Enter the ports to forward (comma-separated):\n")
+	s.WriteString("Enter the ports to forward (comma-separated or ranges like 8000-8005):\n")
 	s.WriteString("Edit the list below to add or remove ports.\n\n")
 	s.WriteString(m.portInput.View())
 	s.WriteString("\n\n")
@@ -434,25 +393,17 @@ func (m portsForwardModel) renderConfirmationStep() string {
 	panel.WriteString(m.styles.label.Render("Instance UUID:") + " " + valueStyle.Render(m.selectedInstance.UUID))
 
 	if len(m.removePorts) > 0 {
-		portStrs := make([]string, len(m.removePorts))
-		for i, p := range m.removePorts {
-			portStrs[i] = fmt.Sprintf("%d", p)
-		}
 		panel.WriteString("\n\n")
-		panel.WriteString(m.styles.label.Render("Remove:") + "        " + strings.Join(portStrs, ", "))
+		panel.WriteString(m.styles.label.Render("Remove:") + "        " + utils.FormatPorts(m.removePorts))
 	}
 
 	if len(m.addPorts) > 0 {
-		portStrs := make([]string, len(m.addPorts))
-		for i, p := range m.addPorts {
-			portStrs[i] = fmt.Sprintf("%d", p)
-		}
 		if len(m.removePorts) == 0 {
 			panel.WriteString("\n\n")
 		} else {
 			panel.WriteString("\n")
 		}
-		panel.WriteString(m.styles.label.Render("Add:") + "           " + strings.Join(portStrs, ", "))
+		panel.WriteString(m.styles.label.Render("Add:") + "           " + utils.FormatPorts(m.addPorts))
 	}
 
 	s.WriteString(m.styles.panel.Render(panel.String()))
@@ -495,11 +446,7 @@ func (m portsForwardModel) renderCompleteStep() string {
 	lines = append(lines, labelStyle.Render("Instance UUID:")+" "+valueStyle.Render(m.selectedInstance.UUID))
 
 	if len(m.resp.HTTPPorts) > 0 {
-		portStrs := make([]string, len(m.resp.HTTPPorts))
-		for i, p := range m.resp.HTTPPorts {
-			portStrs[i] = fmt.Sprintf("%d", p)
-		}
-		lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render(strings.Join(portStrs, ", ")))
+		lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render(utils.FormatPorts(m.resp.HTTPPorts)))
 	} else {
 		lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render("(none)"))
 	}
