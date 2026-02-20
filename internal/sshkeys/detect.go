@@ -102,7 +102,7 @@ func FindPrivateKeyForPublicKey(targetPublicKey string) (string, error) {
 		if normalizePublicKey(key.PublicKey) == normalizedTarget {
 			privateKeyPath := strings.TrimSuffix(key.Path, ".pub")
 			if _, err := os.Stat(privateKeyPath); err != nil {
-				return "", fmt.Errorf("found matching public key at %s but no private key exists at %s", key.Path, privateKeyPath)
+				return "", nil
 			}
 			return privateKeyPath, nil
 		}
