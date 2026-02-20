@@ -235,7 +235,7 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		}
 
 		if effectiveMode == "prototyping" {
-			vcpuOptions := []int{4, 8, 16}
+			vcpuOptions := []int{4, 8, 16, 32, 64}
 			m.config.VCPUs = vcpuOptions[m.cursor]
 			currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
 			m.config.ComputeChanged = (m.config.VCPUs != currentVCPUs)
@@ -331,7 +331,7 @@ func (m modifyModel) getCurrentComputeCursorPosition() int {
 
 	if effectiveMode == "prototyping" {
 		currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
-		vcpuOptions := []int{4, 8, 16}
+		vcpuOptions := []int{4, 8, 16, 32, 64}
 		for i, vcpus := range vcpuOptions {
 			if vcpus == currentVCPUs {
 				return i
@@ -371,7 +371,7 @@ func (m modifyModel) getMaxCursor() int {
 		}
 
 		if effectiveMode == "prototyping" {
-			return 2 // 3 vCPU options
+			return 4 // 5 vCPU options
 		}
 		return 2 // 3 GPU options
 
@@ -511,7 +511,7 @@ func (m modifyModel) renderComputeStep() string {
 		s.WriteString("Select vCPU count (8GB RAM per vCPU):\n\n")
 
 		currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
-		vcpuOptions := []int{4, 8, 16}
+		vcpuOptions := []int{4, 8, 16, 32, 64}
 		for i, vcpus := range vcpuOptions {
 			ram := vcpus * 8
 			option := fmt.Sprintf("%d vCPUs (%d GB RAM)", vcpus, ram)
