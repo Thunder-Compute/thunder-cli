@@ -16,6 +16,7 @@ const (
 	InstanceStatus_Queued       InstanceStatus = "QUEUED"
 	InstanceStatus_Starting     InstanceStatus = "STARTING"
 	InstanceStatus_Running      InstanceStatus = "RUNNING"
+	InstanceStatus_Stopping     InstanceStatus = "STOPPING"
 	InstanceStatus_Stopped      InstanceStatus = "STOPPED"
 	InstanceStatus_Pending      InstanceStatus = "PENDING"
 	InstanceStatus_Unknown      InstanceStatus = "UNKNOWN"
@@ -146,16 +147,6 @@ type InstanceModifyRequest struct {
 	Mode        *InstanceMode `json:"mode,omitempty"`
 	AddPorts    []int         `json:"add_ports,omitempty"`
 	RemovePorts []int         `json:"remove_ports,omitempty"`
-}
-
-// InstanceStopResponse represents the response from stopping an instance.
-type InstanceStopResponse struct {
-	Message string `json:"message"`
-}
-
-// InstanceStartResponse represents the response from starting an instance.
-type InstanceStartResponse struct {
-	Message string `json:"message"`
 }
 
 // InstanceModifyResponse represents the response from modifying an instance.

@@ -63,41 +63,17 @@ func RenderRootHelp(cmd *cobra.Command) {
 	output.WriteString(DescStyle.Render("tnr status"))
 	output.WriteString("\n\n")
 
-	// Commands Section - organized by category
-	type category struct {
-		name     string
-		commands []string
-	}
-	categories := []category{
-		{"INSTANCE OPERATIONS", []string{"create", "connect", "start", "stop", "modify", "delete", "status"}},
-		{"UTILITIES", []string{"scp", "ports", "snapshot", "ssh-keys"}},
-		{"CONFIGURATION", []string{"login", "logout", "update", "completion"}},
-	}
+	// Commands Section
+	output.WriteString(SectionStyle.Render("● AVAILABLE COMMANDS"))
+	output.WriteString("\n\n")
 
-	// Build lookup from command name to cobra command
-	cmdMap := make(map[string]*cobra.Command)
 	for _, subcmd := range cmd.Commands() {
 		if subcmd.IsAvailableCommand() && subcmd.Name() != "help" {
-			cmdMap[subcmd.Name()] = subcmd
-		}
-	}
-
-	output.WriteString(SectionStyle.Render("● COMMANDS"))
-	output.WriteString("\n")
-
-	for _, cat := range categories {
-		output.WriteString("\n")
-		output.WriteString("  ")
-		output.WriteString(DescStyle.Render(cat.name))
-		output.WriteString("\n")
-		for _, name := range cat.commands {
-			if subcmd, ok := cmdMap[name]; ok {
-				output.WriteString("    ")
-				output.WriteString(CommandStyle.Render(subcmd.Name()))
-				output.WriteString("   ")
-				output.WriteString(DescStyle.Render(subcmd.Short))
-				output.WriteString("\n")
-			}
+			output.WriteString("  ")
+			output.WriteString(CommandStyle.Render(subcmd.Name()))
+			output.WriteString("   ")
+			output.WriteString(DescStyle.Render(subcmd.Short))
+			output.WriteString("\n")
 		}
 	}
 	output.WriteString("\n")

@@ -374,58 +374,6 @@ func (c *Client) DeleteInstance(instanceID string) (*DeleteInstanceResponse, err
 	}, nil
 }
 
-// postInstanceAction performs a POST to /instances/{id}/{action} and decodes the response.
-func (c *Client) postInstanceAction(instanceID, action string, result interface{}) error {
-	url := fmt.Sprintf("%s/instances/%s/%s", c.baseURL, instanceID, action)
-
-	httpReq, err := http.NewRequest("POST", url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	c.setHeaders(httpReq)
-
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return fmt.Errorf("failed to make request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
-	}
-
-	switch resp.StatusCode {
-	case 200, 202:
-		return json.Unmarshal(body, result)
-	case 401:
-		return fmt.Errorf("authentication failed: invalid token")
-	case 404:
-		return fmt.Errorf("instance not found: %s", string(body))
-	case 400:
-		return fmt.Errorf("instance cannot be %sed: %s", action, string(body))
-	default:
-		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-}
-
-func (c *Client) StopInstance(instanceID string) (*InstanceStopResponse, error) {
-	var resp InstanceStopResponse
-	if err := c.postInstanceAction(instanceID, "stop", &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}
-
-func (c *Client) StartInstance(instanceID string) (*InstanceStartResponse, error) {
-	var resp InstanceStartResponse
-	if err := c.postInstanceAction(instanceID, "start", &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}
-
 // ModifyInstance modifies an existing instance configuration
 func (c *Client) ModifyInstance(instanceID string, req InstanceModifyRequest) (*InstanceModifyResponse, error) {
 	jsonData, err := json.Marshal(req)
