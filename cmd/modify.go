@@ -30,7 +30,7 @@ func init() {
 	modifyCmd.Flags().String("mode", "", "Instance mode (prototyping or production)")
 	modifyCmd.Flags().String("gpu", "", "GPU type (a6000, a100, h100)")
 	modifyCmd.Flags().Int("num-gpus", 0, "Number of GPUs (production mode: 1, 2, or 4)")
-	modifyCmd.Flags().Int("vcpus", 0, "CPU cores (prototyping mode: 4, 8, 16, 32, or 64)")
+	modifyCmd.Flags().Int("vcpus", 0, "CPU cores (prototyping mode: 4, 8, or 16)")
 	modifyCmd.Flags().Int("disk-size-gb", 0, "Disk size in GB (100-1000, cannot shrink)")
 
 	modifyCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
@@ -242,7 +242,7 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 				return req, fmt.Errorf("switching to production requires --num-gpus flag (1, 2, or 4)")
 			}
 			if mode == "prototyping" && !cmd.Flags().Changed("vcpus") {
-				return req, fmt.Errorf("switching to prototyping requires --vcpus flag (4, 8, 16, 32, or 64)")
+				return req, fmt.Errorf("switching to prototyping requires --vcpus flag (4, 8, or 16)")
 			}
 		}
 		instanceMode := api.InstanceMode(mode)
@@ -288,9 +288,9 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 	// VCPUs validation (prototyping only)
 	if cmd.Flags().Changed("vcpus") {
 		vcpus, _ := cmd.Flags().GetInt("vcpus")
-		validVCPUs := []int{4, 8, 16, 32, 64}
+		validVCPUs := []int{4, 8, 16}
 		if !contains(validVCPUs, vcpus) {
-			return req, fmt.Errorf("vcpus must be 4, 8, 16, 32, or 64")
+			return req, fmt.Errorf("vcpus must be 4, 8, or 16")
 		}
 
 		// Check mode compatibility

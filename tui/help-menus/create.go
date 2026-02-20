@@ -36,7 +36,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Prototyping"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr create --mode prototyping --gpu {a6000|a100} --vcpus {4|8|16|32|64} --template {base|comfy-ui|ollama} --disk-size-gb {100-400}"))
+	output.WriteString(DescStyle.Render("tnr create --mode prototyping --gpu {a6000|a100} --vcpus {4|8|16} --template {base|comfy-ui|ollama} --disk-size-gb {100-400}"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
@@ -101,7 +101,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--vcpus"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("CPU cores (prototyping only): 4, 8, 16, 32, or 64, RAM: 8GB per vCPU. Production: 18 per GPU, RAM: 90GB per GPU"))
+	output.WriteString(DescStyle.Render("CPU cores (prototyping only): 4, 8, or 16, RAM: 8GB per vCPU. Production: 18 per GPU, RAM: 90GB per GPU"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

@@ -271,7 +271,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 
 	case stepCompute:
 		if m.config.Mode == "prototyping" {
-			vcpus := []int{4, 8, 16, 32, 64}
+			vcpus := []int{4, 8, 16}
 			m.config.VCPUs = vcpus[m.cursor]
 			m.config.NumGPUs = 1
 		} else {
@@ -354,7 +354,7 @@ func (m createModel) getMaxCursor() int {
 		return len(m.getGPUOptions()) - 1
 	case stepCompute:
 		if m.config.Mode == "prototyping" {
-			return 4
+			return 2
 		}
 		return 3
 	case stepTemplate:
@@ -450,7 +450,7 @@ func (m createModel) View() string {
 	case stepCompute:
 		if m.config.Mode == "prototyping" {
 			s.WriteString("Select vCPU count (8GB RAM per vCPU):\n\n")
-			vcpus := []int{4, 8, 16, 32, 64}
+			vcpus := []int{4, 8, 16}
 			for i, vcpu := range vcpus {
 				cursor := "  "
 				if m.cursor == i {

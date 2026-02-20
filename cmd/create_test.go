@@ -90,7 +90,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				VCPUs:   6,
 			},
 			expectError:   true,
-			errorContains: "vcpus must be one of: 4, 8, 16, 32, or 64",
+			errorContains: "vcpus must be one of: 4, 8, or 16",
 		},
 		{
 			name: "production with invalid GPU type",
