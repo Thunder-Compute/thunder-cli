@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -17,14 +18,14 @@ import (
 )
 
 type SnapshotListModel struct {
-	snapshots    api.ListSnapshotsResponse
-	client       *api.Client
-	monitoring   bool
-	lastUpdate   time.Time
-	quitting     bool
-	spinner      spinner.Model
-	err          error
-	cancelled bool
+	snapshots  api.ListSnapshotsResponse
+	client     *api.Client
+	monitoring bool
+	lastUpdate time.Time
+	quitting   bool
+	spinner    spinner.Model
+	err        error
+	cancelled  bool
 }
 
 type snapshotsMsg struct {
@@ -274,6 +275,13 @@ func RunSnapshotList(client *api.Client, monitoring bool, snapshots api.ListSnap
 		tea.WithContext(ctx),
 		tea.WithOutput(os.Stdout),
 	)
+
+	if monitoring {
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			signal.Reset(syscall.SIGWINCH)
+		}()
+	}
 
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("error running snapshot list TUI: %w", err)

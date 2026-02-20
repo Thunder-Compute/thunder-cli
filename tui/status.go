@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -493,6 +494,13 @@ func RunStatus(client *api.Client, monitoring bool, instances []api.Instance) er
 		tea.WithContext(ctx),
 		tea.WithOutput(os.Stdout),
 	)
+
+	if monitoring {
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			signal.Reset(syscall.SIGWINCH)
+		}()
+	}
 
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("error running status TUI: %w", err)
