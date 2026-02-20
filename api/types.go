@@ -13,8 +13,6 @@ type (
 	CreateInstanceResponse = types.InstanceCreateResponse
 	InstanceModifyRequest  = types.InstanceModifyRequest
 	InstanceModifyResponse = types.InstanceModifyResponse
-	InstanceStopResponse   = types.InstanceStopResponse
-	InstanceStartResponse  = types.InstanceStartResponse
 	AddSSHKeyResponse      = types.InstanceAddKeyResponse
 	CreateSnapshotRequest  = types.CreateSnapshotRequest
 	CreateSnapshotResponse = types.CreateSnapshotResponse
