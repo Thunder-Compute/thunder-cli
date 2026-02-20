@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -277,10 +276,7 @@ func RunSnapshotList(client *api.Client, monitoring bool, snapshots api.ListSnap
 	)
 
 	if monitoring {
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			signal.Reset(syscall.SIGWINCH)
-		}()
+		disableResizeSignal()
 	}
 
 	if _, err := p.Run(); err != nil {
