@@ -42,10 +42,15 @@ type PathInfo struct {
 }
 
 func parsePath(path string) PathInfo {
+	return parsePathWithOS(path, runtime.GOOS)
+}
+
+func parsePathWithOS(path string, goos string) PathInfo {
 	info := PathInfo{Original: path}
 
-	// Windows drive letters
-	if runtime.GOOS == "windows" && len(path) >= 2 && path[1] == ':' {
+	// Windows drive letters (e.g. C:\, D:\) — first char must be a letter
+	if goos == "windows" && len(path) >= 2 && path[1] == ':' &&
+		((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) {
 		info.Path = path
 		return info
 	}
