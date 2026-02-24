@@ -98,8 +98,7 @@ release:
 # Changelog generation settings
 
 changelog:
-  use: github
-  sort: asc
+  use: noop
   filters:
     exclude:
       - "^docs:"
