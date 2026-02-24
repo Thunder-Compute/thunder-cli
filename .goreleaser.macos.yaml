@@ -169,7 +169,7 @@ release:
 # Changelog generation settings
 
 changelog:
-  use: noop
+  disable: true
   filters:
     exclude:
       - "^docs:"
