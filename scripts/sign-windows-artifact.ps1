@@ -11,7 +11,7 @@ if (-not (Test-Path -LiteralPath $ArtifactPath)) {
     throw "Artifact not found: $ArtifactPath"
 }
 
-foreach ($name in 'CERT_THUMBPRINT', 'TIMESTAMP_SERVER') {
+foreach ($name in 'AZURE_DLIB_PATH', 'AZURE_METADATA_PATH') {
     if (-not [Environment]::GetEnvironmentVariable($name)) {
         throw "$name environment variable is required"
     }
@@ -34,12 +34,12 @@ Write-Host "Signing artifact: $ArtifactPath" -ForegroundColor Cyan
 
 Invoke-SignTool -Arguments @(
     'sign',
-    '/sha1', $env:CERT_THUMBPRINT,
-    '/fd', 'sha256',
-    '/tr', $env:TIMESTAMP_SERVER,
-    '/td', 'sha256',
-    '/debug',
-    '/v',
+    '/v', '/debug',
+    '/fd', 'SHA256',
+    '/tr', 'http://timestamp.acs.microsoft.com',
+    '/td', 'SHA256',
+    '/dlib', $env:AZURE_DLIB_PATH,
+    '/dmdf', $env:AZURE_METADATA_PATH,
     $ArtifactPath
 ) -ErrorMessage "signtool sign failed for $ArtifactPath"
 
@@ -57,10 +57,10 @@ if ($SignaturePath) {
 
     Invoke-SignTool -Arguments @(
         'sign',
-        '/sha1', $env:CERT_THUMBPRINT,
-        '/fd', 'sha256',
-        '/debug',
-        '/v',
+        '/v', '/debug',
+        '/fd', 'SHA256',
+        '/dlib', $env:AZURE_DLIB_PATH,
+        '/dmdf', $env:AZURE_METADATA_PATH,
         '/p7', $p7Dir,
         '/p7ce', 'DetachedSignedData',
         '/p7co', '1.3.6.1.4.1.311.2.1.4',

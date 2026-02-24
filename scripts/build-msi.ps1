@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# Build and sign Windows MSI installer using WiX v4 and YubiKey
+# Build and sign Windows MSI installer using WiX v4 and Azure Trusted Signing
 # This script mirrors the macOS .pkg build process from .goreleaser.macos.yaml
 # Called as a post-build hook by GoReleaser for each architecture
 
@@ -129,48 +129,49 @@ try {
 
     Write-Host "[OK] MSI built successfully: $OutputMsi"
 
-    # Sign the MSI with YubiKey (if credentials are available)
-    if ($env:CERT_THUMBPRINT -and $env:TIMESTAMP_SERVER) {
-        Write-Host "[SIGN] Signing MSI with YubiKey..."
-        
+    # Sign the MSI with Azure Trusted Signing (if credentials are available)
+    if ($env:AZURE_DLIB_PATH -and $env:AZURE_METADATA_PATH) {
+        Write-Host "[SIGN] Signing MSI with Azure Trusted Signing..."
+
         # Find signtool.exe
-        $SignTool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue | 
+        $SignTool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
                     Select-Object -First 1
-        
+
         if (-not $SignTool) {
             Write-Error "signtool.exe not found. Please install Windows 10 SDK on the runner."
             exit 1
         }
-    
+
         Write-Host "Using signtool: $($SignTool.FullName)"
-    
-        # Sign with YubiKey certificate
+
+        # Sign with Azure Trusted Signing
         & $SignTool.FullName sign `
-            /sha1 $env:CERT_THUMBPRINT `
-            /fd sha256 `
-            /tr $env:TIMESTAMP_SERVER `
-            /td sha256 `
-            /v `
+            /v /debug `
+            /fd SHA256 `
+            /tr "http://timestamp.acs.microsoft.com" `
+            /td SHA256 `
+            /dlib $env:AZURE_DLIB_PATH `
+            /dmdf $env:AZURE_METADATA_PATH `
             $OutputMsi
-    
+
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Failed to sign MSI (exit code: $LASTEXITCODE)"
             exit 1
         }
-    
+
         Write-Host "[OK] MSI signed successfully"
-    
+
         # Verify the signature
         Write-Host "[VERIFY] Verifying signature..."
         & $SignTool.FullName verify /pa /v $OutputMsi
-        
+
         if ($LASTEXITCODE -ne 0) {
             Write-Warning "Signature verification failed (exit code: $LASTEXITCODE)"
         } else {
             Write-Host "[OK] Signature verified"
         }
     } else {
-        Write-Warning "[SKIP] Skipping MSI signing (CERT_THUMBPRINT or TIMESTAMP_SERVER not set)"
+        Write-Warning "[SKIP] Skipping MSI signing (AZURE_DLIB_PATH or AZURE_METADATA_PATH not set)"
     }
 
     # Copy signed MSI to dist directory
