@@ -1,7 +1,8 @@
 # GoReleaser configuration for Windows builds
 # This file handles building and publishing Windows packages (.msi)
-# Run by GitHub Actions in the windows_release job
-# See: .github/workflows/release.yml
+# Run by the monorepo's cli-release workflow
+# See: .github/workflows/cli-release.yml
+# Releases are created on Thunder-Compute/thunder-cli
 
 version: 2
 project_name: tnr
@@ -74,6 +75,9 @@ blobs:
 
 # extra_files needed here to include MSI installers in GitHub releases
 release:
+  github:
+    owner: Thunder-Compute
+    name: thunder-cli
   disable: false
   draft: false
   prerelease: auto
@@ -83,11 +87,14 @@ release:
 # Changelog generation settings
 
 changelog:
-  disable: true
+  disable: false
+  sort: asc
   filters:
     exclude:
       - "^docs:"
       - "^test:"
+      - "^chore:"
+      - "^Merge"
 
 # Scoop package manager integration
 # Automatically updates the Scoop bucket with new releases
