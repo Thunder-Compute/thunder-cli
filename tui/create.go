@@ -59,6 +59,7 @@ type createModel struct {
 	client           *api.Client
 	spinner          spinner.Model
 	selectedSnapshot *api.Snapshot
+	gpuCountPhase    bool // when true, stepCompute shows GPU count selection before vCPU selection
 
 	styles createStyles
 }
@@ -216,9 +217,14 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "esc":
-			if m.step > stepMode {
+			if m.step == stepCompute && !m.gpuCountPhase && m.config.Mode == "prototyping" && m.config.GPUType == "h100" {
+				// Go back to GPU count selection phase
+				m.gpuCountPhase = true
+				m.cursor = 0
+			} else if m.step > stepMode {
 				m.step--
 				m.cursor = 0
+				m.gpuCountPhase = false
 				if m.step == stepDiskSize {
 					m.diskInput.Blur()
 				}
@@ -268,19 +274,34 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 		m.config.GPUType = gpus[m.cursor]
 		m.step = stepCompute
 		m.cursor = 0
+		// H100 prototyping supports multi-GPU, so show GPU count selection first
+		if m.config.Mode == "prototyping" && m.config.GPUType == "h100" {
+			m.gpuCountPhase = true
+		} else if m.config.Mode == "prototyping" {
+			m.config.NumGPUs = 1
+			m.gpuCountPhase = false
+		}
 
 	case stepCompute:
-		if m.config.Mode == "prototyping" {
-			vcpus := []int{4, 8, 16}
+		if m.gpuCountPhase {
+			// GPU count selection phase (H100 prototyping)
+			gpuCounts := []int{1, 2}
+			m.config.NumGPUs = gpuCounts[m.cursor]
+			m.gpuCountPhase = false
+			m.cursor = 0
+			// Stay on stepCompute to show vCPU options next
+		} else if m.config.Mode == "prototyping" {
+			vcpus := m.getPrototypingVcpuOptions()
 			m.config.VCPUs = vcpus[m.cursor]
-			m.config.NumGPUs = 1
+			m.step = stepTemplate
+			m.cursor = 0
 		} else {
 			numGPUs := []int{1, 2, 4, 8}
 			m.config.NumGPUs = numGPUs[m.cursor]
 			m.config.VCPUs = 18 * m.config.NumGPUs
+			m.step = stepTemplate
+			m.cursor = 0
 		}
-		m.step = stepTemplate
-		m.cursor = 0
 
 	case stepTemplate:
 		totalOptions := len(m.templates) + len(m.snapshots)
@@ -346,6 +367,18 @@ func (m createModel) getGPUOptions() []string {
 	}
 }
 
+func (m createModel) getPrototypingVcpuOptions() []int {
+	switch m.config.GPUType {
+	case "h100":
+		if m.config.NumGPUs == 2 {
+			return []int{8, 12, 16, 20, 24}
+		}
+		return []int{4, 8, 12, 16}
+	default:
+		return []int{4, 8, 16}
+	}
+}
+
 func (m createModel) getMaxCursor() int {
 	switch m.step {
 	case stepMode:
@@ -353,8 +386,11 @@ func (m createModel) getMaxCursor() int {
 	case stepGPU:
 		return len(m.getGPUOptions()) - 1
 	case stepCompute:
+		if m.gpuCountPhase {
+			return 1 // 1 or 2 GPUs
+		}
 		if m.config.Mode == "prototyping" {
-			return 2
+			return len(m.getPrototypingVcpuOptions()) - 1
 		}
 		return 3
 	case stepTemplate:
@@ -448,9 +484,23 @@ func (m createModel) View() string {
 		}
 
 	case stepCompute:
-		if m.config.Mode == "prototyping" {
+		if m.gpuCountPhase {
+			s.WriteString("Select number of GPUs:\n\n")
+			gpuCounts := []int{1, 2}
+			for i, num := range gpuCounts {
+				cursor := "  "
+				if m.cursor == i {
+					cursor = m.styles.cursor.Render("▶ ")
+				}
+				text := fmt.Sprintf("%d GPU(s)", num)
+				if m.cursor == i {
+					text = m.styles.selected.Render(text)
+				}
+				s.WriteString(fmt.Sprintf("%s%s\n", cursor, text))
+			}
+		} else if m.config.Mode == "prototyping" {
 			s.WriteString("Select vCPU count (8GB RAM per vCPU):\n\n")
-			vcpus := []int{4, 8, 16}
+			vcpus := m.getPrototypingVcpuOptions()
 			for i, vcpu := range vcpus {
 				cursor := "  "
 				if m.cursor == i {
