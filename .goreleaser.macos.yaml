@@ -178,21 +178,22 @@ changelog:
 # Homebrew tap integration
 # Automatically updates the Homebrew tap with new releases
 # Users can install via: brew tap Thunder-Compute/tnr; brew install tnr
-brews:
-  - name: tnr
-    ids: [archive]
-    repository:
-      owner: Thunder-Compute
-      name: homebrew-tnr
-      token: "{{ .Env.GH_PAT }}"
-    directory: Formula
-    commit_author:
-      name: goreleaser
-      email: goreleaser@users.noreply.github.com
-    description: "Thunder Compute CLI"
-    homepage: "https://github.com/Thunder-Compute/thunder-cli"
-    license: MIT
-    test: |
-      system "#{bin}/tnr", "--version"
-    install: |
-      bin.install "tnr"
+# TODO: Re-enable once GH_PAT has write access to these repos
+# brews:
+#   - name: tnr
+#     ids: [archive]
+#     repository:
+#       owner: Thunder-Compute
+#       name: homebrew-tnr
+#       token: "{{ .Env.GH_PAT }}"
+#     directory: Formula
+#     commit_author:
+#       name: goreleaser
+#       email: goreleaser@users.noreply.github.com
+#     description: "Thunder Compute CLI"
+#     homepage: "https://github.com/Thunder-Compute/thunder-cli"
+#     license: MIT
+#     test: |
+#       system "#{bin}/tnr", "--version"
+#     install: |
+#       bin.install "tnr"
