@@ -41,6 +41,14 @@ var (
 	prototypingGPUMap = map[string]string{
 		"a6000": "a6000",
 		"a100":  "a100xl",
+		"h100":  "h100",
+	}
+
+	// Prototyping specs: allowed GPU counts and vCPU options per GPU type
+	prototypingSpecs = map[string]map[int][]int{
+		"a6000":  {1: {4, 8, 16}},
+		"a100xl": {1: {4, 8, 16}},
+		"h100":   {1: {4, 8, 12, 16}, 2: {8, 12, 16, 20, 24}},
 	}
 
 	productionGPUMap = map[string]string{
@@ -57,9 +65,9 @@ func init() {
 	rootCmd.AddCommand(createCmd)
 
 	createCmd.Flags().StringVar(&mode, "mode", "", "Instance mode: prototyping or production")
-	createCmd.Flags().StringVar(&gpuType, "gpu", "", "GPU type (prototyping: a6000 or a100, production: a100 or h100)")
-	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs (production only): 1, 2, 4, or 8")
-	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): 4, 8, or 16")
+	createCmd.Flags().StringVar(&gpuType, "gpu", "", "GPU type (prototyping: a6000, a100, or h100; production: a100 or h100)")
+	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs: 1-8 (production), 1-2 for H100 (prototyping)")
+	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): options vary by GPU type and count")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (100-1000)")
 	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-key", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
@@ -356,25 +364,42 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	if config.Mode == "prototyping" {
 		canonical, ok := prototypingGPUMap[config.GPUType]
 		if !ok {
-			return fmt.Errorf("prototyping mode supports GPU types: a6000 or a100")
+			return fmt.Errorf("prototyping mode supports GPU types: a6000, a100, or h100")
 		}
 		config.GPUType = canonical
-		config.NumGPUs = 1
 
-		if config.VCPUs == 0 {
-			return fmt.Errorf("prototyping mode requires --vcpus flag (4, 8, or 16)")
+		// Look up allowed specs for this GPU type
+		gpuSpec, specOk := prototypingSpecs[config.GPUType]
+		if !specOk {
+			return fmt.Errorf("no prototyping specs found for GPU type: %s", config.GPUType)
 		}
 
-		validVCPUs := []int{4, 8, 16}
+		// Validate GPU count
+		if config.NumGPUs == 0 {
+			config.NumGPUs = 1
+		}
+		allowedVCPUs, countOk := gpuSpec[config.NumGPUs]
+		if !countOk {
+			allowedCounts := make([]string, 0, len(gpuSpec))
+			for k := range gpuSpec {
+				allowedCounts = append(allowedCounts, fmt.Sprintf("%d", k))
+			}
+			return fmt.Errorf("GPU count %d is not valid for %s prototyping. Allowed: %s", config.NumGPUs, config.GPUType, strings.Join(allowedCounts, ", "))
+		}
+
+		if config.VCPUs == 0 {
+			return fmt.Errorf("prototyping mode requires --vcpus flag (options for %s with %d GPU(s): %v)", config.GPUType, config.NumGPUs, allowedVCPUs)
+		}
+
 		valid := false
-		for _, v := range validVCPUs {
+		for _, v := range allowedVCPUs {
 			if config.VCPUs == v {
 				valid = true
 				break
 			}
 		}
 		if !valid {
-			return fmt.Errorf("vcpus must be one of: 4, 8, or 16")
+			return fmt.Errorf("vcpus must be one of %v for %s with %d GPU(s)", allowedVCPUs, config.GPUType, config.NumGPUs)
 		}
 	} else {
 		canonical, ok := productionGPUMap[config.GPUType]
