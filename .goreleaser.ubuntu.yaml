@@ -102,11 +102,4 @@ release:
 # Changelog generation settings
 
 changelog:
-  disable: false
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore:"
-      - "^Merge"
+  disable: true
