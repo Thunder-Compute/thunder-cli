@@ -30,7 +30,7 @@ func init() {
 	modifyCmd.Flags().String("mode", "", "Instance mode (prototyping or production)")
 	modifyCmd.Flags().String("gpu", "", "GPU type (a6000, a100, h100)")
 	modifyCmd.Flags().Int("num-gpus", 0, "Number of GPUs (production mode: 1, 2, or 4)")
-	modifyCmd.Flags().Int("vcpus", 0, "CPU cores (prototyping mode: 4, 8, or 16)")
+	modifyCmd.Flags().Int("vcpus", 0, "CPU cores (prototyping only): options vary by GPU type and count")
 	modifyCmd.Flags().Int("disk-size-gb", 0, "Disk size in GB (100-1000, cannot shrink)")
 
 	modifyCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
@@ -242,7 +242,7 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 				return req, fmt.Errorf("switching to production requires --num-gpus flag (1, 2, or 4)")
 			}
 			if mode == "prototyping" && !cmd.Flags().Changed("vcpus") {
-				return req, fmt.Errorf("switching to prototyping requires --vcpus flag (4, 8, or 16)")
+				return req, fmt.Errorf("switching to prototyping requires --vcpus flag (options vary by GPU type)")
 			}
 		}
 		instanceMode := api.InstanceMode(mode)
@@ -288,31 +288,64 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 	// VCPUs validation (prototyping only)
 	if cmd.Flags().Changed("vcpus") {
 		vcpus, _ := cmd.Flags().GetInt("vcpus")
-		validVCPUs := []int{4, 8, 16}
-		if !contains(validVCPUs, vcpus) {
-			return req, fmt.Errorf("vcpus must be 4, 8, or 16")
-		}
 
 		// Check mode compatibility
 		if effectiveMode == "production" {
 			return req, fmt.Errorf("production mode does not use --vcpus flag. Use --num-gpus instead (vCPUs auto-calculated)")
 		}
 
+		// Determine effective GPU type for validation
+		effectiveGPU := currentInstance.GPUType
+		if req.GPUType != nil {
+			effectiveGPU = *req.GPUType
+		}
+		effectiveNumGPUs := 1
+		if req.NumGPUs != nil {
+			effectiveNumGPUs = *req.NumGPUs
+		} else if currentInstance.NumGPUs != "" {
+			if n, err := fmt.Sscanf(currentInstance.NumGPUs, "%d", &effectiveNumGPUs); n != 1 || err != nil {
+				effectiveNumGPUs = 1
+			}
+		}
+
+		if gpuSpec, ok := prototypingSpecs[effectiveGPU]; ok {
+			if allowedVCPUs, ok := gpuSpec[effectiveNumGPUs]; ok {
+				if !contains(allowedVCPUs, vcpus) {
+					return req, fmt.Errorf("vcpus must be one of %v for %s with %d GPU(s)", allowedVCPUs, effectiveGPU, effectiveNumGPUs)
+				}
+			}
+		}
+
 		req.CPUCores = &vcpus
 		hasChanges = true
 	}
 
-	// NumGPUs validation (production only)
+	// NumGPUs validation
 	if cmd.Flags().Changed("num-gpus") {
 		numGPUs, _ := cmd.Flags().GetInt("num-gpus")
-		validGPUs := []int{1, 2, 4}
-		if !contains(validGPUs, numGPUs) {
-			return req, fmt.Errorf("num-gpus must be 1, 2, or 4")
-		}
 
-		// Check mode compatibility
 		if effectiveMode == "prototyping" {
-			return req, fmt.Errorf("prototyping mode does not use --num-gpus flag (always 1 GPU). Use --vcpus instead")
+			// Determine effective GPU type
+			effectiveGPU := currentInstance.GPUType
+			if req.GPUType != nil {
+				effectiveGPU = *req.GPUType
+			}
+			gpuSpec, ok := prototypingSpecs[effectiveGPU]
+			if !ok {
+				return req, fmt.Errorf("no prototyping specs found for GPU type: %s", effectiveGPU)
+			}
+			if _, countOk := gpuSpec[numGPUs]; !countOk {
+				allowedCounts := make([]string, 0, len(gpuSpec))
+				for k := range gpuSpec {
+					allowedCounts = append(allowedCounts, fmt.Sprintf("%d", k))
+				}
+				return req, fmt.Errorf("num-gpus %d is not valid for %s prototyping. Allowed: %s", numGPUs, effectiveGPU, strings.Join(allowedCounts, ", "))
+			}
+		} else {
+			validGPUs := []int{1, 2, 4}
+			if !contains(validGPUs, numGPUs) {
+				return req, fmt.Errorf("num-gpus must be 1, 2, or 4")
+			}
 		}
 
 		req.NumGPUs = &numGPUs
