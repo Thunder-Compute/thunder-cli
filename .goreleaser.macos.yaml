@@ -1,7 +1,8 @@
 # GoReleaser configuration for macOS builds
 # This file handles building, code signing, notarizing, and publishing macOS packages (.pkg)
-# Run by GitHub Actions in the macos_release job
-# See: .github/workflows/release.yml
+# Run by the monorepo's cli-release workflow
+# See: .github/workflows/cli-release.yml
+# Releases are created on Thunder-Compute/thunder-cli
 
 version: 2
 project_name: tnr
@@ -160,6 +161,9 @@ blobs:
 
 # extra_files needed here to include .pkg installers in GitHub releases
 release:
+  github:
+    owner: Thunder-Compute
+    name: thunder-cli
   disable: false
   draft: false
   prerelease: auto
@@ -170,29 +174,26 @@ release:
 
 changelog:
   disable: true
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
 
 # Homebrew tap integration
 # Automatically updates the Homebrew tap with new releases
 # Users can install via: brew tap Thunder-Compute/tnr; brew install tnr
-brews:
-  - name: tnr
-    ids: [archive]
-    repository:
-      owner: Thunder-Compute
-      name: homebrew-tnr
-      token: "{{ .Env.GH_PAT }}"
-    directory: Formula
-    commit_author:
-      name: goreleaser
-      email: goreleaser@users.noreply.github.com
-    description: "Thunder Compute CLI"
-    homepage: "https://github.com/Thunder-Compute/thunder-cli"
-    license: MIT
-    test: |
-      system "#{bin}/tnr", "--version"
-    install: |
-      bin.install "tnr"
+# TODO: Re-enable once GH_PAT has write access to these repos
+# brews:
+#   - name: tnr
+#     ids: [archive]
+#     repository:
+#       owner: Thunder-Compute
+#       name: homebrew-tnr
+#       token: "{{ .Env.GH_PAT }}"
+#     directory: Formula
+#     commit_author:
+#       name: goreleaser
+#       email: goreleaser@users.noreply.github.com
+#     description: "Thunder Compute CLI"
+#     homepage: "https://github.com/Thunder-Compute/thunder-cli"
+#     license: MIT
+#     test: |
+#       system "#{bin}/tnr", "--version"
+#     install: |
+#       bin.install "tnr"

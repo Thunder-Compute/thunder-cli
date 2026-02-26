@@ -1,7 +1,8 @@
 # GoReleaser configuration for Linux builds
 # This file handles building and publishing Linux packages (.deb, .rpm, .apk)
-# Run by GitHub Actions in the ubuntu_release job
-# See: .github/workflows/release.yml
+# Run by the monorepo's cli-release workflow
+# See: .github/workflows/cli-release.yml
+# Releases are created on Thunder-Compute/thunder-cli
 
 version: 2
 project_name: tnr
@@ -91,6 +92,9 @@ blobs:
 # NOTE: Do NOT add extra_files here for .deb/.rpm/.apk - they're auto-included from nfpms
 # Adding them causes "422 already_exists" errors
 release:
+  github:
+    owner: Thunder-Compute
+    name: thunder-cli
   disable: false
   draft: false
   prerelease: auto
@@ -99,7 +103,3 @@ release:
 
 changelog:
   disable: true
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
