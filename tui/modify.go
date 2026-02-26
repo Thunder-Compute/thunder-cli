@@ -358,13 +358,17 @@ func (m modifyModel) needsGPUCountPhase() bool {
 
 func (m modifyModel) getPrototypingVcpuOptions() []int {
 	switch m.config.GPUType {
+	case "a6000":
+		return []int{4, 8}
+	case "a100xl":
+		return []int{4, 8, 12}
 	case "h100":
 		if m.config.NumGPUs == 2 {
 			return []int{8, 12, 16, 20, 24}
 		}
 		return []int{4, 8, 12, 16}
 	default:
-		return []int{4, 8, 16}
+		return []int{4, 8}
 	}
 }
 

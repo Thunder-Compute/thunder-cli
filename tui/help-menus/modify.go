@@ -74,13 +74,13 @@ func RenderModifyHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--num-gpus"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Number of GPUs (production only)"))
+	output.WriteString(DescStyle.Render("Number of GPUs: 1-8 (production), 1-2 for H100 (prototyping)"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--vcpus"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("CPU cores (prototyping only)"))
+	output.WriteString(DescStyle.Render("CPU cores (prototyping only): options vary by GPU type and count. RAM: 8GB per vCPU"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

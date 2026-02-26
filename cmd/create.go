@@ -46,8 +46,8 @@ var (
 
 	// Prototyping specs: allowed GPU counts and vCPU options per GPU type
 	prototypingSpecs = map[string]map[int][]int{
-		"a6000":  {1: {4, 8, 16}},
-		"a100xl": {1: {4, 8, 16}},
+		"a6000":  {1: {4, 8}},
+		"a100xl": {1: {4, 8, 12}},
 		"h100":   {1: {4, 8, 12, 16}, 2: {8, 12, 16, 20, 24}},
 	}
 
