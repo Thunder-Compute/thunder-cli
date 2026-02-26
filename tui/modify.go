@@ -52,6 +52,7 @@ type modifyModel struct {
 	validationErr    error
 	quitting         bool
 	cancelled        bool
+	gpuCountPhase    bool // when true, modifyStepCompute shows GPU count selection before vCPU selection
 
 	styles modifyStyles
 }
@@ -137,9 +138,16 @@ func (m modifyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "esc":
+			if m.step == modifyStepCompute && !m.gpuCountPhase && m.needsGPUCountPhase() {
+				// Go back to GPU count selection phase
+				m.gpuCountPhase = true
+				m.cursor = 0
+				return m, nil
+			}
 			if m.step > modifyStepMode {
 				m.step--
 				m.cursor = 0
+				m.gpuCountPhase = false
 				m.validationErr = nil
 				if m.step == modifyStepDiskSize {
 					m.diskInput.Focus()
@@ -208,10 +216,7 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case modifyStepGPU:
-		effectiveMode := m.currentInstance.Mode
-		if m.config.ModeChanged {
-			effectiveMode = m.config.Mode
-		}
+		effectiveMode := m.getEffectiveMode()
 
 		var gpuValues []string
 		if effectiveMode == "prototyping" {
@@ -224,21 +229,38 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		// Case-insensitive comparison
 		m.config.GPUChanged = !strings.EqualFold(m.config.GPUType, m.currentInstance.GPUType)
 		m.step = modifyStepCompute
-		// Set cursor to current compute position for next step
-		m.cursor = m.getCurrentComputeCursorPosition()
+		// H100 prototyping supports multi-GPU, so show GPU count selection first
+		if m.needsGPUCountPhase() {
+			m.gpuCountPhase = true
+			m.cursor = m.getCurrentGPUCountCursorPosition()
+		} else {
+			m.gpuCountPhase = false
+			if effectiveMode == "prototyping" {
+				m.config.NumGPUs = 1
+			}
+			m.cursor = m.getCurrentComputeCursorPosition()
+		}
 		return m, nil
 
 	case modifyStepCompute:
-		effectiveMode := m.currentInstance.Mode
-		if m.config.ModeChanged {
-			effectiveMode = m.config.Mode
+		effectiveMode := m.getEffectiveMode()
+
+		if m.gpuCountPhase {
+			// GPU count selection phase (H100 prototyping)
+			gpuCounts := []int{1, 2}
+			m.config.NumGPUs = gpuCounts[m.cursor]
+			m.gpuCountPhase = false
+			m.cursor = m.getCurrentComputeCursorPosition()
+			// Stay on modifyStepCompute to show vCPU options next
+			return m, nil
 		}
 
 		if effectiveMode == "prototyping" {
-			vcpuOptions := []int{4, 8, 16}
+			vcpuOptions := m.getPrototypingVcpuOptions()
 			m.config.VCPUs = vcpuOptions[m.cursor]
 			currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
-			m.config.ComputeChanged = (m.config.VCPUs != currentVCPUs)
+			currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
+			m.config.ComputeChanged = (m.config.VCPUs != currentVCPUs) || (m.config.NumGPUs != currentNumGPUs)
 		} else { // production
 			gpuOptions := []int{1, 2, 4}
 			m.config.NumGPUs = gpuOptions[m.cursor]
@@ -323,15 +345,46 @@ func (m modifyModel) formatGPUType(gpuType string) string {
 	return utils.FormatGPUType(gpuType)
 }
 
-func (m modifyModel) getCurrentComputeCursorPosition() int {
-	effectiveMode := m.currentInstance.Mode
+func (m modifyModel) getEffectiveMode() string {
 	if m.config.ModeChanged {
-		effectiveMode = m.config.Mode
+		return m.config.Mode
 	}
+	return m.currentInstance.Mode
+}
+
+func (m modifyModel) needsGPUCountPhase() bool {
+	return m.getEffectiveMode() == "prototyping" && m.config.GPUType == "h100"
+}
+
+func (m modifyModel) getPrototypingVcpuOptions() []int {
+	switch m.config.GPUType {
+	case "h100":
+		if m.config.NumGPUs == 2 {
+			return []int{8, 12, 16, 20, 24}
+		}
+		return []int{4, 8, 12, 16}
+	default:
+		return []int{4, 8, 16}
+	}
+}
+
+func (m modifyModel) getCurrentGPUCountCursorPosition() int {
+	currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
+	gpuCounts := []int{1, 2}
+	for i, count := range gpuCounts {
+		if count == currentNumGPUs {
+			return i
+		}
+	}
+	return 0
+}
+
+func (m modifyModel) getCurrentComputeCursorPosition() int {
+	effectiveMode := m.getEffectiveMode()
 
 	if effectiveMode == "prototyping" {
 		currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
-		vcpuOptions := []int{4, 8, 16}
+		vcpuOptions := m.getPrototypingVcpuOptions()
 		for i, vcpus := range vcpuOptions {
 			if vcpus == currentVCPUs {
 				return i
@@ -355,25 +408,19 @@ func (m modifyModel) getMaxCursor() int {
 		return 1 // Prototyping, Production
 
 	case modifyStepGPU:
-		effectiveMode := m.currentInstance.Mode
-		if m.config.ModeChanged {
-			effectiveMode = m.config.Mode
-		}
-		if effectiveMode == "prototyping" {
+		if m.getEffectiveMode() == "prototyping" {
 			return 2 // 3 GPU options (a6000/a100xl/h100)
 		}
 		return 1 // 2 GPU options (a100xl/h100)
 
 	case modifyStepCompute:
-		effectiveMode := m.currentInstance.Mode
-		if m.config.ModeChanged {
-			effectiveMode = m.config.Mode
+		if m.gpuCountPhase {
+			return 1 // 1 or 2 GPUs
 		}
-
-		if effectiveMode == "prototyping" {
-			return 2 // 3 vCPU options
+		if m.getEffectiveMode() == "prototyping" {
+			return len(m.getPrototypingVcpuOptions()) - 1
 		}
-		return 2 // 3 GPU options
+		return 2 // 3 production GPU options
 
 	case modifyStepConfirmation:
 		return 1 // Apply Changes, Cancel
@@ -502,16 +549,32 @@ func (m modifyModel) renderGPUStep() string {
 func (m modifyModel) renderComputeStep() string {
 	var s strings.Builder
 
-	effectiveMode := m.currentInstance.Mode
-	if m.config.ModeChanged {
-		effectiveMode = m.config.Mode
-	}
+	effectiveMode := m.getEffectiveMode()
 
-	if effectiveMode == "prototyping" {
+	if m.gpuCountPhase {
+		s.WriteString("Select number of GPUs:\n\n")
+
+		currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
+		gpuCounts := []int{1, 2}
+		for i, num := range gpuCounts {
+			option := fmt.Sprintf("%d GPU(s)", num)
+
+			if num == currentNumGPUs {
+				option += " [current]"
+			}
+
+			cursor := "  "
+			if m.cursor == i {
+				cursor = m.styles.cursor.Render("▶ ")
+				option = m.styles.selected.Render(option)
+			}
+			s.WriteString(fmt.Sprintf("%s%s\n", cursor, option))
+		}
+	} else if effectiveMode == "prototyping" {
 		s.WriteString("Select vCPU count (8GB RAM per vCPU):\n\n")
 
 		currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
-		vcpuOptions := []int{4, 8, 16}
+		vcpuOptions := m.getPrototypingVcpuOptions()
 		for i, vcpus := range vcpuOptions {
 			ram := vcpus * 8
 			option := fmt.Sprintf("%d vCPUs (%d GB RAM)", vcpus, ram)
@@ -594,6 +657,10 @@ func (m modifyModel) renderConfirmationStep() string {
 		}
 
 		if effectiveMode == "prototyping" {
+			currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
+			if m.config.NumGPUs != currentNumGPUs {
+				panel.WriteString(m.styles.label.Render("GPUs:       ") + fmt.Sprintf("%d → %d", currentNumGPUs, m.config.NumGPUs) + "\n")
+			}
 			currentRAM, _ := strconv.Atoi(m.currentInstance.CPUCores)
 			currentRAM *= 8
 			newRAM := m.config.VCPUs * 8
