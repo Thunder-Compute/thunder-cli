@@ -60,6 +60,8 @@ type createModel struct {
 	spinner          spinner.Model
 	selectedSnapshot *api.Snapshot
 	gpuCountPhase    bool // when true, stepCompute shows GPU count selection before vCPU selection
+	pricing          *PricingData
+	pricingLoaded    bool
 
 	styles createStyles
 }
@@ -128,6 +130,10 @@ type createSnapshotsMsg struct {
 	err       error
 }
 
+type createPricingMsg struct {
+	rates map[string]float64
+}
+
 func sortTemplates(templates []api.TemplateEntry) []api.TemplateEntry {
 	sorted := make([]api.TemplateEntry, 0, len(templates))
 
@@ -174,8 +180,15 @@ func fetchCreateSnapshotsCmd(client *api.Client) tea.Cmd {
 	}
 }
 
+func fetchCreatePricingCmd(client *api.Client) tea.Cmd {
+	return func() tea.Msg {
+		rates, _ := client.FetchPricing()
+		return createPricingMsg{rates: rates}
+	}
+}
+
 func (m createModel) Init() tea.Cmd {
-	return tea.Batch(fetchCreateTemplatesCmd(m.client), fetchCreateSnapshotsCmd(m.client), m.spinner.Tick)
+	return tea.Batch(fetchCreateTemplatesCmd(m.client), fetchCreateSnapshotsCmd(m.client), fetchCreatePricingCmd(m.client), m.spinner.Tick)
 }
 
 func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -200,6 +213,13 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.snapshotsLoaded = true
 		return m, m.spinner.Tick
+
+	case createPricingMsg:
+		if msg.rates != nil {
+			m.pricing = &PricingData{Rates: msg.rates}
+		}
+		m.pricingLoaded = true
+		return m, nil
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -423,7 +443,7 @@ func (m createModel) View() string {
 	s.WriteString(m.styles.title.Render("⚡ Create Thunder Compute Instance"))
 	s.WriteString("\n")
 
-	progressSteps := []string{"Mode", "GPU", "Compute", "Template", "Disk", "Confirm"}
+	progressSteps := []string{"Mode", "GPU", "Size", "Template", "Disk", "Confirm"}
 	progress := ""
 	for i, stepName := range progressSteps {
 		adjustedStep := int(m.step)
@@ -627,6 +647,13 @@ func (m createModel) View() string {
 		}
 	}
 
+	// Pricing line
+	if m.pricing != nil {
+		price := m.computePreviewPrice()
+		s.WriteString("\n")
+		s.WriteString(m.styles.help.Render(fmt.Sprintf("Estimated cost: %s", FormatPrice(price))))
+	}
+
 	if m.step != stepConfirmation {
 		s.WriteString("\n")
 		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n"))
@@ -636,6 +663,78 @@ func (m createModel) View() string {
 	}
 
 	return s.String()
+}
+
+// computePreviewPrice calculates the price based on current config state,
+// using the hovered option for the current step to preview pricing.
+func (m createModel) computePreviewPrice() float64 {
+	mode := m.config.Mode
+	gpuType := m.config.GPUType
+	numGPUs := m.config.NumGPUs
+	vcpus := m.config.VCPUs
+	diskSizeGB := m.config.DiskSizeGB
+
+	// Apply defaults for unfilled fields
+	if mode == "" {
+		mode = "prototyping"
+	}
+	if gpuType == "" {
+		if mode == "prototyping" {
+			gpuType = "a6000"
+		} else {
+			gpuType = "a100xl"
+		}
+	}
+	if numGPUs == 0 {
+		numGPUs = 1
+	}
+	if vcpus == 0 {
+		vcpus = includedVCPUs(gpuType, numGPUs)
+	}
+	if diskSizeGB == 0 {
+		diskSizeGB = 100
+	}
+
+	// Override with hovered option for current step
+	switch m.step {
+	case stepMode:
+		modes := []string{"prototyping", "production"}
+		mode = modes[m.cursor]
+		// Reset dependent defaults
+		if mode == "prototyping" {
+			gpuType = "a6000"
+		} else {
+			gpuType = "a100xl"
+		}
+		numGPUs = 1
+		vcpus = includedVCPUs(gpuType, numGPUs)
+	case stepGPU:
+		gpus := m.getGPUOptions()
+		gpuType = gpus[m.cursor]
+		if numGPUs == 0 {
+			numGPUs = 1
+		}
+		vcpus = includedVCPUs(gpuType, numGPUs)
+	case stepCompute:
+		if m.gpuCountPhase {
+			gpuCounts := []int{1, 2}
+			numGPUs = gpuCounts[m.cursor]
+			vcpus = includedVCPUs(gpuType, numGPUs)
+		} else if mode == "prototyping" {
+			vcpuOpts := m.getPrototypingVcpuOptions()
+			vcpus = vcpuOpts[m.cursor]
+		} else {
+			gpuOpts := []int{1, 2, 4, 8}
+			numGPUs = gpuOpts[m.cursor]
+			vcpus = 18 * numGPUs
+		}
+	case stepDiskSize:
+		if v, err := fmt.Sscanf(m.diskInput.Value(), "%d", &diskSizeGB); v != 1 || err != nil {
+			diskSizeGB = 100
+		}
+	}
+
+	return CalculateHourlyPrice(m.pricing, mode, gpuType, numGPUs, vcpus, diskSizeGB)
 }
 
 func RunCreateInteractive(client *api.Client) (*CreateConfig, error) {

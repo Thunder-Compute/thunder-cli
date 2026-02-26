@@ -693,6 +693,41 @@ func (c *Client) AddSSHKeyToInstanceWithPublicKey(instanceID, publicKey string) 
 	return &keyResp, nil
 }
 
+// FetchPricing retrieves the public pricing data from the API.
+// Returns nil on error since pricing display is non-critical.
+func (c *Client) FetchPricing() (map[string]float64, error) {
+	req, err := http.NewRequest("GET", c.baseURL+"/v1/pricing", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	c.setHeaders(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("pricing request failed with status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var result struct {
+		Pricing map[string]float64 `json:"pricing"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return result.Pricing, nil
+}
+
 // getLogLevelForStatus determines the appropriate Sentry level for HTTP status codes
 func getLogLevelForStatus(statusCode int) sentry.Level {
 	switch {

@@ -53,6 +53,8 @@ type modifyModel struct {
 	quitting         bool
 	cancelled        bool
 	gpuCountPhase    bool // when true, modifyStepCompute shows GPU count selection before vCPU selection
+	pricing          *PricingData
+	pricingLoaded    bool
 
 	styles modifyStyles
 }
@@ -115,12 +117,30 @@ func NewModifyModel(client *api.Client, instance *api.Instance) tea.Model {
 	return m
 }
 
+type modifyPricingMsg struct {
+	rates map[string]float64
+}
+
+func fetchModifyPricingCmd(client *api.Client) tea.Cmd {
+	return func() tea.Msg {
+		rates, _ := client.FetchPricing()
+		return modifyPricingMsg{rates: rates}
+	}
+}
+
 func (m modifyModel) Init() tea.Cmd {
-	return nil
+	return fetchModifyPricingCmd(m.client)
 }
 
 func (m modifyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case modifyPricingMsg:
+		if msg.rates != nil {
+			m.pricing = &PricingData{Rates: msg.rates}
+		}
+		m.pricingLoaded = true
+		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -462,6 +482,13 @@ func (m modifyModel) View() string {
 		s.WriteString(m.renderConfirmationStep())
 	}
 
+	// Pricing line
+	if m.pricing != nil {
+		price := m.computePreviewPrice()
+		s.WriteString("\n")
+		s.WriteString(m.styles.help.Render(fmt.Sprintf("Estimated cost: %s", FormatPrice(price))))
+	}
+
 	// Help text
 	s.WriteString("\n")
 	switch m.step {
@@ -474,6 +501,82 @@ func (m modifyModel) View() string {
 	}
 
 	return s.String()
+}
+
+// computePreviewPrice calculates the price for the resulting configuration,
+// using current instance values as base and overriding with selections/hovered option.
+func (m modifyModel) computePreviewPrice() float64 {
+	// Start with current instance values
+	mode := strings.ToLower(m.currentInstance.Mode)
+	gpuType := strings.ToLower(m.currentInstance.GPUType)
+	numGPUs := 1
+	if n, err := strconv.Atoi(m.currentInstance.NumGPUs); err == nil {
+		numGPUs = n
+	}
+	vcpus := 4
+	if n, err := strconv.Atoi(m.currentInstance.CPUCores); err == nil {
+		vcpus = n
+	}
+	diskSizeGB := m.currentInstance.Storage
+
+	// Override with already-confirmed selections
+	if m.config.ModeChanged {
+		mode = m.config.Mode
+	}
+	if m.config.GPUChanged {
+		gpuType = m.config.GPUType
+	}
+	if m.config.ComputeChanged {
+		if m.config.NumGPUs > 0 {
+			numGPUs = m.config.NumGPUs
+		}
+		if m.config.VCPUs > 0 {
+			vcpus = m.config.VCPUs
+		}
+	}
+	if m.config.DiskChanged {
+		diskSizeGB = m.config.DiskSizeGB
+	}
+
+	// Override with hovered option for the current step
+	switch m.step {
+	case modifyStepMode:
+		modeOptions := []string{"prototyping", "production"}
+		mode = modeOptions[m.cursor]
+	case modifyStepGPU:
+		effectiveMode := m.getEffectiveMode()
+		if effectiveMode == "prototyping" {
+			gpuValues := []string{"a6000", "a100xl", "h100"}
+			gpuType = gpuValues[m.cursor]
+		} else {
+			gpuValues := []string{"a100xl", "h100"}
+			gpuType = gpuValues[m.cursor]
+		}
+	case modifyStepCompute:
+		effectiveMode := m.getEffectiveMode()
+		if m.gpuCountPhase {
+			gpuCounts := []int{1, 2}
+			numGPUs = gpuCounts[m.cursor]
+			vcpus = includedVCPUs(gpuType, numGPUs)
+		} else if effectiveMode == "prototyping" {
+			vcpuOptions := m.getPrototypingVcpuOptions()
+			vcpus = vcpuOptions[m.cursor]
+		} else {
+			gpuOptions := []int{1, 2, 4}
+			numGPUs = gpuOptions[m.cursor]
+		}
+	case modifyStepDiskSize:
+		if v, err := strconv.Atoi(m.diskInput.Value()); err == nil && v >= 100 {
+			diskSizeGB = v
+		}
+	}
+
+	// For production mode, set vcpus based on numGPUs (auto-calculated)
+	if mode == "production" {
+		vcpus = 18 * numGPUs
+	}
+
+	return CalculateHourlyPrice(m.pricing, mode, gpuType, numGPUs, vcpus, diskSizeGB)
 }
 
 func (m modifyModel) renderModeStep() string {

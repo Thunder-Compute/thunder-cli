@@ -269,6 +269,13 @@ func runCreate(cmd *cobra.Command) error {
 			return err
 		}
 
+		// Display estimated pricing
+		if pricing, err := client.FetchPricing(); err == nil {
+			pd := &tui.PricingData{Rates: pricing}
+			price := tui.CalculateHourlyPrice(pd, createConfig.Mode, createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB)
+			fmt.Printf("\nEstimated cost: %s\n", tui.FormatPrice(price))
+		}
+
 		if createConfig.Mode == "prototyping" {
 			fmt.Println()
 			PrintWarningSimple("PROTOTYPING MODE DISCLAIMER")

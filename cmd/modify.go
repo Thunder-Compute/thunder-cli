@@ -155,6 +155,45 @@ func runModify(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Display estimated pricing for the resulting configuration
+	if pricing, pricingErr := client.FetchPricing(); pricingErr == nil {
+		pd := &tui.PricingData{Rates: pricing}
+		// Compute resulting config: start with current values, override with modifications
+		resultMode := strings.ToLower(selectedInstance.Mode)
+		resultGPU := strings.ToLower(selectedInstance.GPUType)
+		resultNumGPUs := 1
+		if n, parseErr := strconv.Atoi(selectedInstance.NumGPUs); parseErr == nil {
+			resultNumGPUs = n
+		}
+		resultVCPUs := 4
+		if n, parseErr := strconv.Atoi(selectedInstance.CPUCores); parseErr == nil {
+			resultVCPUs = n
+		}
+		resultDisk := selectedInstance.Storage
+
+		if modifyReq.Mode != nil {
+			resultMode = string(*modifyReq.Mode)
+		}
+		if modifyReq.GPUType != nil {
+			resultGPU = *modifyReq.GPUType
+		}
+		if modifyReq.NumGPUs != nil {
+			resultNumGPUs = *modifyReq.NumGPUs
+		}
+		if modifyReq.CPUCores != nil {
+			resultVCPUs = *modifyReq.CPUCores
+		}
+		if modifyReq.DiskSizeGB != nil {
+			resultDisk = *modifyReq.DiskSizeGB
+		}
+		if resultMode == "production" {
+			resultVCPUs = 18 * resultNumGPUs
+		}
+
+		price := tui.CalculateHourlyPrice(pd, resultMode, resultGPU, resultNumGPUs, resultVCPUs, resultDisk)
+		fmt.Printf("\nEstimated cost: %s\n", tui.FormatPrice(price))
+	}
+
 	// Make API call with progress spinner
 	p := tea.NewProgram(newModifyProgressModel(client, selectedInstance.ID, modifyReq))
 	finalModel, err := p.Run()
