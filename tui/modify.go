@@ -482,8 +482,8 @@ func (m modifyModel) View() string {
 		s.WriteString(m.renderConfirmationStep())
 	}
 
-	// Pricing line
-	if m.pricing != nil {
+	// Pricing line (skip on mode step since config is too incomplete)
+	if m.pricing != nil && m.step != modifyStepMode {
 		price := m.computePreviewPrice()
 		s.WriteString("\n")
 		s.WriteString(m.styles.help.Render(fmt.Sprintf("Estimated cost: %s", FormatPrice(price))))
