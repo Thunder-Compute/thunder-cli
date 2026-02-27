@@ -107,20 +107,24 @@ builds:
           '
 
 # macOS notarization configuration (alternative method, not currently used)
-# The notarization happens in the post-build hook above instead
-notarize:
-  macos:
-    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
-      ids: [tnr]
-      sign:
-        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
-        password: "{{ .Env.MACOS_CERT_PASSWORD }}"
-      notarize:
-        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
-        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
-        key: "{{ .Env.MACOS_NOTARY_KEY }}"
-        wait: true
-        timeout: 20m
+# The notarization happens in the post-build hook above instead.
+# This section is disabled because enabling it causes GoReleaser to re-sign
+# binaries (overwriting the codesign signature from the post-build hook) and
+# attempt a redundant notarization pass, doubling Apple API calls and adding
+# an extra failure surface (e.g. transient timestamp.apple.com EOF errors).
+# notarize:
+#   macos:
+#     - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+#       ids: [tnr]
+#       sign:
+#         certificate: "{{ .Env.MACOS_SIGN_P12 }}"
+#         password: "{{ .Env.MACOS_CERT_PASSWORD }}"
+#       notarize:
+#         issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+#         key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+#         key: "{{ .Env.MACOS_NOTARY_KEY }}"
+#         wait: true
+#         timeout: 20m
 
 # Archive configuration (.tar.gz for macOS)
 archives:
