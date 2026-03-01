@@ -373,7 +373,7 @@ func (m modifyModel) getEffectiveMode() string {
 }
 
 func (m modifyModel) needsGPUCountPhase() bool {
-	return m.getEffectiveMode() == "prototyping" && m.config.GPUType == "h100"
+	return m.getEffectiveMode() == "prototyping" && (m.config.GPUType == "h100" || m.config.GPUType == "a100xl")
 }
 
 func (m modifyModel) getPrototypingVcpuOptions() []int {
@@ -381,6 +381,9 @@ func (m modifyModel) getPrototypingVcpuOptions() []int {
 	case "a6000":
 		return []int{4, 8}
 	case "a100xl":
+		if m.config.NumGPUs == 2 {
+			return []int{8, 12, 16, 20, 24}
+		}
 		return []int{4, 8, 12}
 	case "h100":
 		if m.config.NumGPUs == 2 {

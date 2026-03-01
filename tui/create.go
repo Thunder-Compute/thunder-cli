@@ -294,8 +294,8 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 		m.config.GPUType = gpus[m.cursor]
 		m.step = stepCompute
 		m.cursor = 0
-		// H100 prototyping supports multi-GPU, so show GPU count selection first
-		if m.config.Mode == "prototyping" && m.config.GPUType == "h100" {
+		// H100 and A100 prototyping support multi-GPU, so show GPU count selection first
+		if m.config.Mode == "prototyping" && (m.config.GPUType == "h100" || m.config.GPUType == "a100xl") {
 			m.gpuCountPhase = true
 		} else if m.config.Mode == "prototyping" {
 			m.config.NumGPUs = 1
@@ -392,6 +392,9 @@ func (m createModel) getPrototypingVcpuOptions() []int {
 	case "a6000":
 		return []int{4, 8}
 	case "a100xl":
+		if m.config.NumGPUs == 2 {
+			return []int{8, 12, 16, 20, 24}
+		}
 		return []int{4, 8, 12}
 	case "h100":
 		if m.config.NumGPUs == 2 {

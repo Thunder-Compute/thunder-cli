@@ -47,7 +47,7 @@ var (
 	// Prototyping specs: allowed GPU counts and vCPU options per GPU type
 	prototypingSpecs = map[string]map[int][]int{
 		"a6000":  {1: {4, 8}},
-		"a100xl": {1: {4, 8, 12}},
+		"a100xl": {1: {4, 8, 12}, 2: {8, 12, 16, 20, 24}},
 		"h100":   {1: {4, 8, 12, 16}, 2: {8, 12, 16, 20, 24}},
 	}
 
@@ -66,7 +66,7 @@ func init() {
 
 	createCmd.Flags().StringVar(&mode, "mode", "", "Instance mode: prototyping or production")
 	createCmd.Flags().StringVar(&gpuType, "gpu", "", "GPU type (prototyping: a6000, a100, or h100; production: a100 or h100)")
-	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs: 1-8 (production), 1-2 for H100 (prototyping)")
+	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs: 1-8 (production), 1-2 for A100/H100 (prototyping)")
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): options vary by GPU type and count")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (100-1000)")

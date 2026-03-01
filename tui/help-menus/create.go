@@ -95,7 +95,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--num-gpus"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Number of GPUs: 1-8 (production), 1-2 for H100 (prototyping)"))
+	output.WriteString(DescStyle.Render("Number of GPUs: 1-8 (production), 1-2 for A100/H100 (prototyping)"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
