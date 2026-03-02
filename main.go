@@ -6,13 +6,15 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 	"time"
+
+	"github.com/getsentry/sentry-go"
 
 	"github.com/Thunder-Compute/thunder-cli/cmd"
 	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
 	"github.com/Thunder-Compute/thunder-cli/internal/console"
 	"github.com/Thunder-Compute/thunder-cli/internal/version"
-	"github.com/getsentry/sentry-go"
 )
 
 func main() {
@@ -58,8 +60,10 @@ func initSentry() error {
 		SampleRate:       1.0,
 		TracesSampleRate: 0.1,
 		EnableTracing:    true,
+		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			return filterSentryEvent(event)
+		},
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to initialize Sentry: %w", err)
 	}
@@ -100,6 +104,37 @@ func getInstanceID() string {
 		return id
 	}
 	return "unknown"
+}
+
+// Noisy Sentry errors I think we should ignore.
+var ignoredErrors = []string{
+	// Our errors
+	"not authenticated",
+	"authentication failed: invalid token",
+	"token validation failed",
+	"unknown flag",
+	"unknown command",
+	"unknown shorthand flag",
+	"flag needs an argument",
+	"invalid argument",
+
+	// Misc errors
+	"context deadline exceeded",
+	"connection reset",
+	"ECONNRESET",
+	"i/o timeout",
+}
+
+func filterSentryEvent(event *sentry.Event) *sentry.Event {
+	for _, ex := range event.Exception {
+		text := ex.Type + " " + ex.Value
+		for _, pattern := range ignoredErrors {
+			if strings.Contains(strings.ToLower(text), strings.ToLower(pattern)) {
+				return nil
+			}
+		}
+	}
+	return event
 }
 
 func setUserContext(token string) {
