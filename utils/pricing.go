@@ -1,27 +1,10 @@
-package tui
+package utils
 
 import "fmt"
 
 // PricingData holds fetched pricing rates from the API.
 type PricingData struct {
 	Rates map[string]float64
-}
-
-// includedVCPUs returns the minimum (included) vCPU count for a given GPU type and count in prototyping mode.
-func includedVCPUs(gpuType string, numGPUs int) int {
-	switch gpuType {
-	case "a6000":
-		return 4
-	case "a100xl":
-		return 4
-	case "h100":
-		if numGPUs >= 2 {
-			return 8
-		}
-		return 4
-	default:
-		return 4
-	}
 }
 
 // CalculateHourlyPrice computes the estimated hourly cost based on the configuration.
@@ -39,7 +22,7 @@ func CalculateHourlyPrice(p *PricingData, mode, gpuType string, numGPUs, vcpus, 
 
 	var vcpuCost float64
 	if mode == "prototyping" {
-		included := includedVCPUs(gpuType, numGPUs)
+		included := IncludedVCPUs(gpuType, numGPUs)
 		extra := max(0, vcpus-included)
 		if extra > 0 {
 			rate := p.Rates["additional_vcpus"]

@@ -271,9 +271,9 @@ func runCreate(cmd *cobra.Command) error {
 
 		// Display estimated pricing
 		if pricing, err := client.FetchPricing(); err == nil {
-			pd := &tui.PricingData{Rates: pricing}
-			price := tui.CalculateHourlyPrice(pd, createConfig.Mode, createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB)
-			fmt.Printf("\nEstimated cost: %s\n", tui.FormatPrice(price))
+			pd := &utils.PricingData{Rates: pricing}
+			price := utils.CalculateHourlyPrice(pd, createConfig.Mode, createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB)
+			fmt.Printf("\nEstimated cost: %s\n", utils.FormatPrice(price))
 		}
 
 		if createConfig.Mode == "prototyping" {
