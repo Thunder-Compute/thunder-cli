@@ -644,35 +644,18 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		Level: sentry.LevelInfo,
 	})
 
-	// Set up token on the instance (binary is now managed by the instance itself)
-	if instance.Mode == "production" {
-		tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Production mode detected, setting up token...", 0)
-		if err := utils.RemoveThunderVirtualization(sshClient, config.Token); err != nil {
-			sentry.AddBreadcrumb(&sentry.Breadcrumb{
-				Category: "connect",
-				Message:  "token setup failed (production)",
-				Data: map[string]interface{}{
-					"error": err.Error(),
-				},
-				Level: sentry.LevelError,
-			})
-			shutdownTUI()
-			return fmt.Errorf("failed to set up token: %w", err)
-		}
-	} else {
-		tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Setting up token...", 0)
-		if err := utils.SetupToken(sshClient, config.Token); err != nil {
-			sentry.AddBreadcrumb(&sentry.Breadcrumb{
-				Category: "connect",
-				Message:  "token setup failed (prototyping)",
-				Data: map[string]interface{}{
-					"error": err.Error(),
-				},
-				Level: sentry.LevelError,
-			})
-			shutdownTUI()
-			return fmt.Errorf("failed to set up token: %w", err)
-		}
+	tui.SendPhaseUpdate(p, 4, tui.PhaseInProgress, "Setting up token...", 0)
+	if err := utils.SetupToken(sshClient, config.Token); err != nil {
+		sentry.AddBreadcrumb(&sentry.Breadcrumb{
+			Category: "connect",
+			Message:  "token setup failed",
+			Data: map[string]interface{}{
+				"error": err.Error(),
+			},
+			Level: sentry.LevelError,
+		})
+		shutdownTUI()
+		return fmt.Errorf("failed to set up token: %w", err)
 	}
 
 	if checkCancelled() {
