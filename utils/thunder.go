@@ -34,29 +34,3 @@ func SetupToken(client *SSHClient, token string) error {
 
 	return nil
 }
-
-// RemoveThunderVirtualization removes Thunder binary/config for production mode and sets up token
-func RemoveThunderVirtualization(client *SSHClient, token string) error {
-	productionCommands := []string{
-		fmt.Sprintf("sudo rm -f %s || true", ldPreloadPath),
-		"sudo touch /etc/ld.so.preload || true",
-		"sudo chown root:root /etc/ld.so.preload || true",
-		"sudo chmod 644 /etc/ld.so.preload || true",
-		fmt.Sprintf("sudo rm -f %s || true", thunderLibPath),
-		"sudo rm -rf /etc/thunder || true",
-		fmt.Sprintf("echo '%s' | base64 -d > /tmp/token.tmp", base64.StdEncoding.EncodeToString([]byte(token))),
-		"sudo install -d -m 755 /home/ubuntu/.thunder || true",
-		"sudo install -m 600 -o ubuntu -g ubuntu /tmp/token.tmp /home/ubuntu/.thunder/token || true",
-		"rm -f /tmp/token.tmp || true",
-		"sudo sed -i '/export TNR_API_TOKEN/d' /home/ubuntu/.bashrc || true",
-		"echo 'export TNR_API_TOKEN=\"$(cat /home/ubuntu/.thunder/token)\"' | sudo tee -a /home/ubuntu/.bashrc > /dev/null || true",
-	}
-
-	cleanupScript := strings.Join(productionCommands, " ; ")
-
-	if _, err := ExecuteSSHCommand(client, cleanupScript); err != nil {
-		return fmt.Errorf("failed to remove Thunder virtualization: %w", err)
-	}
-
-	return nil
-}
