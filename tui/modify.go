@@ -182,14 +182,14 @@ func (m modifyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 
-		case "up":
+		case "up", "k":
 			if m.step != modifyStepDiskSize {
 				if m.cursor > 0 {
 					m.cursor--
 				}
 			}
 
-		case "down":
+		case "down", "j":
 			if m.step != modifyStepDiskSize {
 				maxCursor := m.getMaxCursor()
 				if m.cursor < maxCursor {
@@ -898,12 +898,12 @@ func (m modifyInstanceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 
-		case "up":
+		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
 			}
 
-		case "down":
+		case "down", "j":
 			if m.cursor < len(m.instances)-1 {
 				m.cursor++
 			}
