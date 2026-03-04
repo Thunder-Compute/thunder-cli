@@ -10,6 +10,7 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -157,7 +158,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 
 	// Display estimated pricing for the resulting configuration
 	if pricing, pricingErr := client.FetchPricing(); pricingErr == nil {
-		pd := &tui.PricingData{Rates: pricing}
+		pd := &utils.PricingData{Rates: pricing}
 		// Compute resulting config: start with current values, override with modifications
 		resultMode := strings.ToLower(selectedInstance.Mode)
 		resultGPU := strings.ToLower(selectedInstance.GPUType)
@@ -190,8 +191,8 @@ func runModify(cmd *cobra.Command, args []string) error {
 			resultVCPUs = 18 * resultNumGPUs
 		}
 
-		price := tui.CalculateHourlyPrice(pd, resultMode, resultGPU, resultNumGPUs, resultVCPUs, resultDisk)
-		fmt.Printf("\nEstimated cost: %s\n", tui.FormatPrice(price))
+		price := utils.CalculateHourlyPrice(pd, resultMode, resultGPU, resultNumGPUs, resultVCPUs, resultDisk)
+		fmt.Printf("\nEstimated cost: %s\n", utils.FormatPrice(price))
 	}
 
 	// Make API call with progress spinner

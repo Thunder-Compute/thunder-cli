@@ -60,7 +60,7 @@ type createModel struct {
 	spinner          spinner.Model
 	selectedSnapshot *api.Snapshot
 	gpuCountPhase    bool // when true, stepCompute shows GPU count selection before vCPU selection
-	pricing          *PricingData
+	pricing          *utils.PricingData
 	pricingLoaded    bool
 
 	styles createStyles
@@ -216,7 +216,7 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case createPricingMsg:
 		if msg.rates != nil {
-			m.pricing = &PricingData{Rates: msg.rates}
+			m.pricing = &utils.PricingData{Rates: msg.rates}
 		}
 		m.pricingLoaded = true
 		return m, nil
@@ -237,7 +237,7 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "esc":
-			if m.step == stepCompute && !m.gpuCountPhase && m.config.Mode == "prototyping" && m.config.GPUType == "h100" {
+			if m.step == stepCompute && !m.gpuCountPhase && m.config.Mode == "prototyping" && utils.NeedsGPUCountPhase(m.config.GPUType) {
 				// Go back to GPU count selection phase
 				m.gpuCountPhase = true
 				m.cursor = 0
@@ -294,8 +294,8 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 		m.config.GPUType = gpus[m.cursor]
 		m.step = stepCompute
 		m.cursor = 0
-		// H100 and A100 prototyping support multi-GPU, so show GPU count selection first
-		if m.config.Mode == "prototyping" && (m.config.GPUType == "h100" || m.config.GPUType == "a100xl") {
+		// Some prototyping GPU types support multi-GPU, so show GPU count selection first
+		if m.config.Mode == "prototyping" && utils.NeedsGPUCountPhase(m.config.GPUType) {
 			m.gpuCountPhase = true
 		} else if m.config.Mode == "prototyping" {
 			m.config.NumGPUs = 1
@@ -304,15 +304,14 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 
 	case stepCompute:
 		if m.gpuCountPhase {
-			// GPU count selection phase (H100 prototyping)
-			gpuCounts := []int{1, 2}
+			gpuCounts := utils.PrototypingGPUCounts(m.config.GPUType)
 			m.config.NumGPUs = gpuCounts[m.cursor]
 			m.gpuCountPhase = false
 			m.cursor = 0
 			// Stay on stepCompute to show vCPU options next
 		} else if m.config.Mode == "prototyping" {
-			vcpus := m.getPrototypingVcpuOptions()
-			m.config.VCPUs = vcpus[m.cursor]
+			vcpuOpts := utils.PrototypingVCPUOptions(m.config.GPUType, m.config.NumGPUs)
+			m.config.VCPUs = vcpuOpts[m.cursor]
 			m.step = stepTemplate
 			m.cursor = 0
 		} else {
@@ -379,30 +378,11 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 func (m createModel) getGPUOptions() []string {
 	switch m.config.Mode {
 	case "prototyping":
-		return []string{"a6000", "a100xl", "h100"}
+		return utils.PrototypingGPUOptions()
 	case "production":
 		return []string{"a100xl", "h100"}
 	default:
 		panic("Unknown config mode")
-	}
-}
-
-func (m createModel) getPrototypingVcpuOptions() []int {
-	switch m.config.GPUType {
-	case "a6000":
-		return []int{4, 8}
-	case "a100xl":
-		if m.config.NumGPUs == 2 {
-			return []int{8, 12, 16, 20, 24}
-		}
-		return []int{4, 8, 12}
-	case "h100":
-		if m.config.NumGPUs == 2 {
-			return []int{8, 12, 16, 20, 24}
-		}
-		return []int{4, 8, 12, 16}
-	default:
-		return []int{4, 8}
 	}
 }
 
@@ -414,10 +394,10 @@ func (m createModel) getMaxCursor() int {
 		return len(m.getGPUOptions()) - 1
 	case stepCompute:
 		if m.gpuCountPhase {
-			return 1 // 1 or 2 GPUs
+			return len(utils.PrototypingGPUCounts(m.config.GPUType)) - 1
 		}
 		if m.config.Mode == "prototyping" {
-			return len(m.getPrototypingVcpuOptions()) - 1
+			return len(utils.PrototypingVCPUOptions(m.config.GPUType, m.config.NumGPUs)) - 1
 		}
 		return 3
 	case stepTemplate:
@@ -513,7 +493,7 @@ func (m createModel) View() string {
 	case stepCompute:
 		if m.gpuCountPhase {
 			s.WriteString("Select number of GPUs:\n\n")
-			gpuCounts := []int{1, 2}
+			gpuCounts := utils.PrototypingGPUCounts(m.config.GPUType)
 			for i, num := range gpuCounts {
 				cursor := "  "
 				if m.cursor == i {
@@ -527,8 +507,8 @@ func (m createModel) View() string {
 			}
 		} else if m.config.Mode == "prototyping" {
 			s.WriteString("Select vCPU count (8GB RAM per vCPU):\n\n")
-			vcpus := m.getPrototypingVcpuOptions()
-			for i, vcpu := range vcpus {
+			vcpuOpts := utils.PrototypingVCPUOptions(m.config.GPUType, m.config.NumGPUs)
+			for i, vcpu := range vcpuOpts {
 				cursor := "  "
 				if m.cursor == i {
 					cursor = m.styles.cursor.Render("▶ ")
@@ -654,7 +634,7 @@ func (m createModel) View() string {
 	if m.pricing != nil && m.step != stepMode {
 		price := m.computePreviewPrice()
 		s.WriteString("\n")
-		s.WriteString(m.styles.help.Render(fmt.Sprintf("Estimated cost: %s", FormatPrice(price))))
+		s.WriteString(m.styles.help.Render(fmt.Sprintf("Estimated cost: %s", utils.FormatPrice(price))))
 	}
 
 	if m.step != stepConfirmation {
@@ -692,7 +672,7 @@ func (m createModel) computePreviewPrice() float64 {
 		numGPUs = 1
 	}
 	if vcpus == 0 {
-		vcpus = includedVCPUs(gpuType, numGPUs)
+		vcpus = utils.IncludedVCPUs(gpuType, numGPUs)
 	}
 	if diskSizeGB == 0 {
 		diskSizeGB = 100
@@ -710,21 +690,21 @@ func (m createModel) computePreviewPrice() float64 {
 			gpuType = "a100xl"
 		}
 		numGPUs = 1
-		vcpus = includedVCPUs(gpuType, numGPUs)
+		vcpus = utils.IncludedVCPUs(gpuType, numGPUs)
 	case stepGPU:
 		gpus := m.getGPUOptions()
 		gpuType = gpus[m.cursor]
 		if numGPUs == 0 {
 			numGPUs = 1
 		}
-		vcpus = includedVCPUs(gpuType, numGPUs)
+		vcpus = utils.IncludedVCPUs(gpuType, numGPUs)
 	case stepCompute:
 		if m.gpuCountPhase {
 			gpuCounts := []int{1, 2}
 			numGPUs = gpuCounts[m.cursor]
-			vcpus = includedVCPUs(gpuType, numGPUs)
+			vcpus = utils.IncludedVCPUs(gpuType, numGPUs)
 		} else if mode == "prototyping" {
-			vcpuOpts := m.getPrototypingVcpuOptions()
+			vcpuOpts := utils.PrototypingVCPUOptions(m.config.GPUType, m.config.NumGPUs)
 			vcpus = vcpuOpts[m.cursor]
 		} else {
 			gpuOpts := []int{1, 2, 4, 8}
@@ -737,7 +717,7 @@ func (m createModel) computePreviewPrice() float64 {
 		}
 	}
 
-	return CalculateHourlyPrice(m.pricing, mode, gpuType, numGPUs, vcpus, diskSizeGB)
+	return utils.CalculateHourlyPrice(m.pricing, mode, gpuType, numGPUs, vcpus, diskSizeGB)
 }
 
 func RunCreateInteractive(client *api.Client) (*CreateConfig, error) {
