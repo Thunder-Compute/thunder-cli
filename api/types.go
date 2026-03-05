@@ -23,6 +23,7 @@ type (
 	SSHKeyAddResponse      = types.SSHKeyAddResponse
 	SSHKeyListResponse     = types.SSHKeyListResponse
 	SSHKeyDeleteResponse   = types.SSHKeyDeleteResponse
+	ValidateTokenResult    = types.ValidateTokenResponse
 )
 
 // TemplateEntry represents a template with its key, used for ordered iteration.

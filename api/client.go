@@ -43,7 +43,7 @@ func (c *Client) setHeaders(req *http.Request) {
 	req.Header.Set("Thunder-Client", "GO-CLI")
 }
 
-func (c *Client) ValidateToken(ctx context.Context) error {
+func (c *Client) ValidateToken(ctx context.Context) (*ValidateTokenResult, error) {
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{
 		Category: "api",
 		Message:  "validate_token",
@@ -52,7 +52,7 @@ func (c *Client) ValidateToken(ctx context.Context) error {
 
 	req, err := http.NewRequest("GET", c.baseURL+"/v1/auth/validate", nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	c.setHeaders(req)
@@ -65,7 +65,7 @@ func (c *Client) ValidateToken(ctx context.Context) error {
 			scope.SetLevel(sentry.LevelError)
 			sentry.CaptureException(err)
 		})
-		return fmt.Errorf("failed to validate token: %w", err)
+		return nil, fmt.Errorf("failed to validate token: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -77,11 +77,12 @@ func (c *Client) ValidateToken(ctx context.Context) error {
 			scope.SetLevel(sentry.LevelWarning)
 			sentry.CaptureException(err)
 		})
-		return err
+		return nil, err
 	}
 
+	body, _ := io.ReadAll(resp.Body)
+
 	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
 		err := fmt.Errorf("token validation failed with status %d: %s", resp.StatusCode, string(body))
 		sentry.WithScope(func(scope *sentry.Scope) {
 			scope.SetTag("api_method", "ValidateToken")
@@ -90,11 +91,12 @@ func (c *Client) ValidateToken(ctx context.Context) error {
 			scope.SetLevel(getLogLevelForStatus(resp.StatusCode))
 			sentry.CaptureException(err)
 		})
-		return err
+		return nil, err
 	}
 
-	_, _ = io.ReadAll(resp.Body)
-	return nil
+	var result ValidateTokenResult
+	_ = json.Unmarshal(body, &result)
+	return &result, nil
 }
 
 func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, error) {

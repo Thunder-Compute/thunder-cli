@@ -108,7 +108,7 @@ func RenderUpdateStaged() string {
 
 func RenderUpdateRerun() string {
 	InitCommonStyles(os.Stdout)
-	return SuccessStyle().Render("✓ Update completed successfully. Please re-run your command.")
+	return SuccessStyle().Render("✓ Update completed successfully!")
 }
 
 func RenderUpdateFailed(err error, releaseURL string) string {

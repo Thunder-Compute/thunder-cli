@@ -237,3 +237,10 @@ type SSHKeyListResponse []SSHKey
 type SSHKeyDeleteResponse struct {
 	Message string `json:"message"`
 }
+
+// ValidateTokenResponse represents the response from token validation.
+type ValidateTokenResponse struct {
+	Valid   bool   `json:"valid"`
+	Email   string `json:"email,omitempty"`
+	OrgName string `json:"org_name,omitempty"`
+}

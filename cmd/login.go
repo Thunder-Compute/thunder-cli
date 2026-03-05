@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	authURL = "https://console.thundercompute.com/login/vscode"
+	authURL     = "https://console.thundercompute.com/login/vscode"
 	callbackURL = "http://127.0.0.1"
 )
 
@@ -247,10 +247,29 @@ func init() {
 	loginCmd.Flags().StringVar(&loginToken, "token", "", "Authenticate directly with a token instead of opening browser")
 }
 
+func loginMessage(prefix string, result *api.ValidateTokenResult) string {
+	if result != nil && result.Email != "" {
+		if result.OrgName != "" {
+			return fmt.Sprintf("%s as %s (%s).", prefix, result.Email, result.OrgName)
+		}
+		return fmt.Sprintf("%s as %s.", prefix, result.Email)
+	}
+	return prefix + "."
+}
+
 func runLogin() error {
 	config, err := LoadConfig()
 	if err == nil && config.Token != "" {
-		PrintWarningSimple("User already logged in. Log out to sign into a different account.")
+		client := api.NewClient(config.Token, getAPIURL())
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		result, err := client.ValidateToken(ctx)
+		if err == nil {
+			PrintWarningSimple(loginMessage("Already logged in", result))
+		} else {
+			PrintWarningSimple("Already logged in.")
+		}
 		return nil
 	}
 
@@ -261,7 +280,8 @@ func runLogin() error {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			if err := client.ValidateToken(ctx); err != nil {
+			result, err := client.ValidateToken(ctx)
+			if err != nil {
 				return fmt.Errorf("token validation failed: %w", err)
 			}
 
@@ -271,7 +291,7 @@ func runLogin() error {
 			if err := saveConfig(authResp); err != nil {
 				return fmt.Errorf("failed to save credentials: %w", err)
 			}
-			PrintSuccessSimple("Successfully authenticated with Thunder Compute using TNR_API_TOKEN!")
+			PrintSuccessSimple(loginMessage("Logged in", result))
 			return nil
 		}
 	}
@@ -281,7 +301,8 @@ func runLogin() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		if err := client.ValidateToken(ctx); err != nil {
+		result, err := client.ValidateToken(ctx)
+		if err != nil {
 			return fmt.Errorf("token validation failed: %w", err)
 		}
 
@@ -291,7 +312,7 @@ func runLogin() error {
 		if err := saveConfig(authResp); err != nil {
 			return fmt.Errorf("failed to save credentials: %w", err)
 		}
-		PrintSuccessSimple("Successfully authenticated with Thunder Compute!")
+		PrintSuccessSimple(loginMessage("Logged in", result))
 		return nil
 	}
 
@@ -351,7 +372,8 @@ func runInteractiveLogin() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		if err := client.ValidateToken(ctx); err != nil {
+		result, err := client.ValidateToken(ctx)
+		if err != nil {
 			return fmt.Errorf("token validation failed: %w", err)
 		}
 
@@ -361,7 +383,7 @@ func runInteractiveLogin() error {
 		if err := saveConfig(authResp); err != nil {
 			return fmt.Errorf("failed to save credentials: %w", err)
 		}
-		PrintSuccessSimple("Successfully authenticated with Thunder Compute!")
+		PrintSuccessSimple(loginMessage("Logged in", result))
 		return nil
 	}
 

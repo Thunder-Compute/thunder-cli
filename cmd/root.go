@@ -215,12 +215,12 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result, m
 			os.Exit(0)
 		}
 		if shouldReexec {
-			fmt.Fprintln(os.Stderr, "Update completed successfully. Please re-run your command.")
+			fmt.Fprintf(os.Stderr, "Updated tnr to %s.\n", displayVersion(res.LatestVersion))
 			os.Exit(0)
 		}
 	}
 
-	fmt.Fprintln(os.Stderr, "Update staged successfully. Please re-run your command to complete the update.")
+	fmt.Fprintf(os.Stderr, "Updated tnr to %s.\n", displayVersion(res.LatestVersion))
 	os.Exit(0)
 }
 
@@ -267,7 +267,7 @@ func handleOptionalUpdate(parentCtx context.Context, res updatepolicy.Result) {
 	}
 
 	if updateErr == nil {
-		fmt.Println("Update finished! You can now re-run your command.")
+		fmt.Printf("Updated tnr to %s.\n", displayVersion(res.LatestVersion))
 	} else {
 		// Capture optional update failures to Sentry
 		sentry.WithScope(func(scope *sentry.Scope) {
