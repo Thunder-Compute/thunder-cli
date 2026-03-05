@@ -7,18 +7,19 @@ type PricingData struct {
 	Rates map[string]float64
 }
 
+// gpuPricingKey returns the pricing map key for the given GPU configuration.
+// Format: "{gpu}_x{count}_{mode}", e.g. "h100_x1_prototyping", "a100xl_x4_production".
+func gpuPricingKey(mode, gpuType string, numGPUs int) string {
+	return fmt.Sprintf("%s_x%d_%s", gpuType, numGPUs, mode)
+}
+
 // CalculateHourlyPrice computes the estimated hourly cost based on the configuration.
 func CalculateHourlyPrice(p *PricingData, mode, gpuType string, numGPUs, vcpus, diskSizeGB int) float64 {
 	if p == nil || p.Rates == nil {
 		return 0
 	}
 
-	var gpuCost float64
-	if mode == "production" {
-		gpuCost = p.Rates[gpuType+"_native"] * float64(numGPUs)
-	} else {
-		gpuCost = p.Rates[gpuType] * float64(numGPUs)
-	}
+	gpuCost := p.Rates[gpuPricingKey(mode, gpuType, numGPUs)]
 
 	var vcpuCost float64
 	if mode == "prototyping" {
