@@ -101,7 +101,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--vcpus"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("CPU cores (prototyping only): options vary by GPU type and count. RAM: 8GB per vCPU. Production: 18 per GPU, RAM: 90GB per GPU"))
+	output.WriteString(DescStyle.Render("CPU cores (prototyping only): options vary by GPU type and count. RAM per vCPU from specs. Production: determined by specs."))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

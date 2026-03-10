@@ -14,7 +14,8 @@ func gpuPricingKey(mode, gpuType string, numGPUs int) string {
 }
 
 // CalculateHourlyPrice computes the estimated hourly cost based on the configuration.
-func CalculateHourlyPrice(p *PricingData, mode, gpuType string, numGPUs, vcpus, diskSizeGB int) float64 {
+// includedVCPUs is the minimum (included) vCPU count from specs (vcpuOptions[0]).
+func CalculateHourlyPrice(p *PricingData, mode, gpuType string, numGPUs, vcpus, diskSizeGB, includedVCPUs int) float64 {
 	if p == nil || p.Rates == nil {
 		return 0
 	}
@@ -23,7 +24,10 @@ func CalculateHourlyPrice(p *PricingData, mode, gpuType string, numGPUs, vcpus, 
 
 	var vcpuCost float64
 	if mode == "prototyping" {
-		included := IncludedVCPUs(gpuType, numGPUs)
+		included := includedVCPUs
+		if included == 0 {
+			included = 4
+		}
 		extra := max(0, vcpus-included)
 		if extra > 0 {
 			rate := p.Rates["additional_vcpus"]

@@ -26,6 +26,30 @@ type (
 	ValidateTokenResult    = types.ValidateTokenResponse
 )
 
+// StorageRange defines min/max storage in GB.
+type StorageRange struct {
+	Min int `json:"min"`
+	Max int `json:"max"`
+}
+
+// GpuLimits defines per-GPU resource caps.
+type GpuLimits struct {
+	MaxCPUPerGPU       int `json:"maxCPUPerGPU"`
+	MaxMemoryGiBPerGPU int `json:"maxMemoryGiBPerGPU"`
+}
+
+// GpuSpecConfig represents a single GPU configuration entry.
+type GpuSpecConfig struct {
+	DisplayName   string       `json:"displayName"`
+	VramGB        int          `json:"vramGB"`
+	GpuCount      int          `json:"gpuCount"`
+	Mode          string       `json:"mode"`
+	VcpuOptions   []int        `json:"vcpuOptions"`
+	RamPerVCPUGiB int          `json:"ramPerVCPUGiB"`
+	StorageGB     StorageRange `json:"storageGB"`
+	Limits        *GpuLimits   `json:"limits,omitempty"`
+}
+
 // TemplateEntry represents a template with its key, used for ordered iteration.
 type TemplateEntry struct {
 	Key      string

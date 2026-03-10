@@ -37,25 +37,6 @@ var createCmd = &cobra.Command{
 	},
 }
 
-var (
-	prototypingGPUMap = map[string]string{
-		"a6000": "a6000",
-		"a100":  "a100xl",
-		"h100":  "h100",
-	}
-
-	// Prototyping specs: allowed GPU counts and vCPU options per GPU type
-	prototypingSpecs = map[string]map[int][]int{
-		"a6000":  {1: {4, 8}},
-		"a100xl": {1: {4, 8, 12}, 2: {8, 12, 16, 20, 24}},
-		"h100":   {1: {4, 8, 12, 16}, 2: {8, 12, 16, 20, 24}},
-	}
-
-	productionGPUMap = map[string]string{
-		"a100": "a100xl",
-		"h100": "h100",
-	}
-)
 
 func init() {
 	createCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
@@ -69,7 +50,7 @@ func init() {
 	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs: 1-8 (production), 1-2 for A100/H100 (prototyping)")
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): options vary by GPU type and count")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
-	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (100-1000)")
+	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (range depends on GPU config)")
 	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-key", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
 }
 
@@ -201,12 +182,19 @@ func runCreate(cmd *cobra.Command) error {
 
 	client := api.NewClient(config.Token, config.APIURL)
 
+	// Fetch GPU specs from API
+	specsMap, specsErr := client.GetSpecs()
+	if specsErr != nil {
+		return fmt.Errorf("failed to fetch GPU specs: %w", specsErr)
+	}
+	specs := utils.NewSpecStore(specsMap)
+
 	isInteractive := !cmd.Flags().Changed("mode")
 
 	var createConfig *tui.CreateConfig
 
 	if isInteractive {
-		createConfig, err = tui.RunCreateInteractive(client)
+		createConfig, err = tui.RunCreateInteractive(client, specs)
 		if err != nil {
 			if _, ok := err.(*tui.CancellationError); ok {
 				PrintWarningSimple("User cancelled creation process")
@@ -265,14 +253,15 @@ func runCreate(cmd *cobra.Command) error {
 			DiskSizeGB: diskSizeGB,
 		}
 
-		if err := validateCreateConfig(createConfig, templates, snapshots, diskSizeWasSet); err != nil {
+		if err := validateCreateConfig(createConfig, templates, snapshots, diskSizeWasSet, specs); err != nil {
 			return err
 		}
 
 		// Display estimated pricing
 		if pricing, err := client.FetchPricing(); err == nil {
 			pd := &utils.PricingData{Rates: pricing}
-			price := utils.CalculateHourlyPrice(pd, createConfig.Mode, createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB)
+			included := specs.IncludedVCPUs(createConfig.GPUType, createConfig.NumGPUs, createConfig.Mode)
+			price := utils.CalculateHourlyPrice(pd, createConfig.Mode, createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB, included)
 			fmt.Printf("\nEstimated cost: %s\n", utils.FormatPrice(price))
 		}
 
@@ -360,7 +349,7 @@ func runCreate(cmd *cobra.Command) error {
 	return nil
 }
 
-func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntry, snapshots []api.Snapshot, diskSizeWasSet bool) error {
+func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntry, snapshots []api.Snapshot, diskSizeWasSet bool, specs *utils.SpecStore) error {
 	config.Mode = strings.ToLower(config.Mode)
 	config.GPUType = strings.ToLower(config.GPUType)
 
@@ -368,32 +357,26 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 		return fmt.Errorf("mode must be 'prototyping' or 'production'")
 	}
 
+	// Normalize GPU type
+	canonical, ok := specs.NormalizeGPUType(config.GPUType, config.Mode)
+	if !ok {
+		availableGPUs := specs.GPUOptionsForMode(config.Mode)
+		return fmt.Errorf("%s mode supports GPU types: %s", config.Mode, strings.Join(availableGPUs, ", "))
+	}
+	config.GPUType = canonical
+
+	// Validate GPU count
+	if config.NumGPUs == 0 {
+		config.NumGPUs = 1
+	}
+
+	allowedVCPUs := specs.VCPUOptions(config.GPUType, config.NumGPUs, config.Mode)
+	if allowedVCPUs == nil {
+		allowedCounts := specs.GPUCountsForMode(config.GPUType, config.Mode)
+		return fmt.Errorf("GPU count %d is not valid for %s %s. Allowed: %v", config.NumGPUs, config.GPUType, config.Mode, allowedCounts)
+	}
+
 	if config.Mode == "prototyping" {
-		canonical, ok := prototypingGPUMap[config.GPUType]
-		if !ok {
-			return fmt.Errorf("prototyping mode supports GPU types: a6000, a100, or h100")
-		}
-		config.GPUType = canonical
-
-		// Look up allowed specs for this GPU type
-		gpuSpec, specOk := prototypingSpecs[config.GPUType]
-		if !specOk {
-			return fmt.Errorf("no prototyping specs found for GPU type: %s", config.GPUType)
-		}
-
-		// Validate GPU count
-		if config.NumGPUs == 0 {
-			config.NumGPUs = 1
-		}
-		allowedVCPUs, countOk := gpuSpec[config.NumGPUs]
-		if !countOk {
-			allowedCounts := make([]string, 0, len(gpuSpec))
-			for k := range gpuSpec {
-				allowedCounts = append(allowedCounts, fmt.Sprintf("%d", k))
-			}
-			return fmt.Errorf("GPU count %d is not valid for %s prototyping. Allowed: %s", config.NumGPUs, config.GPUType, strings.Join(allowedCounts, ", "))
-		}
-
 		if config.VCPUs == 0 {
 			return fmt.Errorf("prototyping mode requires --vcpus flag (options for %s with %d GPU(s): %v)", config.GPUType, config.NumGPUs, allowedVCPUs)
 		}
@@ -409,29 +392,8 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 			return fmt.Errorf("vcpus must be one of %v for %s with %d GPU(s)", allowedVCPUs, config.GPUType, config.NumGPUs)
 		}
 	} else {
-		canonical, ok := productionGPUMap[config.GPUType]
-		if !ok {
-			return fmt.Errorf("production mode supports GPU types: a100 or h100")
-		}
-		config.GPUType = canonical
-
-		if config.NumGPUs == 0 {
-			return fmt.Errorf("production mode requires --num-gpus flag (1, 2, 4, or 8)")
-		}
-
-		validGPUs := []int{1, 2, 4, 8}
-		valid := false
-		for _, v := range validGPUs {
-			if config.NumGPUs == v {
-				valid = true
-				break
-			}
-		}
-		if !valid {
-			return fmt.Errorf("num-gpus must be one of: 1, 2, 4, or 8")
-		}
-
-		config.VCPUs = 18 * config.NumGPUs
+		// Production: vCPUs are auto-set from the spec (first/only option)
+		config.VCPUs = allowedVCPUs[0]
 	}
 
 	if config.Template == "" {
@@ -469,19 +431,18 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	// If a snapshot was selected, set default disk size or validate minimum
 	if selectedSnapshot != nil {
 		if !diskSizeWasSet {
-			// User didn't specify disk size, use snapshot's minimum
 			config.DiskSizeGB = selectedSnapshot.MinimumDiskSizeGB
 		} else {
-			// User specified disk size, validate it's at least the minimum
 			if config.DiskSizeGB < selectedSnapshot.MinimumDiskSizeGB {
 				return fmt.Errorf("disk size must be at least %d GB for snapshot '%s'", selectedSnapshot.MinimumDiskSizeGB, selectedSnapshot.Name)
 			}
 		}
 	}
 
-	// Validate disk size is within bounds
-	if config.DiskSizeGB < 100 || config.DiskSizeGB > 1000 {
-		return fmt.Errorf("disk size must be between 100 and 1000 GB")
+	// Validate disk size against spec storage range
+	minStorage, maxStorage := specs.StorageRange(config.GPUType, config.NumGPUs, config.Mode)
+	if config.DiskSizeGB < minStorage || config.DiskSizeGB > maxStorage {
+		return fmt.Errorf("disk size must be between %d and %d GB", minStorage, maxStorage)
 	}
 
 	return nil

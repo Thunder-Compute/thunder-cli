@@ -6,9 +6,28 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/pkg/types"
 	"github.com/Thunder-Compute/thunder-cli/tui"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func testSpecStore() *utils.SpecStore {
+	return utils.NewSpecStore(map[string]api.GpuSpecConfig{
+		"a6000_x1_prototyping":  {DisplayName: "RTX A6000", VramGB: 48, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 300}},
+		"a100xl_x1_prototyping": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8, 12}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
+		"a100xl_x2_prototyping": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16, 20, 24}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"h100_x1_prototyping":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8, 12, 16}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
+		"h100_x2_prototyping":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16, 20, 24}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"a100xl_x1_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 1, Mode: "production", VcpuOptions: []int{18}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"a100xl_x2_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 2, Mode: "production", VcpuOptions: []int{36}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"a100xl_x4_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 4, Mode: "production", VcpuOptions: []int{72}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"a100xl_x8_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 8, Mode: "production", VcpuOptions: []int{144}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"h100_x1_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 1, Mode: "production", VcpuOptions: []int{18}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"h100_x2_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 2, Mode: "production", VcpuOptions: []int{36}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"h100_x4_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 4, Mode: "production", VcpuOptions: []int{72}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"h100_x8_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 8, Mode: "production", VcpuOptions: []int{144}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+	})
+}
 
 func tmplEntry(key, displayName string) api.TemplateEntry {
 	return api.TemplateEntry{Key: key, Template: types.EnvironmentTemplate{DisplayName: displayName}}
@@ -70,7 +89,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				GPUType: "invalid",
 			},
 			expectError:   true,
-			errorContains: "prototyping mode supports GPU types: a6000, a100, or h100",
+			errorContains: "prototyping mode supports GPU types:",
 		},
 		{
 			name: "prototyping without vcpus",
@@ -99,7 +118,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				GPUType: "a6000",
 			},
 			expectError:   true,
-			errorContains: "production mode supports GPU types: a100 or h100",
+			errorContains: "production mode supports GPU types:",
 		},
 		{
 			name: "production without num-gpus",
@@ -109,7 +128,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				NumGPUs: 0,
 			},
 			expectError:   true,
-			errorContains: "production mode requires --num-gpus flag",
+			errorContains: "GPU count",
 		},
 		{
 			name: "invalid num-gpus for production",
@@ -119,7 +138,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				NumGPUs: 3,
 			},
 			expectError:   true,
-			errorContains: "num-gpus must be one of: 1, 2, 4, or 8",
+			errorContains: "GPU count 3 is not valid",
 		},
 		{
 			name: "valid production config with 8 GPUs",
@@ -149,7 +168,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 			},
 			expectError:   true,
-			errorContains: "disk size must be between 100 and 1000 GB",
+			errorContains: "disk size must be between 100 and 300 GB",
 		},
 		{
 			name: "missing template",
@@ -181,7 +200,7 @@ func TestValidateCreateConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateCreateConfig(tt.config, tt.templates, []api.Snapshot{}, false)
+			err := validateCreateConfig(tt.config, tt.templates, []api.Snapshot{}, false, testSpecStore())
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -209,7 +228,7 @@ func TestCreateInstanceRequest(t *testing.T) {
 		tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 	}
 
-	require.NoError(t, validateCreateConfig(config, templates, []api.Snapshot{}, false))
+	require.NoError(t, validateCreateConfig(config, templates, []api.Snapshot{}, false, testSpecStore()))
 
 	req := api.CreateInstanceRequest{
 		Mode:       api.InstanceMode(config.Mode),
@@ -241,7 +260,7 @@ func TestCreateInstanceRequestA100Alias(t *testing.T) {
 		tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 	}
 
-	require.NoError(t, validateCreateConfig(config, templates, []api.Snapshot{}, false))
+	require.NoError(t, validateCreateConfig(config, templates, []api.Snapshot{}, false, testSpecStore()))
 
 	req := api.CreateInstanceRequest{
 		Mode:       api.InstanceMode(config.Mode),
@@ -273,7 +292,7 @@ func TestCreateConfigVCPUsAutoSet(t *testing.T) {
 		tmplEntry("pytorch", "PyTorch"),
 	}
 
-	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
+	err := validateCreateConfig(config, templates, []api.Snapshot{}, false, testSpecStore())
 	require.NoError(t, err)
 
 	assert.Equal(t, 36, config.VCPUs)
@@ -294,7 +313,7 @@ func TestCreateConfigGPUTypeCaseInsensitive(t *testing.T) {
 		tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 	}
 
-	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
+	err := validateCreateConfig(config, templates, []api.Snapshot{}, false, testSpecStore())
 	require.NoError(t, err)
 
 	assert.Equal(t, "a6000", config.GPUType)
@@ -313,7 +332,7 @@ func TestCreateConfigA100Alias(t *testing.T) {
 		tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 	}
 
-	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
+	err := validateCreateConfig(config, templates, []api.Snapshot{}, false, testSpecStore())
 	require.NoError(t, err)
 
 	assert.Equal(t, "a100xl", config.GPUType)
@@ -334,7 +353,7 @@ func TestCreateConfigTemplateCaseInsensitive(t *testing.T) {
 		tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 	}
 
-	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
+	err := validateCreateConfig(config, templates, []api.Snapshot{}, false, testSpecStore())
 	require.NoError(t, err)
 
 	assert.Equal(t, "ubuntu-22.04", config.Template)
@@ -355,7 +374,7 @@ func TestCreateConfigTemplateByDisplayName(t *testing.T) {
 		tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 	}
 
-	err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
+	err := validateCreateConfig(config, templates, []api.Snapshot{}, false, testSpecStore())
 	require.NoError(t, err)
 
 	assert.Equal(t, "ubuntu-22.04", config.Template)
@@ -405,7 +424,7 @@ func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 				tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 			}
 
-			err := validateCreateConfig(config, templates, []api.Snapshot{}, false)
+			err := validateCreateConfig(config, templates, []api.Snapshot{}, false, testSpecStore())
 
 			if tt.expectError {
 				assert.Error(t, err)
