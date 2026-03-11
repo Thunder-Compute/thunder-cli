@@ -47,7 +47,8 @@ const authSuccessHTML = `
 				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
 				background: #0a0a0a;
 				color: #fafafa;
-				min-height: 100vh;
+				height: 100vh;
+				overflow: hidden;
 				display: flex;
 				flex-direction: column;
 				align-items: center;
@@ -132,7 +133,8 @@ const authFailedHTML = `
 				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
 				background: #0a0a0a;
 				color: #fafafa;
-				min-height: 100vh;
+				height: 100vh;
+				overflow: hidden;
 				display: flex;
 				flex-direction: column;
 				align-items: center;
@@ -467,7 +469,7 @@ func startCallbackServerWithContext(ctx context.Context) (int, <-chan AuthRespon
 	}()
 
 	cleanup := func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx) //nolint:errcheck // shutdown error is non-fatal
 	}
