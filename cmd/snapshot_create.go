@@ -1,17 +1,19 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
+
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -170,7 +172,7 @@ func runSnapshotCreate(cmd *cobra.Command) error {
 		// Run interactive flow
 		createConfig, err := tui.RunSnapshotCreateInteractive(client)
 		if err != nil {
-			if _, ok := err.(*tui.CancellationError); ok {
+			if errors.Is(err, tui.ErrCancelled) {
 				PrintWarningSimple("User cancelled snapshot creation")
 				return nil
 			}

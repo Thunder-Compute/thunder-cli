@@ -5,13 +5,14 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/tui/theme"
-	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
 type portsForwardStep int
@@ -472,10 +473,13 @@ func RunPortsForwardInteractive(client *api.Client, instances []api.Instance) er
 		return fmt.Errorf("error running interactive port forward: %w", err)
 	}
 
-	finalPortsModel := finalModel.(portsForwardModel)
+	finalPortsModel, ok := finalModel.(portsForwardModel)
+	if !ok {
+		return fmt.Errorf("unexpected model type")
+	}
 
 	if finalPortsModel.cancelled {
-		return &CancellationError{}
+		return ErrCancelled
 	}
 
 	if finalPortsModel.err != nil {

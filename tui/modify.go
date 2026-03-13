@@ -119,12 +119,13 @@ func NewModifyModel(client *api.Client, instance *api.Instance) tea.Model {
 
 type modifyPricingMsg struct {
 	rates map[string]float64
+	err   error
 }
 
 func fetchModifyPricingCmd(client *api.Client) tea.Cmd {
 	return func() tea.Msg {
-		rates, _ := client.FetchPricing()
-		return modifyPricingMsg{rates: rates}
+		rates, err := client.FetchPricing()
+		return modifyPricingMsg{rates: rates, err: err}
 	}
 }
 
@@ -135,7 +136,7 @@ func (m modifyModel) Init() tea.Cmd {
 func (m modifyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case modifyPricingMsg:
-		if msg.rates != nil {
+		if msg.err == nil && msg.rates != nil {
 			m.pricing = &utils.PricingData{Rates: msg.rates}
 		}
 		m.pricingLoaded = true
@@ -312,7 +313,7 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		// Check if any changes were made
 		if !m.config.ModeChanged && !m.config.GPUChanged && !m.config.ComputeChanged && !m.config.DiskChanged {
 			// No changes, exit with a special error
-			m.err = fmt.Errorf("no changes")
+			m.err = ErrNoChanges
 			m.quitting = true
 			return m, tea.Quit
 		}
@@ -811,10 +812,13 @@ func RunModifyInteractive(client *api.Client, instance *api.Instance) (*ModifyCo
 		return nil, fmt.Errorf("error running interactive modify: %w", err)
 	}
 
-	finalModifyModel := finalModel.(modifyModel)
+	finalModifyModel, ok := finalModel.(modifyModel)
+	if !ok {
+		return nil, fmt.Errorf("unexpected model type")
+	}
 
 	if finalModifyModel.cancelled {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	if finalModifyModel.err != nil {
@@ -835,14 +839,17 @@ func RunModifyInstanceSelector(client *api.Client, instances []api.Instance) (*a
 		return nil, fmt.Errorf("error running instance selector: %w", err)
 	}
 
-	result := finalModel.(modifyInstanceSelectorModel)
+	result, ok := finalModel.(modifyInstanceSelectorModel)
+	if !ok {
+		return nil, fmt.Errorf("unexpected model type")
+	}
 
 	if result.cancelled {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	if result.selected == nil {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	return result.selected, nil

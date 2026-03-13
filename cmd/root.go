@@ -9,13 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/spf13/cobra"
+
 	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
 	"github.com/Thunder-Compute/thunder-cli/internal/updatepolicy"
 	"github.com/Thunder-Compute/thunder-cli/internal/version"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
-	"github.com/getsentry/sentry-go"
-	"github.com/spf13/cobra"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -35,8 +36,7 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	cmd, err := rootCmd.ExecuteC()
 	if err != nil {
-		var cancellationErr *tui.CancellationError
-		if !errors.As(err, &cancellationErr) {
+		if !errors.Is(err, tui.ErrCancelled) {
 			sentry.WithScope(func(scope *sentry.Scope) {
 				scope.SetTag("command", cmd.Name())
 				scope.SetTag("version", version.BuildVersion)

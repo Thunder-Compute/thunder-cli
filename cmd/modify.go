@@ -1,20 +1,22 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/Thunder-Compute/thunder-cli/utils"
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/cobra"
 )
 
 // modifyCmd represents the modify command
@@ -82,7 +84,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 		// No argument - show interactive selector
 		selectedInstance, err = tui.RunModifyInstanceSelector(client, instances)
 		if err != nil {
-			if _, ok := err.(*tui.CancellationError); ok {
+			if errors.Is(err, tui.ErrCancelled) {
 				PrintWarningSimple("User cancelled modification process")
 				return nil
 			}
@@ -132,11 +134,11 @@ func runModify(cmd *cobra.Command, args []string) error {
 		// Run interactive mode
 		modifyConfig, err = tui.RunModifyInteractive(client, selectedInstance)
 		if err != nil {
-			if _, ok := err.(*tui.CancellationError); ok {
+			if errors.Is(err, tui.ErrCancelled) {
 				PrintWarningSimple("User cancelled modification process")
 				return nil
 			}
-			if err.Error() == "no changes" {
+			if errors.Is(err, tui.ErrNoChanges) {
 				PrintWarningSimple("No changes were requested. Instance configuration unchanged.")
 				return nil
 			}

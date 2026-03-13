@@ -16,7 +16,27 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/api"
 )
 
-type SnapshotListModel struct {
+type snapshotListStyles struct {
+	header    lipgloss.Style
+	cell      lipgloss.Style
+	ready     lipgloss.Style
+	creating  lipgloss.Style
+	failed    lipgloss.Style
+	timestamp lipgloss.Style
+}
+
+func newSnapshotListStyles() snapshotListStyles {
+	return snapshotListStyles{
+		header:    PrimaryTitleStyle().Padding(0, 1),
+		cell:      lipgloss.NewStyle().Padding(0, 1),
+		ready:     SuccessStyle(),
+		creating:  WarningStyle(),
+		failed:    ErrorStyle(),
+		timestamp: HelpStyle(),
+	}
+}
+
+type snapshotListModel struct {
 	snapshots  api.ListSnapshotsResponse
 	client     *api.Client
 	monitoring bool
@@ -25,6 +45,7 @@ type SnapshotListModel struct {
 	spinner    spinner.Model
 	err        error
 	cancelled  bool
+	styles     snapshotListStyles
 }
 
 type snapshotsMsg struct {
@@ -32,19 +53,20 @@ type snapshotsMsg struct {
 	err       error
 }
 
-func NewSnapshotListModel(client *api.Client, monitoring bool, snapshots api.ListSnapshotsResponse) SnapshotListModel {
+func newSnapshotListModel(client *api.Client, monitoring bool, snapshots api.ListSnapshotsResponse) snapshotListModel {
 	s := NewPrimarySpinner()
 
-	return SnapshotListModel{
-		client:       client,
-		monitoring:   monitoring,
-		snapshots:    snapshots,
-		lastUpdate:   time.Now(),
-		spinner: s,
+	return snapshotListModel{
+		client:     client,
+		monitoring: monitoring,
+		snapshots:  snapshots,
+		lastUpdate: time.Now(),
+		spinner:    s,
+		styles:     newSnapshotListStyles(),
 	}
 }
 
-func (m SnapshotListModel) Init() tea.Cmd {
+func (m snapshotListModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.spinner.Tick}
 	if m.monitoring {
 		cmds = append(cmds, snapshotsTickCmd())
@@ -65,7 +87,7 @@ func fetchSnapshotsCmd(client *api.Client) tea.Cmd {
 	}
 }
 
-func (m SnapshotListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m snapshotListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.quitting {
 		return m, tea.Quit
 	}
@@ -97,7 +119,7 @@ func (m SnapshotListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.err = msg.err
 			m.monitoring = false
-			return m, nil
+			return m, deferQuit()
 		}
 		m.snapshots = msg.snapshots
 		m.lastUpdate = time.Now()
@@ -113,7 +135,7 @@ func (m SnapshotListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m SnapshotListModel) View() string {
+func (m snapshotListModel) View() string {
 	if m.err != nil {
 		return errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v\n", m.err))
 	}
@@ -132,14 +154,14 @@ func (m SnapshotListModel) View() string {
 
 	if m.quitting {
 		timestamp := m.lastUpdate.Format("15:04:05")
-		b.WriteString(timestampStyle.Render(fmt.Sprintf("Last updated: %s", timestamp)))
+		b.WriteString(m.styles.timestamp.Render(fmt.Sprintf("Last updated: %s", timestamp)))
 		b.WriteString("\n")
 		return b.String()
 	}
 
 	if m.monitoring {
 		ts := m.lastUpdate.Format("15:04:05")
-		b.WriteString(timestampStyle.Render(fmt.Sprintf("Last updated: %s", ts)))
+		b.WriteString(m.styles.timestamp.Render(fmt.Sprintf("Last updated: %s", ts)))
 		b.WriteString("  ")
 		b.WriteString(m.spinner.View())
 		b.WriteString("\n")
@@ -164,7 +186,7 @@ func (m SnapshotListModel) View() string {
 	return b.String()
 }
 
-func (m SnapshotListModel) renderTable() string {
+func (m snapshotListModel) renderTable() string {
 	if len(m.snapshots) == 0 {
 		return warningStyleTUI.Render("⚠ No snapshots found. Use 'tnr snapshot create' to create a snapshot.")
 	}
@@ -181,7 +203,7 @@ func (m SnapshotListModel) renderTable() string {
 	headers := []string{"Name", "Status", "Size", "Created"}
 	headerRow := make([]string, len(headers))
 	for i, h := range headers {
-		headerRow[i] = snapshotHeaderStyle.Width(colWidths[h]).Render(h)
+		headerRow[i] = m.styles.header.Width(colWidths[h]).Render(h)
 	}
 	b.WriteString(strings.Join(headerRow, ""))
 	b.WriteString("\n")
@@ -211,10 +233,10 @@ func (m SnapshotListModel) renderTable() string {
 		created := truncate(createdTime.Format("2006-01-02 15:04:05"), colWidths["Created"])
 
 		row := []string{
-			snapshotCellStyle.Width(colWidths["Name"]).Render(name),
-			snapshotCellStyle.Width(colWidths["Status"]).Render(status),
-			snapshotCellStyle.Width(colWidths["Size"]).Render(size),
-			snapshotCellStyle.Width(colWidths["Created"]).Render(created),
+			m.styles.cell.Width(colWidths["Name"]).Render(name),
+			m.styles.cell.Width(colWidths["Status"]).Render(status),
+			m.styles.cell.Width(colWidths["Size"]).Render(size),
+			m.styles.cell.Width(colWidths["Created"]).Render(created),
 		}
 		b.WriteString(strings.Join(row, ""))
 		b.WriteString("\n")
@@ -223,7 +245,7 @@ func (m SnapshotListModel) renderTable() string {
 	return b.String()
 }
 
-func (m SnapshotListModel) hasCreatingSnapshots() bool {
+func (m snapshotListModel) hasCreatingSnapshots() bool {
 	for _, s := range m.snapshots {
 		if s.Status == "CREATING" {
 			return true
@@ -232,28 +254,20 @@ func (m SnapshotListModel) hasCreatingSnapshots() bool {
 	return false
 }
 
-func (m SnapshotListModel) formatStatus(status string, width int) string {
+func (m snapshotListModel) formatStatus(status string, width int) string {
 	var style lipgloss.Style
 	switch status {
 	case "READY":
-		style = snapshotReadyStyle
+		style = m.styles.ready
 	case "CREATING":
-		style = snapshotCreatingStyle
+		style = m.styles.creating
 	case "FAILED":
-		style = snapshotFailedStyle
+		style = m.styles.failed
 	default:
 		style = lipgloss.NewStyle()
 	}
 	return style.Render(truncate(status, width))
 }
-
-var (
-	snapshotHeaderStyle   lipgloss.Style
-	snapshotCellStyle     lipgloss.Style
-	snapshotReadyStyle    lipgloss.Style
-	snapshotCreatingStyle lipgloss.Style
-	snapshotFailedStyle   lipgloss.Style
-)
 
 func RunSnapshotList(client *api.Client, monitoring bool, snapshots api.ListSnapshotsResponse) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -261,14 +275,7 @@ func RunSnapshotList(client *api.Client, monitoring bool, snapshots api.ListSnap
 
 	InitCommonStyles(os.Stdout)
 
-	snapshotHeaderStyle = PrimaryTitleStyle().Padding(0, 1)
-	snapshotCellStyle = lipgloss.NewStyle().Padding(0, 1)
-	snapshotReadyStyle = SuccessStyle()
-	snapshotCreatingStyle = WarningStyle()
-	snapshotFailedStyle = ErrorStyle()
-	timestampStyle = HelpStyle()
-
-	m := NewSnapshotListModel(client, monitoring, snapshots)
+	m := newSnapshotListModel(client, monitoring, snapshots)
 	p := tea.NewProgram(
 		m,
 		tea.WithContext(ctx),

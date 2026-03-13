@@ -6,13 +6,14 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/tui/theme"
-	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
 type snapshotCreateStep int
@@ -400,14 +401,17 @@ func RunSnapshotCreateInteractive(client *api.Client) (*SnapshotCreateConfig, er
 		return nil, fmt.Errorf("error running TUI: %w", err)
 	}
 
-	result := finalModel.(snapshotCreateModel)
+	result, ok := finalModel.(snapshotCreateModel)
+	if !ok {
+		return nil, fmt.Errorf("unexpected model type")
+	}
 
 	if result.err != nil {
 		return nil, result.err
 	}
 
 	if result.quitting || !result.config.Confirmed {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	return &result.config, nil

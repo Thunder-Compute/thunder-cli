@@ -5,12 +5,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/tui/theme"
-	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
 type deleteStep int
@@ -277,18 +278,21 @@ func RunDeleteInteractive(client *api.Client, instances []api.Instance) (*api.In
 		return nil, fmt.Errorf("error running TUI: %w", err)
 	}
 
-	result := finalModel.(deleteModel)
+	result, ok := finalModel.(deleteModel)
+	if !ok {
+		return nil, fmt.Errorf("unexpected model type")
+	}
 
 	if result.err != nil {
 		return nil, result.err
 	}
 
 	if result.quitting {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	if !result.confirmed || result.selected == nil {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	return result.selected, nil
@@ -375,7 +379,11 @@ func RunDeleteProgress(client *api.Client, instanceID string) (string, error) {
 		return "", fmt.Errorf("error running deletion: %w", err)
 	}
 
-	result := finalModel.(deleteProgressModel)
+	result, ok := finalModel.(deleteProgressModel)
+	if !ok {
+		return "", fmt.Errorf("unexpected model type")
+	}
+
 	if result.err != nil {
 		return "", result.err
 	}
