@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -208,7 +209,7 @@ func runCreate(cmd *cobra.Command) error {
 	if isInteractive {
 		createConfig, err = tui.RunCreateInteractive(client)
 		if err != nil {
-			if _, ok := err.(*tui.CancellationError); ok {
+			if errors.Is(err, tui.ErrCancelled) {
 				PrintWarningSimple("User cancelled creation process")
 				return nil
 			}

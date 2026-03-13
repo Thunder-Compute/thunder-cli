@@ -6,10 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Thunder-Compute/thunder-cli/api"
 )
 
 type snapshotDeleteStep int
@@ -232,18 +233,21 @@ func RunSnapshotDeleteInteractive(client *api.Client, snapshots api.ListSnapshot
 		return nil, fmt.Errorf("error running TUI: %w", err)
 	}
 
-	result := finalModel.(snapshotDeleteModel)
+	result, ok := finalModel.(snapshotDeleteModel)
+	if !ok {
+		return nil, fmt.Errorf("unexpected model type")
+	}
 
 	if result.err != nil {
 		return nil, result.err
 	}
 
 	if result.quitting {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	if !result.confirmed || result.selected == nil {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	return result.selected, nil
@@ -332,7 +336,10 @@ func RunSnapshotDeleteProgress(client *api.Client, snapshotID, snapshotName stri
 		return "", fmt.Errorf("error running deletion: %w", err)
 	}
 
-	result := finalModel.(snapshotDeleteProgressModel)
+	result, ok := finalModel.(snapshotDeleteProgressModel)
+	if !ok {
+		return "", fmt.Errorf("unexpected model type")
+	}
 	if result.err != nil {
 		return "", result.err
 	}

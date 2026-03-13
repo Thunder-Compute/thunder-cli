@@ -1,13 +1,25 @@
 package tui
 
 import (
+	"errors"
 	"io"
+	"sync"
 
-	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 )
+
+// ErrCancelled is returned when the user cancels an interactive TUI flow.
+var ErrCancelled = errors.New("operation cancelled")
+
+// ErrNoRunningInstances is returned when no running instances are available.
+var ErrNoRunningInstances = errors.New("no running instances")
+
+// ErrNoChanges is returned when a modify operation has no changes to apply.
+var ErrNoChanges = errors.New("no changes")
 
 var (
 	helpStyleTUI    lipgloss.Style
@@ -25,25 +37,29 @@ var (
 	warningBoxStyle      lipgloss.Style
 )
 
+var initOnce sync.Once
+
 func InitCommonStyles(out io.Writer) {
-	theme.Init(out)
+	initOnce.Do(func() {
+		theme.Init(out)
 
-	helpStyleTUI = theme.Neutral().Italic(true)
-	errorStyleTUI = theme.Error()
-	warningStyleTUI = theme.Warning()
-	successStyle = theme.Success()
+		helpStyleTUI = theme.Neutral().Italic(true)
+		errorStyleTUI = theme.Error()
+		warningStyleTUI = theme.Warning()
+		successStyle = theme.Success()
 
-	primaryStyle = theme.Primary()
-	primaryTitleStyle = primaryStyle.Bold(true)
-	primaryCursorStyle = primaryStyle
-	primarySelectedStyle = primaryTitleStyle
-	labelStyle = theme.Label()
-	subtleTextStyle = theme.Neutral()
-	durationTextStyle = subtleTextStyle.Italic(true)
-	warningBoxStyle = warningStyleTUI.
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.WarningColor)).
-		Padding(1, 2)
+		primaryStyle = theme.Primary()
+		primaryTitleStyle = primaryStyle.Bold(true)
+		primaryCursorStyle = primaryStyle
+		primarySelectedStyle = primaryTitleStyle
+		labelStyle = theme.Label()
+		subtleTextStyle = theme.Neutral()
+		durationTextStyle = subtleTextStyle.Italic(true)
+		warningBoxStyle = warningStyleTUI.
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(theme.WarningColor)).
+			Padding(1, 2)
+	})
 }
 
 func RenderWarningSimple(message string) string {

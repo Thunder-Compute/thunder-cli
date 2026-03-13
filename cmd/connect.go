@@ -156,11 +156,11 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	if instanceID == "" {
 		instanceID, err = tui.RunConnectSelectWithInstances(instances)
 		if err != nil {
-			if _, ok := err.(*tui.CancellationError); ok {
+			if errors.Is(err, tui.ErrCancelled) {
 				PrintWarningSimple("User cancelled instance connection")
 				return nil
 			}
-			if err.Error() == "no running instances" {
+			if errors.Is(err, tui.ErrNoRunningInstances) {
 				PrintWarningSimple("No running instances found.")
 				return nil
 			}
@@ -746,7 +746,8 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	err = sshCmd.Run()
 	// Handle SSH exit codes (130 = Ctrl+C, 255 = connection closed)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			exitCode := exitErr.ExitCode()
 			if exitCode != 0 && exitCode != 130 && exitCode != 255 {
 				return fmt.Errorf("SSH session failed with exit code %d", exitCode)

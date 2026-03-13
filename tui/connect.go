@@ -7,14 +7,15 @@ import (
 	"os/signal"
 	"strings"
 
-	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
-type ConnectModel struct {
+type connectModel struct {
 	instances   []string
 	cursor      int
 	selected    string
@@ -22,7 +23,7 @@ type ConnectModel struct {
 	done        bool
 	cancelled   bool
 	loading     bool
-	spin        spinner.Model
+	spinner     spinner.Model
 	client      *api.Client
 	err         error
 	displayToID map[string]string
@@ -47,29 +48,29 @@ func newConnectStyles() connectStyles {
 	}
 }
 
-func NewConnectModel(instances []string) ConnectModel {
+func newConnectModel(instances []string) connectModel {
 	s := NewPrimarySpinner()
-	return ConnectModel{
+	return connectModel{
 		instances: instances,
 		styles:    newConnectStyles(),
-		spin:      s,
+		spinner:   s,
 	}
 }
 
-func NewConnectFetchModel(client *api.Client) ConnectModel {
+func newConnectFetchModel(client *api.Client) connectModel {
 	s := NewPrimarySpinner()
-	return ConnectModel{
+	return connectModel{
 		loading:     true,
-		spin:        s,
+		spinner:     s,
 		client:      client,
 		displayToID: make(map[string]string),
 		styles:      newConnectStyles(),
 	}
 }
 
-func (m ConnectModel) Init() tea.Cmd {
+func (m connectModel) Init() tea.Cmd {
 	if m.loading {
-		return tea.Batch(m.spin.Tick, fetchConnectInstancesCmd(m.client))
+		return tea.Batch(m.spinner.Tick, fetchConnectInstancesCmd(m.client))
 	}
 	return nil
 }
@@ -86,7 +87,7 @@ func fetchConnectInstancesCmd(client *api.Client) tea.Cmd {
 	}
 }
 
-func (m ConnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m connectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case connectInstancesMsg:
 		m.loading = false
@@ -117,7 +118,7 @@ func (m ConnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		if m.loading {
 			var cmd tea.Cmd
-			m.spin, cmd = m.spin.Update(msg)
+			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
 		}
 	case tea.KeyMsg:
@@ -159,7 +160,7 @@ func (m ConnectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m ConnectModel) View() string {
+func (m connectModel) View() string {
 	var b strings.Builder
 
 	if m.loading {
@@ -222,7 +223,7 @@ func RunConnect(instances []string) (string, error) {
 
 	InitCommonStyles(os.Stdout)
 
-	m := NewConnectModel(instances)
+	m := newConnectModel(instances)
 	p := tea.NewProgram(
 		m,
 		tea.WithContext(ctx),
@@ -234,14 +235,15 @@ func RunConnect(instances []string) (string, error) {
 		return "", fmt.Errorf("error running connect TUI: %w", err)
 	}
 
-	if m, ok := finalModel.(ConnectModel); ok {
-		if m.cancelled {
-			return "", &CancellationError{}
-		}
-		return m.selected, nil
+	result, ok := finalModel.(connectModel)
+	if !ok {
+		return "", fmt.Errorf("unexpected model type")
 	}
 
-	return "", nil
+	if result.cancelled {
+		return "", ErrCancelled
+	}
+	return result.selected, nil
 }
 
 func RunConnectInteractiveSelect(client *api.Client) (string, error) {
@@ -250,7 +252,7 @@ func RunConnectInteractiveSelect(client *api.Client) (string, error) {
 
 	InitCommonStyles(os.Stdout)
 
-	m := NewConnectFetchModel(client)
+	m := newConnectFetchModel(client)
 	p := tea.NewProgram(
 		m,
 		tea.WithContext(ctx),
@@ -262,25 +264,26 @@ func RunConnectInteractiveSelect(client *api.Client) (string, error) {
 		return "", fmt.Errorf("error running connect TUI: %w", err)
 	}
 
-	if m, ok := finalModel.(ConnectModel); ok {
-		if m.cancelled {
-			return "", &CancellationError{}
-		}
-		if m.err != nil {
-			return "", m.err
-		}
-		if m.noInstances {
-			return "", fmt.Errorf("no running instances")
-		}
-		if m.displayToID != nil && m.selected != "" {
-			if id, ok := m.displayToID[m.selected]; ok {
-				return id, nil
-			}
-		}
-		return m.selected, nil
+	result, ok := finalModel.(connectModel)
+	if !ok {
+		return "", fmt.Errorf("unexpected model type")
 	}
 
-	return "", nil
+	if result.cancelled {
+		return "", ErrCancelled
+	}
+	if result.err != nil {
+		return "", result.err
+	}
+	if result.noInstances {
+		return "", ErrNoRunningInstances
+	}
+	if result.displayToID != nil && result.selected != "" {
+		if id, ok := result.displayToID[result.selected]; ok {
+			return id, nil
+		}
+	}
+	return result.selected, nil
 }
 
 func RunConnectSelectWithInstances(instances []api.Instance) (string, error) {
@@ -300,10 +303,10 @@ func RunConnectSelectWithInstances(instances []api.Instance) (string, error) {
 	}
 
 	if len(items) == 0 {
-		return "", fmt.Errorf("no running instances")
+		return "", ErrNoRunningInstances
 	}
 
-	m := NewConnectModel(items)
+	m := newConnectModel(items)
 	m.displayToID = displayToID
 
 	p := tea.NewProgram(
@@ -317,17 +320,18 @@ func RunConnectSelectWithInstances(instances []api.Instance) (string, error) {
 		return "", fmt.Errorf("error running connect TUI: %w", err)
 	}
 
-	if m, ok := finalModel.(ConnectModel); ok {
-		if m.cancelled {
-			return "", &CancellationError{}
-		}
-		if m.displayToID != nil && m.selected != "" {
-			if id, ok := m.displayToID[m.selected]; ok {
-				return id, nil
-			}
-		}
-		return m.selected, nil
+	result, ok := finalModel.(connectModel)
+	if !ok {
+		return "", fmt.Errorf("unexpected model type")
 	}
 
-	return "", nil
+	if result.cancelled {
+		return "", ErrCancelled
+	}
+	if result.displayToID != nil && result.selected != "" {
+		if id, ok := result.displayToID[result.selected]; ok {
+			return id, nil
+		}
+	}
+	return result.selected, nil
 }

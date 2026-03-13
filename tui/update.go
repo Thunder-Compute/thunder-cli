@@ -5,10 +5,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 )
 
 type updateStyles struct {
@@ -120,7 +121,7 @@ func RenderUpdateFailed(err error, releaseURL string) string {
 	return content.String()
 }
 
-type UpdateProgressModel struct {
+type updateProgressModel struct {
 	spinner  spinner.Model
 	message  string
 	quitting bool
@@ -141,10 +142,10 @@ func runUpdateAction(action func() error) tea.Cmd {
 	}
 }
 
-func NewUpdateProgressModel(message string, action func() error) UpdateProgressModel {
+func newUpdateProgressModel(message string, action func() error) updateProgressModel {
 	InitCommonStyles(os.Stdout)
 	s := NewPrimarySpinner()
-	return UpdateProgressModel{
+	return updateProgressModel{
 		spinner: s,
 		message: message,
 		action:  action,
@@ -152,11 +153,11 @@ func NewUpdateProgressModel(message string, action func() error) UpdateProgressM
 	}
 }
 
-func (m UpdateProgressModel) Init() tea.Cmd {
+func (m updateProgressModel) Init() tea.Cmd {
 	return tea.Batch(m.spinner.Tick, runUpdateAction(m.action))
 }
 
-func (m UpdateProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m updateProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case updateDoneMsg:
 		m.done = true
@@ -176,7 +177,7 @@ func (m UpdateProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m UpdateProgressModel) View() string {
+func (m updateProgressModel) View() string {
 	if m.quitting || m.done {
 		return ""
 	}
@@ -185,14 +186,17 @@ func (m UpdateProgressModel) View() string {
 
 func RunUpdateProgress(message string, action func() error) error {
 	InitCommonStyles(os.Stdout)
-	m := NewUpdateProgressModel(message, action)
+	m := newUpdateProgressModel(message, action)
 	p := tea.NewProgram(m)
 	finalModel, err := p.Run()
 	if err != nil {
 		return fmt.Errorf("error running update progress: %w", err)
 	}
 
-	result := finalModel.(UpdateProgressModel)
+	result, ok := finalModel.(updateProgressModel)
+	if !ok {
+		return fmt.Errorf("unexpected model type")
+	}
 	if result.err != nil {
 		return result.err
 	}

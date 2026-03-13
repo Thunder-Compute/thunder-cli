@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 )
 
 type LoginState int
@@ -34,21 +35,21 @@ type LoginModel struct {
 	styles loginStyles
 }
 
-type LoginSuccessMsg struct {
+type loginSuccessMsg struct {
 	Token string
 }
 
-type LoginErrorMsg struct {
+type loginErrorMsg struct {
 	Err error
 }
 
-type LoginCancelMsg struct{}
+type loginCancelMsg struct{}
 
-type TokenSubmitMsg struct {
+type tokenSubmitMsg struct {
 	Token string
 }
 
-type SwitchToTokenMsg struct{}
+type switchToTokenMsg struct{}
 
 type loginStyles struct {
 	prompt lipgloss.Style
@@ -68,7 +69,7 @@ func newLoginStyles() loginStyles {
 	}
 }
 
-func NewLoginModel(authURL string) *LoginModel {
+func NewLoginModel(authURL string) LoginModel {
 	s := NewPrimarySpinner()
 	styles := newLoginStyles()
 
@@ -82,7 +83,7 @@ func NewLoginModel(authURL string) *LoginModel {
 	ti.PlaceholderStyle = SubtleTextStyle()
 	ti.Cursor.Style = PrimaryCursorStyle()
 
-	return &LoginModel{
+	return LoginModel{
 		state:      LoginStateWaiting,
 		authURL:    authURL,
 		spinner:    s,
@@ -96,7 +97,7 @@ func (m LoginModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
-func (m *LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -122,7 +123,7 @@ func (m *LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				if strings.TrimSpace(m.tokenInput.Value()) != "" {
 					return m, func() tea.Msg {
-						return TokenSubmitMsg{Token: strings.TrimSpace(m.tokenInput.Value())}
+						return tokenSubmitMsg{Token: strings.TrimSpace(m.tokenInput.Value())}
 					}
 				}
 			default:
@@ -135,26 +136,26 @@ func (m *LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
-	case LoginSuccessMsg:
+	case loginSuccessMsg:
 		m.state = LoginStateSuccess
 		m.token = msg.Token
 		m.quitting = true
 		return m, tea.Quit
 
-	case LoginErrorMsg:
+	case loginErrorMsg:
 		m.state = LoginStateError
 		m.err = msg.Err
 		m.quitting = true
 		return m, tea.Quit
 
-	case LoginCancelMsg:
+	case loginCancelMsg:
 		m.state = LoginStateCancelled
 		m.quitting = true
 		return m, tea.Quit
 
-	case TokenSubmitMsg:
+	case tokenSubmitMsg:
 		return m, func() tea.Msg {
-			return LoginSuccessMsg(msg)
+			return loginSuccessMsg(msg)
 		}
 
 	case tea.WindowSizeMsg:
@@ -220,18 +221,18 @@ func (m LoginModel) Error() error {
 
 func SendLoginSuccess(p *tea.Program, token string) {
 	if p != nil {
-		p.Send(LoginSuccessMsg{Token: token})
+		p.Send(loginSuccessMsg{Token: token})
 	}
 }
 
 func SendLoginError(p *tea.Program, err error) {
 	if p != nil {
-		p.Send(LoginErrorMsg{Err: err})
+		p.Send(loginErrorMsg{Err: err})
 	}
 }
 
 func SendLoginCancel(p *tea.Program) {
 	if p != nil {
-		p.Send(LoginCancelMsg{})
+		p.Send(loginCancelMsg{})
 	}
 }

@@ -18,22 +18,35 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
-var (
-	headerStyle       lipgloss.Style
-	runningStyle      lipgloss.Style
-	startingStyle     lipgloss.Style
-	restoringStyle    lipgloss.Style
-	deletingStyle     lipgloss.Style
-	provisioningStyle lipgloss.Style
-	cellStyle         lipgloss.Style
-	timestampStyle    lipgloss.Style
-)
-
 const (
 	provisioningExpectedDuration = 10 * time.Minute
 )
 
-type StatusModel struct {
+type statusStyles struct {
+	header       lipgloss.Style
+	running      lipgloss.Style
+	starting     lipgloss.Style
+	restoring    lipgloss.Style
+	deleting     lipgloss.Style
+	provisioning lipgloss.Style
+	cell         lipgloss.Style
+	timestamp    lipgloss.Style
+}
+
+func newStatusStyles() statusStyles {
+	return statusStyles{
+		header:       PrimaryTitleStyle().Padding(0, 1),
+		running:      SuccessStyle(),
+		starting:     WarningStyle(),
+		restoring:    PrimaryStyle().Bold(true),
+		deleting:     ErrorStyle(),
+		provisioning: WarningStyle(),
+		cell:         lipgloss.NewStyle().Padding(0, 1),
+		timestamp:    HelpStyle(),
+	}
+}
+
+type statusModel struct {
 	instances    []api.Instance
 	client       *api.Client
 	monitoring   bool
@@ -44,6 +57,8 @@ type StatusModel struct {
 	done         bool
 	cancelled    bool
 	progressBars map[string]progress.Model
+
+	styles statusStyles
 }
 
 type tickMsg time.Time
@@ -55,20 +70,21 @@ type instancesMsg struct {
 
 type quitNow struct{}
 
-func NewStatusModel(client *api.Client, monitoring bool, instances []api.Instance) StatusModel {
+func newStatusModel(client *api.Client, monitoring bool, instances []api.Instance) statusModel {
 	s := NewPrimarySpinner()
 
-	return StatusModel{
+	return statusModel{
 		client:       client,
 		monitoring:   monitoring,
 		instances:    instances,
 		lastUpdate:   time.Now(),
 		spinner:      s,
 		progressBars: make(map[string]progress.Model),
+		styles:       newStatusStyles(),
 	}
 }
 
-func (m StatusModel) Init() tea.Cmd {
+func (m statusModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.spinner.Tick}
 	if m.monitoring {
 		cmds = append(cmds, tickCmd(m.instances))
@@ -100,7 +116,7 @@ func deferQuit() tea.Cmd {
 	return tea.Tick(1*time.Millisecond, func(time.Time) tea.Msg { return quitNow{} })
 }
 
-func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.quitting {
 		return m, tea.Quit
 	}
@@ -132,7 +148,7 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.err = msg.err
 			m.monitoring = false
-			return m, nil
+			return m, deferQuit()
 		}
 		m.instances = msg.instances
 		m.lastUpdate = time.Now()
@@ -152,7 +168,7 @@ func (m StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m StatusModel) View() string {
+func (m statusModel) View() string {
 	if m.err != nil {
 		return errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v\n", m.err))
 	}
@@ -176,14 +192,14 @@ func (m StatusModel) View() string {
 
 	if m.quitting {
 		timestamp := m.lastUpdate.Format("15:04:05")
-		b.WriteString(timestampStyle.Render(fmt.Sprintf("Last updated: %s", timestamp)))
+		b.WriteString(m.styles.timestamp.Render(fmt.Sprintf("Last updated: %s", timestamp)))
 		b.WriteString("\n")
 		return b.String()
 	}
 
 	if m.monitoring {
 		ts := m.lastUpdate.Format("15:04:05")
-		b.WriteString(timestampStyle.Render(fmt.Sprintf("Last updated: %s", ts)))
+		b.WriteString(m.styles.timestamp.Render(fmt.Sprintf("Last updated: %s", ts)))
 		b.WriteString("  ")
 		b.WriteString(m.spinner.View())
 		b.WriteString("\n")
@@ -223,7 +239,7 @@ func (m StatusModel) View() string {
 	return b.String()
 }
 
-func (m StatusModel) renderTable() string {
+func (m statusModel) renderTable() string {
 	if len(m.instances) == 0 {
 		return warningStyleTUI.Render("⚠ No instances found. Use 'tnr create' to create a Thunder Compute instance.")
 	}
@@ -246,7 +262,7 @@ func (m StatusModel) renderTable() string {
 	headers := []string{"ID", "UUID", "Status", "Address", "Mode", "Disk", "GPU", "vCPUs", "RAM", "Template"}
 	headerRow := make([]string, len(headers))
 	for i, h := range headers {
-		headerRow[i] = headerStyle.Width(colWidths[h]).Render(h)
+		headerRow[i] = m.styles.header.Width(colWidths[h]).Render(h)
 	}
 	b.WriteString(strings.Join(headerRow, ""))
 	b.WriteString("\n")
@@ -281,16 +297,16 @@ func (m StatusModel) renderTable() string {
 		template := truncate(utils.Capitalize(instance.Template), colWidths["Template"])
 
 		row := []string{
-			cellStyle.Width(colWidths["ID"]).Render(id),
-			cellStyle.Width(colWidths["UUID"]).Render(uuid),
-			cellStyle.Width(colWidths["Status"]).Render(status),
-			cellStyle.Width(colWidths["Address"]).Render(address),
-			cellStyle.Width(colWidths["Mode"]).Render(mode),
-			cellStyle.Width(colWidths["Disk"]).Render(disk),
-			cellStyle.Width(colWidths["GPU"]).Render(gpu),
-			cellStyle.Width(colWidths["vCPUs"]).Render(vcpus),
-			cellStyle.Width(colWidths["RAM"]).Render(ram),
-			cellStyle.Width(colWidths["Template"]).Render(template),
+			m.styles.cell.Width(colWidths["ID"]).Render(id),
+			m.styles.cell.Width(colWidths["UUID"]).Render(uuid),
+			m.styles.cell.Width(colWidths["Status"]).Render(status),
+			m.styles.cell.Width(colWidths["Address"]).Render(address),
+			m.styles.cell.Width(colWidths["Mode"]).Render(mode),
+			m.styles.cell.Width(colWidths["Disk"]).Render(disk),
+			m.styles.cell.Width(colWidths["GPU"]).Render(gpu),
+			m.styles.cell.Width(colWidths["vCPUs"]).Render(vcpus),
+			m.styles.cell.Width(colWidths["RAM"]).Render(ram),
+			m.styles.cell.Width(colWidths["Template"]).Render(template),
 		}
 		b.WriteString(strings.Join(row, ""))
 		b.WriteString("\n")
@@ -299,26 +315,26 @@ func (m StatusModel) renderTable() string {
 	return b.String()
 }
 
-func (m StatusModel) formatStatus(status string, width int) string {
+func (m statusModel) formatStatus(status string, width int) string {
 	var style lipgloss.Style
 	switch status {
 	case "RUNNING":
-		style = runningStyle
+		style = m.styles.running
 	case "STARTING", "SNAPPING":
-		style = startingStyle
+		style = m.styles.starting
 	case "RESTORING":
-		style = restoringStyle
+		style = m.styles.restoring
 	case "DELETING":
-		style = deletingStyle
+		style = m.styles.deleting
 	case "PROVISIONING":
-		style = provisioningStyle
+		style = m.styles.provisioning
 	default:
 		style = lipgloss.NewStyle()
 	}
 	return style.Render(truncate(status, width))
 }
 
-func (m *StatusModel) ensureProgressBar(gpuType string) {
+func (m *statusModel) ensureProgressBar(gpuType string) {
 	if _, exists := m.progressBars[gpuType]; !exists {
 		p := progress.New(
 			progress.WithSolidFill("#FFA500"),
@@ -328,7 +344,7 @@ func (m *StatusModel) ensureProgressBar(gpuType string) {
 	}
 }
 
-func (m *StatusModel) renderProvisioningSection() string {
+func (m *statusModel) renderProvisioningSection() string {
 	// Group instances with PROVISIONING status by GPU type
 	instancesByGPU := make(map[string][]api.Instance)
 	for _, instance := range m.instances {
@@ -390,14 +406,14 @@ func (m *StatusModel) renderProvisioningSection() string {
 			int(provisioningExpectedDuration.Minutes()),
 			remainingMinutes,
 		)
-		b.WriteString(timestampStyle.Render(message))
+		b.WriteString(m.styles.timestamp.Render(message))
 		b.WriteString("\n\n")
 	}
 
 	return b.String()
 }
 
-func (m *StatusModel) renderRestoringSection() string {
+func (m *statusModel) renderRestoringSection() string {
 	// Filter instances with RESTORING status
 	var restoringInstances []api.Instance
 	for _, instance := range m.instances {
@@ -447,7 +463,7 @@ func (m *StatusModel) renderRestoringSection() string {
 			int(restoringExpectedDuration.Minutes()),
 			remainingMinutes,
 		)
-		b.WriteString(timestampStyle.Render(message))
+		b.WriteString(m.styles.timestamp.Render(message))
 		b.WriteString("\n\n")
 	}
 
@@ -470,24 +486,7 @@ func RunStatus(client *api.Client, monitoring bool, instances []api.Instance) er
 
 	InitCommonStyles(os.Stdout)
 
-	headerStyle = PrimaryTitleStyle().Padding(0, 1)
-
-	runningStyle = SuccessStyle()
-
-	startingStyle = WarningStyle()
-
-	restoringStyle = PrimaryStyle().Bold(true)
-
-	deletingStyle = ErrorStyle()
-
-	provisioningStyle = WarningStyle()
-
-	cellStyle = lipgloss.NewStyle().
-		Padding(0, 1)
-
-	timestampStyle = HelpStyle()
-
-	m := NewStatusModel(client, monitoring, instances)
+	m := newStatusModel(client, monitoring, instances)
 	p := tea.NewProgram(
 		m,
 		tea.WithContext(ctx),

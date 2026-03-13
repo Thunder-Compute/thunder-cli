@@ -2,17 +2,19 @@ package cmd
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/cobra"
+
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/spf13/cobra"
 )
 
 // deleteCmd represents the delete command
@@ -72,7 +74,7 @@ func runDelete(args []string) error {
 
 		selectedInstance, err = tui.RunDeleteInteractive(client, instances)
 		if err != nil {
-			if _, ok := err.(*tui.CancellationError); ok {
+			if errors.Is(err, tui.ErrCancelled) {
 				PrintWarningSimple("User cancelled delete process")
 				return nil
 			}
@@ -200,5 +202,5 @@ func removeSSHHostEntry(configPath, instanceID string) error {
 		return err
 	}
 
-	return os.WriteFile(configPath, []byte(strings.Join(lines, "\n")+"\n"), 0600)
+	return os.WriteFile(configPath, []byte(strings.Join(lines, "\n")+"\n"), 0o600)
 }

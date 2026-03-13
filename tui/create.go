@@ -6,20 +6,15 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/tui/theme"
-	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 )
-
-type CancellationError struct{}
-
-func (e *CancellationError) Error() string {
-	return "operation cancelled"
-}
 
 type createStep int
 
@@ -132,6 +127,7 @@ type createSnapshotsMsg struct {
 
 type createPricingMsg struct {
 	rates map[string]float64
+	err   error
 }
 
 func sortTemplates(templates []api.TemplateEntry) []api.TemplateEntry {
@@ -182,8 +178,8 @@ func fetchCreateSnapshotsCmd(client *api.Client) tea.Cmd {
 
 func fetchCreatePricingCmd(client *api.Client) tea.Cmd {
 	return func() tea.Msg {
-		rates, _ := client.FetchPricing()
-		return createPricingMsg{rates: rates}
+		rates, err := client.FetchPricing()
+		return createPricingMsg{rates: rates, err: err}
 	}
 }
 
@@ -215,7 +211,7 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.spinner.Tick
 
 	case createPricingMsg:
-		if msg.rates != nil {
+		if msg.err == nil && msg.rates != nil {
 			m.pricing = &utils.PricingData{Rates: msg.rates}
 		}
 		m.pricingLoaded = true
@@ -729,14 +725,17 @@ func RunCreateInteractive(client *api.Client) (*CreateConfig, error) {
 		return nil, fmt.Errorf("error running TUI: %w", err)
 	}
 
-	result := finalModel.(createModel)
+	result, ok := finalModel.(createModel)
+	if !ok {
+		return nil, fmt.Errorf("unexpected model type")
+	}
 
 	if result.err != nil {
 		return nil, result.err
 	}
 
 	if result.quitting || !result.config.Confirmed {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	return &result.config, nil

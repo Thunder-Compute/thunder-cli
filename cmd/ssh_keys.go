@@ -1,18 +1,20 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/tui"
-	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+
+	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/tui"
+	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 )
 
 // ── ssh-keys (parent) ───────────────────────────────────────────────────────
@@ -246,7 +248,7 @@ func runSSHKeysAddNonInteractive(client *api.Client, cmd *cobra.Command) error {
 func runSSHKeysAddInteractive(client *api.Client) error {
 	addConfig, err := tui.RunSSHKeyAddInteractive(client)
 	if err != nil {
-		if _, ok := err.(*tui.CancellationError); ok {
+		if errors.Is(err, tui.ErrCancelled) {
 			PrintWarningSimple("User cancelled add process")
 			return nil
 		}
@@ -328,7 +330,7 @@ func runSSHKeysDelete(args []string) error {
 
 		selectedKey, err = tui.RunSSHKeyDeleteInteractive(client, keys)
 		if err != nil {
-			if _, ok := err.(*tui.CancellationError); ok {
+			if errors.Is(err, tui.ErrCancelled) {
 				PrintWarningSimple("User cancelled delete process")
 				return nil
 			}

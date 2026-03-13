@@ -6,13 +6,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/internal/sshkeys"
-	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/internal/sshkeys"
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 )
 
 // ── SSH Key Add ─────────────────────────────────────────────────────────────
@@ -34,17 +35,17 @@ const (
 )
 
 type sshKeyAddModel struct {
-	step         sshKeyAddStep
-	cursor       int
-	localKeys    []sshkeys.DetectedKey
-	selectedKey  *sshkeys.DetectedKey // nil if "Paste key manually"
-	pasteManual  bool
-	nameInput    textinput.Model
-	keyInput     textinput.Model
-	config       SSHKeyAddConfig
-	quitting     bool
-	confirmed    bool
-	err          error
+	step        sshKeyAddStep
+	cursor      int
+	localKeys   []sshkeys.DetectedKey
+	selectedKey *sshkeys.DetectedKey // nil if "Paste key manually"
+	pasteManual bool
+	nameInput   textinput.Model
+	keyInput    textinput.Model
+	config      SSHKeyAddConfig
+	quitting    bool
+	confirmed   bool
+	err         error
 
 	styles sshKeyAddStyles
 }
@@ -354,14 +355,17 @@ func RunSSHKeyAddInteractive(client *api.Client) (*SSHKeyAddConfig, error) {
 		return nil, fmt.Errorf("error running TUI: %w", err)
 	}
 
-	result := finalModel.(sshKeyAddModel)
+	result, ok := finalModel.(sshKeyAddModel)
+	if !ok {
+		return nil, fmt.Errorf("unexpected model type")
+	}
 
 	if result.err != nil {
 		return nil, result.err
 	}
 
 	if result.quitting || !result.confirmed {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	return &result.config, nil
@@ -567,18 +571,21 @@ func RunSSHKeyDeleteInteractive(client *api.Client, keys api.SSHKeyListResponse)
 		return nil, fmt.Errorf("error running TUI: %w", err)
 	}
 
-	result := finalModel.(sshKeyDeleteModel)
+	result, ok := finalModel.(sshKeyDeleteModel)
+	if !ok {
+		return nil, fmt.Errorf("unexpected model type")
+	}
 
 	if result.err != nil {
 		return nil, result.err
 	}
 
 	if result.quitting {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	if !result.confirmed || result.selected == nil {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	return result.selected, nil
@@ -670,7 +677,10 @@ func RunSSHKeyDeleteProgress(client *api.Client, keyID, keyName string) (string,
 		return "", fmt.Errorf("error running deletion: %w", err)
 	}
 
-	result := finalModel.(sshKeyDeleteProgressModel)
+	result, ok := finalModel.(sshKeyDeleteProgressModel)
+	if !ok {
+		return "", fmt.Errorf("unexpected model type")
+	}
 	if result.err != nil {
 		return "", result.err
 	}
