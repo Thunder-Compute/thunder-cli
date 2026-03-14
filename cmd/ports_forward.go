@@ -5,15 +5,15 @@ import (
 	"os"
 	"strconv"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/cobra"
+
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/Thunder-Compute/thunder-cli/utils"
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -51,31 +51,18 @@ func init() {
 }
 
 func runPortsForward(cmd *cobra.Command, args []string) error {
-	config, err := LoadConfig()
+	client, err := getAuthenticatedClient()
 	if err != nil {
-		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
+		return err
 	}
-
-	if config.Token == "" {
-		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
-	}
-
-	client := api.NewClient(config.Token, config.APIURL)
 
 	// Fetch instances
-	busy := tui.NewBusyModel("Fetching instances...")
-	bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
-	busyDone := make(chan struct{})
-	go func() {
-		_, _ = bp.Run()
-		close(busyDone)
-	}()
-
-	instances, err := client.ListInstances()
-	bp.Send(tui.BusyDoneMsg{})
-	<-busyDone
-
-	if err != nil {
+	var instances []api.Instance
+	if err := tui.RunWithBusySpinner("Fetching instances...", os.Stdout, func() error {
+		var e error
+		instances, e = client.ListInstances()
+		return e
+	}); err != nil {
 		return fmt.Errorf("failed to fetch instances: %w", err)
 	}
 
@@ -101,13 +88,8 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 
 	instanceIdentifier := args[0]
 
-	// Find instance by ID or UUID
-	for i := range instances {
-		if instances[i].ID == instanceIdentifier || instances[i].UUID == instanceIdentifier {
-			selectedInstance = &instances[i]
-			break
-		}
-	}
+	// Find instance by ID, UUID, or Name
+	selectedInstance = findInstance(instances, instanceIdentifier)
 
 	// If not found and it's a number, try as array index
 	if selectedInstance == nil {
@@ -143,109 +125,42 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 	}
 
 	// Make API call with progress spinner
-	p := tea.NewProgram(newPortsForwardProgressModel(client, selectedInstance.ID, req))
+	var portsResp *api.InstanceModifyResponse
+	p := tea.NewProgram(tui.NewProgressModel("Updating ports...",
+		portsForwardApiCall(client, selectedInstance.ID, req, &portsResp),
+		renderPortsForwardSuccess(&portsResp),
+	))
 	finalModel, err := p.Run()
 	if err != nil {
 		return fmt.Errorf("error during port update: %w", err)
 	}
 
-	progressModel := finalModel.(portsForwardProgressModel)
+	result := finalModel.(tui.ProgressModel)
 
-	if progressModel.cancelled {
+	if result.Cancelled() {
 		PrintWarningSimple("User cancelled port update")
 		return nil
 	}
 
-	if progressModel.err != nil {
-		return fmt.Errorf("failed to update ports: %w", progressModel.err)
+	if result.Err() != nil {
+		return fmt.Errorf("failed to update ports: %w", result.Err())
 	}
 
 	return nil
 }
 
-// Progress model for port forward operation
-type portsForwardProgressModel struct {
-	client     *api.Client
-	instanceID string
-	req        api.InstanceModifyRequest
-	spinner    spinner.Model
-	message    string
-	done       bool
-	err        error
-	resp       *api.InstanceModifyResponse
-	cancelled  bool
-}
-
-func newPortsForwardProgressModel(client *api.Client, instanceID string, req api.InstanceModifyRequest) portsForwardProgressModel {
-	theme.Init(os.Stdout)
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.Primary()
-
-	return portsForwardProgressModel{
-		client:     client,
-		instanceID: instanceID,
-		req:        req,
-		spinner:    s,
-		message:    "Updating ports...",
-	}
-}
-
-type portsForwardResultMsg struct {
-	resp *api.InstanceModifyResponse
-	err  error
-}
-
-func (m portsForwardProgressModel) Init() tea.Cmd {
-	return tea.Batch(
-		m.spinner.Tick,
-		portsForwardCmd_apiCall(m.client, m.instanceID, m.req),
-	)
-}
-
-func portsForwardCmd_apiCall(client *api.Client, instanceID string, req api.InstanceModifyRequest) tea.Cmd {
+func portsForwardApiCall(client *api.Client, instanceID string, req api.InstanceModifyRequest, resp **api.InstanceModifyResponse) tea.Cmd {
 	return func() tea.Msg {
-		resp, err := client.ModifyInstance(instanceID, req)
-		return portsForwardResultMsg{
-			resp: resp,
-			err:  err,
+		r, err := client.ModifyInstance(instanceID, req)
+		if err == nil {
+			*resp = r
 		}
+		return tui.ProgressResultMsg{Err: err}
 	}
 }
 
-func (m portsForwardProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
-			m.cancelled = true
-			return m, tea.Quit
-		}
-
-	case portsForwardResultMsg:
-		m.done = true
-		m.err = msg.err
-		m.resp = msg.resp
-		return m, tea.Quit
-
-	default:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-	}
-
-	return m, nil
-}
-
-func (m portsForwardProgressModel) View() string {
-	if m.done {
-		if m.cancelled {
-			return ""
-		}
-
-		if m.err != nil {
-			return ""
-		}
-
+func renderPortsForwardSuccess(resp **api.InstanceModifyResponse) func() string {
+	return func() string {
 		headerStyle := theme.Primary().Bold(true)
 		labelStyle := theme.Neutral()
 		valueStyle := lipgloss.NewStyle().Bold(true)
@@ -258,25 +173,23 @@ func (m portsForwardProgressModel) View() string {
 		successTitleStyle := theme.Success()
 		lines = append(lines, successTitleStyle.Render("✓ Ports updated successfully!"))
 		lines = append(lines, "")
-		lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(m.resp.Identifier))
-		lines = append(lines, labelStyle.Render("Instance UUID:")+" "+valueStyle.Render(m.resp.InstanceName))
+		lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render((*resp).Identifier))
+		lines = append(lines, labelStyle.Render("Instance UUID:")+" "+valueStyle.Render((*resp).InstanceName))
 
-		if len(m.resp.HTTPPorts) > 0 {
-			lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render(utils.FormatPorts(m.resp.HTTPPorts)))
+		if len((*resp).HTTPPorts) > 0 {
+			lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render(utils.FormatPorts((*resp).HTTPPorts)))
 		} else {
 			lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render("(none)"))
 		}
 
 		lines = append(lines, "")
 		lines = append(lines, headerStyle.Render("Access your services:"))
-		if len(m.resp.HTTPPorts) > 0 {
-			lines = append(lines, labelStyle.Render(fmt.Sprintf("  https://%s-<port>.thundercompute.net", m.resp.InstanceName)))
+		if len((*resp).HTTPPorts) > 0 {
+			lines = append(lines, labelStyle.Render(fmt.Sprintf("  https://%s-<port>.thundercompute.net", (*resp).InstanceName)))
 		}
 		lines = append(lines, labelStyle.Render("  • Run 'tnr ports list' to see all forwarded ports"))
 
 		content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 		return "\n" + boxStyle.Render(content) + "\n\n"
 	}
-
-	return fmt.Sprintf("\n   %s %s\n\n", m.spinner.View(), m.message)
 }

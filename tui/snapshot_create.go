@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
@@ -46,59 +45,32 @@ type snapshotCreateModel struct {
 	client           *api.Client
 	spinner          spinner.Model
 
-	styles snapshotCreateStyles
-}
-
-type snapshotCreateStyles struct {
-	title      lipgloss.Style
-	selected   lipgloss.Style
-	cursor     lipgloss.Style
-	panel      lipgloss.Style
-	label      lipgloss.Style
-	help       lipgloss.Style
+	styles     PanelStyles
 	warningBox lipgloss.Style
 }
 
-func newSnapshotCreateStyles() snapshotCreateStyles {
-	panelBase := PrimaryStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.PrimaryColor)).
-		Padding(1, 2).
-		MarginTop(1).
-		MarginBottom(1)
-
-	return snapshotCreateStyles{
-		title:      PrimaryTitleStyle().MarginBottom(1),
-		selected:   PrimarySelectedStyle(),
-		cursor:     PrimaryCursorStyle(),
-		panel:      panelBase,
-		label:      LabelStyle(),
-		help:       HelpStyle(),
-		warningBox: WarningBoxStyle().MarginTop(1).MarginBottom(1),
-	}
-}
-
 func NewSnapshotCreateModel(client *api.Client) snapshotCreateModel {
-	styles := newSnapshotCreateStyles()
+	styles := NewPanelStyles()
 
 	ti := textinput.New()
 	ti.Placeholder = ""
 	ti.CharLimit = 50
 	ti.Width = 40
 	ti.Prompt = "▶ "
-	ti.PromptStyle = styles.cursor
-	ti.TextStyle = styles.cursor
-	ti.PlaceholderStyle = styles.cursor
-	ti.Cursor.Style = styles.cursor
+	ti.PromptStyle = styles.Cursor
+	ti.TextStyle = styles.Cursor
+	ti.PlaceholderStyle = styles.Cursor
+	ti.Cursor.Style = styles.Cursor
 
 	s := NewPrimarySpinner()
 
 	return snapshotCreateModel{
-		step:      snapshotCreateStepSelectInstance,
-		client:    client,
-		nameInput: ti,
-		spinner:   s,
-		styles:    styles,
+		step:       snapshotCreateStepSelectInstance,
+		client:     client,
+		nameInput:  ti,
+		spinner:    s,
+		styles:     styles,
+		warningBox: WarningBoxStyle().MarginTop(1).MarginBottom(1),
 	}
 }
 
@@ -141,7 +113,7 @@ func (m snapshotCreateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.instancesLoaded = true
 		if len(m.runningInstances) == 0 {
-			m.err = fmt.Errorf("no running instances found. Snapshots can only be created from instances in RUNNING state")
+			m.err = ErrNoRunningInstances
 			return m, tea.Quit
 		}
 		return m, m.spinner.Tick
@@ -282,7 +254,7 @@ func (m snapshotCreateModel) View() string {
 
 	var s strings.Builder
 	s.WriteString("\n")
-	s.WriteString(m.styles.title.Render("⚡ Create Snapshot"))
+	s.WriteString(m.styles.Title.Render("⚡ Create Snapshot"))
 	s.WriteString("\n\n")
 
 	progressSteps := []string{"Instance", "Name", "Confirm"}
@@ -290,7 +262,7 @@ func (m snapshotCreateModel) View() string {
 	for i, stepName := range progressSteps {
 		adjustedStep := int(m.step)
 		if i == adjustedStep {
-			progress += m.styles.selected.Render(fmt.Sprintf("[%s]", stepName))
+			progress += m.styles.Selected.Render(fmt.Sprintf("[%s]", stepName))
 		} else if i < adjustedStep {
 			progress += fmt.Sprintf("[✓ %s]", stepName)
 		} else {
@@ -312,7 +284,7 @@ func (m snapshotCreateModel) View() string {
 			for i, instance := range m.runningInstances {
 				cursor := "  "
 				if m.cursor == i {
-					cursor = m.styles.cursor.Render("▶ ")
+					cursor = m.styles.Cursor.Render("▶ ")
 				}
 
 				display := fmt.Sprintf("(%s) %s - %sx%s",
@@ -322,7 +294,7 @@ func (m snapshotCreateModel) View() string {
 					utils.FormatGPUType(instance.GPUType),
 				)
 				if m.cursor == i {
-					display = m.styles.selected.Render(display)
+					display = m.styles.Selected.Render(display)
 				}
 				s.WriteString(fmt.Sprintf("%s%s\n", cursor, display))
 			}
@@ -336,7 +308,7 @@ func (m snapshotCreateModel) View() string {
 			s.WriteString(errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v", m.validationErr)))
 			s.WriteString("\n")
 		}
-		s.WriteString(m.styles.help.Render("Press Enter to continue\n"))
+		s.WriteString(m.styles.Help.Render("Press Enter to continue\n"))
 
 	case snapshotCreateStepConfirm:
 		s.WriteString("Review your snapshot configuration:\n")
@@ -352,17 +324,17 @@ func (m snapshotCreateModel) View() string {
 		}
 
 		if selectedInstance != nil {
-			panel.WriteString(m.styles.label.Render("Instance ID:   ") + selectedInstance.ID + "\n")
-			panel.WriteString(m.styles.label.Render("Instance Name: ") + selectedInstance.Name + "\n")
-			panel.WriteString(m.styles.label.Render("Instance IP:   ") + selectedInstance.GetIP() + "\n")
+			panel.WriteString(m.styles.Label.Render("Instance ID:   ") + selectedInstance.ID + "\n")
+			panel.WriteString(m.styles.Label.Render("Instance Name: ") + selectedInstance.Name + "\n")
+			panel.WriteString(m.styles.Label.Render("Instance IP:   ") + selectedInstance.GetIP() + "\n")
 		}
-		panel.WriteString(m.styles.label.Render("Snapshot Name: ") + m.config.Name)
+		panel.WriteString(m.styles.Label.Render("Snapshot Name: ") + m.config.Name)
 
-		s.WriteString(m.styles.panel.Render(panel.String()))
+		s.WriteString(m.styles.Panel.Render(panel.String()))
 		s.WriteString("\n")
 
 		warning := "⚠ This will terminate running tasks and pause the instance."
-		s.WriteString(m.styles.warningBox.Render(warning))
+		s.WriteString(m.warningBox.Render(warning))
 		s.WriteString("\n\n")
 
 		s.WriteString("Confirm snapshot creation?\n\n")
@@ -371,11 +343,11 @@ func (m snapshotCreateModel) View() string {
 		for i, option := range options {
 			cursor := "  "
 			if m.cursor == i {
-				cursor = m.styles.cursor.Render("▶ ")
+				cursor = m.styles.Cursor.Render("▶ ")
 			}
 			text := option
 			if m.cursor == i {
-				text = m.styles.selected.Render(option)
+				text = m.styles.Selected.Render(option)
 			}
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, text))
 		}
@@ -383,10 +355,10 @@ func (m snapshotCreateModel) View() string {
 
 	if m.step != snapshotCreateStepConfirm {
 		s.WriteString("\n")
-		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n"))
 	} else {
 		s.WriteString("\n")
-		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Confirm  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Q: Cancel\n"))
 	}
 
 	return s.String()

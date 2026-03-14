@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -44,31 +43,18 @@ func init() {
 }
 
 func runModify(cmd *cobra.Command, args []string) error {
-	config, err := LoadConfig()
+	client, err := getAuthenticatedClient()
 	if err != nil {
-		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
+		return err
 	}
-
-	if config.Token == "" {
-		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
-	}
-
-	client := api.NewClient(config.Token, config.APIURL)
 
 	// Fetch instances
-	busy := tui.NewBusyModel("Fetching instances...")
-	bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
-	busyDone := make(chan struct{})
-	go func() {
-		_, _ = bp.Run()
-		close(busyDone)
-	}()
-
-	instances, err := client.ListInstances()
-	bp.Send(tui.BusyDoneMsg{})
-	<-busyDone
-
-	if err != nil {
+	var instances []api.Instance
+	if err := tui.RunWithBusySpinner("Fetching instances...", os.Stdout, func() error {
+		var e error
+		instances, e = client.ListInstances()
+		return e
+	}); err != nil {
 		return fmt.Errorf("failed to fetch instances: %w", err)
 	}
 
@@ -93,13 +79,8 @@ func runModify(cmd *cobra.Command, args []string) error {
 	} else {
 		instanceIdentifier := args[0]
 
-		// First try to find by ID or UUID
-		for i := range instances {
-			if instances[i].ID == instanceIdentifier || instances[i].UUID == instanceIdentifier {
-				selectedInstance = &instances[i]
-				break
-			}
-		}
+		// First try to find by ID, UUID, or Name
+		selectedInstance = findInstance(instances, instanceIdentifier)
 
 		// If not found and it's a number, try as array index (for backwards compatibility)
 		if selectedInstance == nil {
@@ -198,21 +179,25 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	// Make API call with progress spinner
-	p := tea.NewProgram(newModifyProgressModel(client, selectedInstance.ID, modifyReq))
+	var modifyResp *api.InstanceModifyResponse
+	p := tea.NewProgram(tui.NewProgressModel("Modifying instance...",
+		modifyInstanceCmd(client, selectedInstance.ID, modifyReq, &modifyResp),
+		renderModifySuccess(selectedInstance.ID, &modifyResp),
+	))
 	finalModel, err := p.Run()
 	if err != nil {
 		return fmt.Errorf("error during modification: %w", err)
 	}
 
-	progressModel := finalModel.(modifyProgressModel)
+	result := finalModel.(tui.ProgressModel)
 
-	if progressModel.cancelled {
+	if result.Cancelled() {
 		PrintWarningSimple("User cancelled modification")
 		return nil
 	}
 
-	if progressModel.err != nil {
-		return fmt.Errorf("failed to modify instance: %w", progressModel.err)
+	if result.Err() != nil {
+		return fmt.Errorf("failed to modify instance: %w", result.Err())
 	}
 
 	// Success output is rendered in the View() method
@@ -414,89 +399,18 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 	return req, nil
 }
 
-// Progress model for modify operation
-type modifyProgressModel struct {
-	client     *api.Client
-	instanceID string
-	req        api.InstanceModifyRequest
-	spinner    spinner.Model
-	message    string
-	done       bool
-	err        error
-	resp       *api.InstanceModifyResponse
-	cancelled  bool
-}
-
-func newModifyProgressModel(client *api.Client, instanceID string, req api.InstanceModifyRequest) modifyProgressModel {
-	theme.Init(os.Stdout)
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.Primary()
-
-	return modifyProgressModel{
-		client:     client,
-		instanceID: instanceID,
-		req:        req,
-		spinner:    s,
-		message:    "Modifying instance...",
-	}
-}
-
-type modifyInstanceResultMsg struct {
-	resp *api.InstanceModifyResponse
-	err  error
-}
-
-func (m modifyProgressModel) Init() tea.Cmd {
-	return tea.Batch(
-		m.spinner.Tick,
-		modifyInstanceCmd(m.client, m.instanceID, m.req),
-	)
-}
-
-func modifyInstanceCmd(client *api.Client, instanceID string, req api.InstanceModifyRequest) tea.Cmd {
+func modifyInstanceCmd(client *api.Client, instanceID string, req api.InstanceModifyRequest, resp **api.InstanceModifyResponse) tea.Cmd {
 	return func() tea.Msg {
-		resp, err := client.ModifyInstance(instanceID, req)
-		return modifyInstanceResultMsg{
-			resp: resp,
-			err:  err,
+		r, err := client.ModifyInstance(instanceID, req)
+		if err == nil {
+			*resp = r
 		}
+		return tui.ProgressResultMsg{Err: err}
 	}
 }
 
-func (m modifyProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
-			m.cancelled = true
-			return m, tea.Quit
-		}
-
-	case modifyInstanceResultMsg:
-		m.done = true
-		m.err = msg.err
-		m.resp = msg.resp
-		return m, tea.Quit
-
-	default:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-	}
-
-	return m, nil
-}
-
-func (m modifyProgressModel) View() string {
-	if m.done {
-		if m.cancelled {
-			return ""
-		}
-
-		if m.err != nil {
-			return ""
-		}
-
+func renderModifySuccess(instanceID string, resp **api.InstanceModifyResponse) func() string {
+	return func() string {
 		headerStyle := theme.Primary().Bold(true)
 		labelStyle := theme.Neutral()
 		valueStyle := lipgloss.NewStyle().Bold(true)
@@ -510,28 +424,26 @@ func (m modifyProgressModel) View() string {
 		successTitleStyle := theme.Success()
 		lines = append(lines, successTitleStyle.Render("✓ Instance modified successfully!"))
 		lines = append(lines, "")
-		lines = append(lines, labelStyle.Render("Instance ID:")+"   "+valueStyle.Render(m.resp.Identifier))
-		lines = append(lines, labelStyle.Render("Instance Name:")+" "+valueStyle.Render(m.resp.InstanceName))
+		lines = append(lines, labelStyle.Render("Instance ID:")+"   "+valueStyle.Render((*resp).Identifier))
+		lines = append(lines, labelStyle.Render("Instance Name:")+" "+valueStyle.Render((*resp).InstanceName))
 
-		if m.resp.Mode != nil {
-			lines = append(lines, labelStyle.Render("New Mode:")+"      "+valueStyle.Render(*m.resp.Mode))
+		if (*resp).Mode != nil {
+			lines = append(lines, labelStyle.Render("New Mode:")+"      "+valueStyle.Render(*(*resp).Mode))
 		}
-		if m.resp.GPUType != nil {
-			lines = append(lines, labelStyle.Render("New GPU:")+"       "+valueStyle.Render(*m.resp.GPUType))
+		if (*resp).GPUType != nil {
+			lines = append(lines, labelStyle.Render("New GPU:")+"       "+valueStyle.Render(*(*resp).GPUType))
 		}
-		if m.resp.NumGPUs != nil {
-			lines = append(lines, labelStyle.Render("New GPUs:")+"      "+valueStyle.Render(fmt.Sprintf("%d", *m.resp.NumGPUs)))
+		if (*resp).NumGPUs != nil {
+			lines = append(lines, labelStyle.Render("New GPUs:")+"      "+valueStyle.Render(fmt.Sprintf("%d", *(*resp).NumGPUs)))
 		}
 
 		lines = append(lines, "")
 		lines = append(lines, headerStyle.Render("Next steps:"))
 		lines = append(lines, cmdStyle.Render("  • Instance is restarting with new configuration"))
 		lines = append(lines, cmdStyle.Render("  • Run 'tnr status' to monitor progress"))
-		lines = append(lines, cmdStyle.Render(fmt.Sprintf("  • Run 'tnr connect %s' once RUNNING", m.instanceID)))
+		lines = append(lines, cmdStyle.Render(fmt.Sprintf("  • Run 'tnr connect %s' once RUNNING", instanceID)))
 
 		content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 		return "\n" + boxStyle.Render(content) + "\n\n"
 	}
-
-	return fmt.Sprintf("\n   %s %s\n\n", m.spinner.View(), m.message)
 }

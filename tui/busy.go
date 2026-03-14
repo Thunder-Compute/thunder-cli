@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"io"
 	"os"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -67,4 +68,16 @@ func (m BusyModel) View() string {
 		return ""
 	}
 	return m.spin.View() + " " + m.styles.text.Render(m.text) + "\n" + m.styles.help.Render("Press 'Q' to cancel\n")
+}
+
+// RunWithBusySpinner shows a spinner while fn executes, then dismisses it.
+func RunWithBusySpinner(message string, out io.Writer, fn func() error) error {
+	busy := NewBusyModel(message)
+	bp := tea.NewProgram(busy, tea.WithOutput(out))
+	done := make(chan struct{})
+	go func() { _, _ = bp.Run(); close(done) }()
+	err := fn()
+	bp.Send(BusyDoneMsg{})
+	<-done
+	return err
 }

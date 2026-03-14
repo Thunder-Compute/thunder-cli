@@ -11,7 +11,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
@@ -56,38 +55,11 @@ type modifyModel struct {
 	pricing          *utils.PricingData
 	pricingLoaded    bool
 
-	styles modifyStyles
-}
-
-type modifyStyles struct {
-	title    lipgloss.Style
-	selected lipgloss.Style
-	cursor   lipgloss.Style
-	panel    lipgloss.Style
-	label    lipgloss.Style
-	help     lipgloss.Style
-}
-
-func newModifyStyles() modifyStyles {
-	panelBase := PrimaryStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.PrimaryColor)).
-		Padding(1, 2).
-		MarginTop(1).
-		MarginBottom(1)
-
-	return modifyStyles{
-		title:    PrimaryTitleStyle().MarginBottom(1),
-		selected: PrimarySelectedStyle(),
-		cursor:   PrimaryCursorStyle(),
-		panel:    panelBase,
-		label:    LabelStyle(),
-		help:     HelpStyle(),
-	}
+	styles PanelStyles
 }
 
 func NewModifyModel(client *api.Client, instance *api.Instance) tea.Model {
-	styles := newModifyStyles()
+	styles := NewPanelStyles()
 
 	ti := textinput.New()
 	ti.Placeholder = fmt.Sprintf("%d", instance.Storage)
@@ -445,11 +417,11 @@ func (m modifyModel) View() string {
 	var s strings.Builder
 
 	// Title
-	s.WriteString(m.styles.title.Render("Modify Instance Configuration"))
+	s.WriteString(m.styles.Title.Render("Modify Instance Configuration"))
 	s.WriteString("\n")
 
 	// Show current instance info
-	s.WriteString(m.styles.label.Render(fmt.Sprintf("Instance: (%s) %s", m.currentInstance.ID, m.currentInstance.Name)))
+	s.WriteString(m.styles.Label.Render(fmt.Sprintf("Instance: (%s) %s", m.currentInstance.ID, m.currentInstance.Name)))
 	s.WriteString("\n\n")
 
 	// Render current step
@@ -470,18 +442,18 @@ func (m modifyModel) View() string {
 	if m.pricing != nil && m.step != modifyStepMode {
 		price := m.computePreviewPrice()
 		s.WriteString("\n")
-		s.WriteString(m.styles.help.Render(fmt.Sprintf("Estimated cost: %s", utils.FormatPrice(price))))
+		s.WriteString(m.styles.Help.Render(fmt.Sprintf("Estimated cost: %s", utils.FormatPrice(price))))
 	}
 
 	// Help text
 	s.WriteString("\n")
 	switch m.step {
 	case modifyStepConfirmation:
-		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Confirm  Q: Cancel"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Q: Cancel"))
 	case modifyStepDiskSize:
-		s.WriteString(m.styles.help.Render("Type disk size  Enter: Continue  ESC: Back  Q: Quit"))
+		s.WriteString(m.styles.Help.Render("Type disk size  Enter: Continue  ESC: Back  Q: Quit"))
 	default:
-		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  ESC: Back  Q: Quit"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  ESC: Back  Q: Quit"))
 	}
 
 	return s.String()
@@ -582,8 +554,8 @@ func (m modifyModel) renderModeStep() string {
 
 		cursor := "  "
 		if m.cursor == i {
-			cursor = m.styles.cursor.Render("▶ ")
-			option = m.styles.selected.Render(option)
+			cursor = m.styles.Cursor.Render("▶ ")
+			option = m.styles.Selected.Render(option)
 		}
 		s.WriteString(fmt.Sprintf("%s%s\n", cursor, option))
 	}
@@ -628,8 +600,8 @@ func (m modifyModel) renderGPUStep() string {
 
 		cursor := "  "
 		if m.cursor == i {
-			cursor = m.styles.cursor.Render("▶ ")
-			option = m.styles.selected.Render(option)
+			cursor = m.styles.Cursor.Render("▶ ")
+			option = m.styles.Selected.Render(option)
 		}
 		s.WriteString(fmt.Sprintf("%s%s\n", cursor, option))
 	}
@@ -656,8 +628,8 @@ func (m modifyModel) renderComputeStep() string {
 
 			cursor := "  "
 			if m.cursor == i {
-				cursor = m.styles.cursor.Render("▶ ")
-				option = m.styles.selected.Render(option)
+				cursor = m.styles.Cursor.Render("▶ ")
+				option = m.styles.Selected.Render(option)
 			}
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, option))
 		}
@@ -676,8 +648,8 @@ func (m modifyModel) renderComputeStep() string {
 
 			cursor := "  "
 			if m.cursor == i {
-				cursor = m.styles.cursor.Render("▶ ")
-				option = m.styles.selected.Render(option)
+				cursor = m.styles.Cursor.Render("▶ ")
+				option = m.styles.Selected.Render(option)
 			}
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, option))
 		}
@@ -697,8 +669,8 @@ func (m modifyModel) renderComputeStep() string {
 
 			cursor := "  "
 			if m.cursor == i {
-				cursor = m.styles.cursor.Render("▶ ")
-				option = m.styles.selected.Render(option)
+				cursor = m.styles.Cursor.Render("▶ ")
+				option = m.styles.Selected.Render(option)
 			}
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, option))
 		}
@@ -732,13 +704,13 @@ func (m modifyModel) renderConfirmationStep() string {
 	var panel strings.Builder
 
 	if m.config.ModeChanged {
-		panel.WriteString(m.styles.label.Render("Mode:       ") + fmt.Sprintf("%s → %s", utils.Capitalize(m.currentInstance.Mode), utils.Capitalize(m.config.Mode)) + "\n")
+		panel.WriteString(m.styles.Label.Render("Mode:       ") + fmt.Sprintf("%s → %s", utils.Capitalize(m.currentInstance.Mode), utils.Capitalize(m.config.Mode)) + "\n")
 	}
 
 	if m.config.GPUChanged {
 		currentGPU := m.formatGPUType(m.currentInstance.GPUType)
 		newGPU := m.formatGPUType(m.config.GPUType)
-		panel.WriteString(m.styles.label.Render("GPU Type:   ") + fmt.Sprintf("%s → %s", currentGPU, newGPU) + "\n")
+		panel.WriteString(m.styles.Label.Render("GPU Type:   ") + fmt.Sprintf("%s → %s", currentGPU, newGPU) + "\n")
 	}
 
 	if m.config.ComputeChanged {
@@ -750,13 +722,13 @@ func (m modifyModel) renderConfirmationStep() string {
 		if effectiveMode == "prototyping" {
 			currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
 			if m.config.NumGPUs != currentNumGPUs {
-				panel.WriteString(m.styles.label.Render("GPUs:       ") + fmt.Sprintf("%d → %d", currentNumGPUs, m.config.NumGPUs) + "\n")
+				panel.WriteString(m.styles.Label.Render("GPUs:       ") + fmt.Sprintf("%d → %d", currentNumGPUs, m.config.NumGPUs) + "\n")
 			}
 			currentRAM, _ := strconv.Atoi(m.currentInstance.CPUCores)
 			currentRAM *= 8
 			newRAM := m.config.VCPUs * 8
-			panel.WriteString(m.styles.label.Render("vCPUs:      ") + fmt.Sprintf("%s → %d", m.currentInstance.CPUCores, m.config.VCPUs) + "\n")
-			panel.WriteString(m.styles.label.Render("RAM:        ") + fmt.Sprintf("%d GB → %d GB", currentRAM, newRAM) + "\n")
+			panel.WriteString(m.styles.Label.Render("vCPUs:      ") + fmt.Sprintf("%s → %d", m.currentInstance.CPUCores, m.config.VCPUs) + "\n")
+			panel.WriteString(m.styles.Label.Render("RAM:        ") + fmt.Sprintf("%d GB → %d GB", currentRAM, newRAM) + "\n")
 		} else {
 			currentVCPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
 			currentVCPUs *= 18
@@ -764,14 +736,14 @@ func (m modifyModel) renderConfirmationStep() string {
 			currentRAM, _ := strconv.Atoi(m.currentInstance.NumGPUs)
 			currentRAM *= 144
 			newRAM := m.config.NumGPUs * 144
-			panel.WriteString(m.styles.label.Render("GPUs:       ") + fmt.Sprintf("%s → %d", m.currentInstance.NumGPUs, m.config.NumGPUs) + "\n")
-			panel.WriteString(m.styles.label.Render("vCPUs:      ") + fmt.Sprintf("%d → %d", currentVCPUs, newVCPUs) + "\n")
-			panel.WriteString(m.styles.label.Render("RAM:        ") + fmt.Sprintf("%d GB → %d GB", currentRAM, newRAM) + "\n")
+			panel.WriteString(m.styles.Label.Render("GPUs:       ") + fmt.Sprintf("%s → %d", m.currentInstance.NumGPUs, m.config.NumGPUs) + "\n")
+			panel.WriteString(m.styles.Label.Render("vCPUs:      ") + fmt.Sprintf("%d → %d", currentVCPUs, newVCPUs) + "\n")
+			panel.WriteString(m.styles.Label.Render("RAM:        ") + fmt.Sprintf("%d GB → %d GB", currentRAM, newRAM) + "\n")
 		}
 	}
 
 	if m.config.DiskChanged {
-		panel.WriteString(m.styles.label.Render("Disk Size:  ") + fmt.Sprintf("%d GB → %d GB", m.currentInstance.Storage, m.config.DiskSizeGB) + "\n")
+		panel.WriteString(m.styles.Label.Render("Disk Size:  ") + fmt.Sprintf("%d GB → %d GB", m.currentInstance.Storage, m.config.DiskSizeGB) + "\n")
 	}
 
 	panelStr := panel.String()
@@ -781,7 +753,7 @@ func (m modifyModel) renderConfirmationStep() string {
 	} else {
 		// Trim trailing newline for consistent panel rendering
 		panelStr = strings.TrimSuffix(panelStr, "\n")
-		s.WriteString(m.styles.panel.Render(panelStr))
+		s.WriteString(m.styles.Panel.Render(panelStr))
 	}
 
 	s.WriteString(warningStyleTUI.Render("⚠ Warning: Modifying will restart the instance, running processes will be interrupted."))
@@ -793,8 +765,8 @@ func (m modifyModel) renderConfirmationStep() string {
 	for i, option := range options {
 		cursor := "  "
 		if m.cursor == i {
-			cursor = m.styles.cursor.Render("▶ ")
-			option = m.styles.selected.Render(option)
+			cursor = m.styles.Cursor.Render("▶ ")
+			option = m.styles.Selected.Render(option)
 		}
 		s.WriteString(fmt.Sprintf("%s%s\n", cursor, option))
 	}
@@ -861,14 +833,14 @@ type modifyInstanceSelectorModel struct {
 	selected  *api.Instance
 	cancelled bool
 	quitting  bool
-	styles    modifyStyles
+	styles    PanelStyles
 }
 
 func newModifyInstanceSelectorModel(instances []api.Instance) modifyInstanceSelectorModel {
 	return modifyInstanceSelectorModel{
 		cursor:    0,
 		instances: instances,
-		styles:    newModifyStyles(),
+		styles:    NewPanelStyles(),
 	}
 }
 
@@ -912,14 +884,14 @@ func (m modifyInstanceSelectorModel) View() string {
 
 	var s strings.Builder
 
-	s.WriteString(m.styles.title.Render("⚙ Modify Thunder Compute Instance"))
+	s.WriteString(m.styles.Title.Render("⚙ Modify Thunder Compute Instance"))
 	s.WriteString("\n")
 	s.WriteString("Select an instance to modify:\n\n")
 
 	for i, instance := range m.instances {
 		cursor := "  "
 		if m.cursor == i {
-			cursor = m.styles.cursor.Render("▶ ")
+			cursor = m.styles.Cursor.Render("▶ ")
 		}
 
 		// Determine status style
@@ -939,7 +911,7 @@ func (m modifyInstanceSelectorModel) View() string {
 
 		idAndName := fmt.Sprintf("(%s) %s", instance.ID, instance.Name)
 		if m.cursor == i {
-			idAndName = m.styles.selected.Render(idAndName)
+			idAndName = m.styles.Selected.Render(idAndName)
 		}
 
 		statusText := statusStyle.Render(fmt.Sprintf("(%s)", instance.Status))
@@ -955,7 +927,7 @@ func (m modifyInstanceSelectorModel) View() string {
 	}
 
 	s.WriteString("\n")
-	s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
+	s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
 
 	return s.String()
 }

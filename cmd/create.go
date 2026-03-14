@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -74,96 +73,18 @@ func init() {
 	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-key", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
 }
 
-type createProgressModel struct {
-	spinner spinner.Model
-	message string
-
-	client     *api.Client
-	req        api.CreateInstanceRequest
-	sshKeyName string
-
-	done      bool
-	err       error
-	cancelled bool
-	resp      *api.CreateInstanceResponse
-}
-
-type createInstanceResultMsg struct {
-	resp *api.CreateInstanceResponse
-	err  error
-}
-
-func newCreateProgressModel(client *api.Client, message string, req api.CreateInstanceRequest) createProgressModel {
-	theme.Init(os.Stdout)
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.Primary()
-
-	return createProgressModel{
-		spinner: s,
-		message: message,
-		client:  client,
-		req:     req,
-	}
-}
-
-func createInstanceCmd(client *api.Client, req api.CreateInstanceRequest) tea.Cmd {
+func createInstanceCmd(client *api.Client, req api.CreateInstanceRequest, resp **api.CreateInstanceResponse) tea.Cmd {
 	return func() tea.Msg {
-		resp, err := client.CreateInstance(req)
-		return createInstanceResultMsg{
-			resp: resp,
-			err:  err,
+		r, err := client.CreateInstance(req)
+		if err == nil {
+			*resp = r
 		}
+		return tui.ProgressResultMsg{Err: err}
 	}
 }
 
-func (m createProgressModel) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, createInstanceCmd(m.client, m.req))
-}
-
-func (m createProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case spinner.TickMsg:
-		if m.done {
-			return m, nil
-		}
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-
-	case createInstanceResultMsg:
-		m.done = true
-		m.err = msg.err
-		if msg.err == nil {
-			m.resp = msg.resp
-		}
-		return m, tea.Quit
-
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
-			m.done = true
-			m.cancelled = true
-			return m, tea.Quit
-		}
-
-	case tea.QuitMsg:
-		return m, nil
-	}
-
-	return m, nil
-}
-
-func (m createProgressModel) View() string {
-	if m.done {
-		if m.cancelled {
-			return ""
-		}
-
-		if m.err != nil {
-			return ""
-		}
-
+func renderCreateSuccess(resp **api.CreateInstanceResponse) func() string {
+	return func() string {
 		headerStyle := theme.Primary().Bold(true)
 		labelStyle := theme.Neutral()
 		valueStyle := lipgloss.NewStyle().Bold(true)
@@ -177,30 +98,22 @@ func (m createProgressModel) View() string {
 		successTitleStyle := theme.Success()
 		lines = append(lines, successTitleStyle.Render("✓ Instance created successfully!"))
 		lines = append(lines, "")
-		lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(fmt.Sprintf("%d", m.resp.Identifier)))
+		lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(fmt.Sprintf("%d", (*resp).Identifier)))
 		lines = append(lines, "")
 		lines = append(lines, headerStyle.Render("Next steps:"))
 		lines = append(lines, cmdStyle.Render("  • Run 'tnr status' to monitor provisioning progress"))
-		lines = append(lines, cmdStyle.Render(fmt.Sprintf("  • Run 'tnr connect %d' once the instance is RUNNING", m.resp.Identifier)))
+		lines = append(lines, cmdStyle.Render(fmt.Sprintf("  • Run 'tnr connect %d' once the instance is RUNNING", (*resp).Identifier)))
 
 		content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 		return "\n" + boxStyle.Render(content) + "\n\n"
 	}
-
-	return fmt.Sprintf("\n %s %s\n", m.spinner.View(), m.message)
 }
 
 func runCreate(cmd *cobra.Command) error {
-	config, err := LoadConfig()
+	client, err := getAuthenticatedClient()
 	if err != nil {
-		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
+		return err
 	}
-
-	if config.Token == "" {
-		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
-	}
-
-	client := api.NewClient(config.Token, config.APIURL)
 
 	isInteractive := !cmd.Flags().Changed("mode")
 
@@ -216,27 +129,15 @@ func runCreate(cmd *cobra.Command) error {
 			return err
 		}
 	} else {
-		busy := tui.NewBusyModel("Fetching templates and snapshots...")
-		bp := tea.NewProgram(busy)
-		busyDone := make(chan struct{})
-
-		go func() {
-			_, _ = bp.Run()
-			close(busyDone)
-		}()
-
-		templates, err := client.ListTemplates()
-		if err != nil {
-			bp.Send(tui.BusyDoneMsg{})
-			<-busyDone
-			return fmt.Errorf("failed to fetch templates: %w", err)
-		}
-
-		snapshots, err := client.ListSnapshots()
-		// Snapshots are optional, so we continue even if there's an error
-		if err != nil {
-			snapshots = []api.Snapshot{}
-		} else {
+		var templates []api.TemplateEntry
+		var snapshots []api.Snapshot
+		if err := tui.RunWithBusySpinner("Fetching templates and snapshots...", os.Stdout, func() error {
+			var e error
+			templates, e = client.ListTemplates()
+			if e != nil {
+				return e
+			}
+			snapshots, _ = client.ListSnapshots()
 			// Filter for READY snapshots only
 			readySnapshots := make([]api.Snapshot, 0)
 			for _, s := range snapshots {
@@ -245,10 +146,10 @@ func runCreate(cmd *cobra.Command) error {
 				}
 			}
 			snapshots = readySnapshots
+			return nil
+		}); err != nil {
+			return fmt.Errorf("failed to fetch templates: %w", err)
 		}
-
-		bp.Send(tui.BusyDoneMsg{})
-		<-busyDone
 
 		if len(templates) == 0 {
 			return fmt.Errorf("no templates available")
@@ -326,31 +227,31 @@ func runCreate(cmd *cobra.Command) error {
 		PublicKey:  resolvedPublicKey,
 	}
 
-	progressModel := newCreateProgressModel(client, "Creating instance...", req)
-	progressModel.sshKeyName = createSSHKeyName
+	var resp *api.CreateInstanceResponse
+	progressModel := tui.NewProgressModel("Creating instance...",
+		createInstanceCmd(client, req, &resp),
+		renderCreateSuccess(&resp),
+	)
 	program := tea.NewProgram(progressModel)
 	finalModel, runErr := program.Run()
 	if runErr != nil {
 		return fmt.Errorf("failed to render progress: %w", runErr)
 	}
 
-	result, ok := finalModel.(createProgressModel)
-	if !ok {
-		return fmt.Errorf("unexpected result from progress renderer")
-	}
+	result := finalModel.(tui.ProgressModel)
 
-	if result.cancelled {
+	if result.Cancelled() {
 		PrintWarningSimple("User cancelled creation process")
 		return nil
 	}
 
-	if result.err != nil {
-		return fmt.Errorf("failed to create instance: %w", result.err)
+	if result.Err() != nil {
+		return fmt.Errorf("failed to create instance: %w", result.Err())
 	}
 
 	// Symlink user's private key so `tnr connect` finds it automatically
-	if privateKeyPath != "" && result.resp != nil {
-		keyFile := utils.GetKeyFile(result.resp.UUID)
+	if privateKeyPath != "" && resp != nil {
+		keyFile := utils.GetKeyFile(resp.UUID)
 		_ = os.MkdirAll(filepath.Dir(keyFile), 0o700)
 		_ = os.Remove(keyFile)
 		if err := os.Symlink(privateKeyPath, keyFile); err != nil {

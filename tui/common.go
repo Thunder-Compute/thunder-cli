@@ -180,6 +180,31 @@ func ErrorStyle() lipgloss.Style {
 	return errorStyleTUI
 }
 
+// PanelStyles contains the standard set of styles used by most TUI panels.
+type PanelStyles struct {
+	Title    lipgloss.Style
+	Selected lipgloss.Style
+	Cursor   lipgloss.Style
+	Panel    lipgloss.Style
+	Label    lipgloss.Style
+	Help     lipgloss.Style
+}
+
+// NewPanelStyles creates the standard panel styles shared across TUI views.
+func NewPanelStyles() PanelStyles {
+	return PanelStyles{
+		Title:    PrimaryTitleStyle().MarginBottom(1),
+		Selected: PrimarySelectedStyle(),
+		Cursor:   PrimaryCursorStyle(),
+		Panel: PrimaryStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(theme.PrimaryColor)).
+			Padding(1, 2).MarginTop(1).MarginBottom(1),
+		Label: LabelStyle(),
+		Help:  HelpStyle(),
+	}
+}
+
 func NewPrimarySpinner() spinner.Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot

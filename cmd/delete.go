@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -36,34 +35,21 @@ func init() {
 }
 
 func runDelete(args []string) error {
-	config, err := LoadConfig()
+	client, err := getAuthenticatedClient()
 	if err != nil {
-		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
+		return err
 	}
-
-	if config.Token == "" {
-		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
-	}
-
-	client := api.NewClient(config.Token, config.APIURL)
 
 	var instanceID string
 	var selectedInstance *api.Instance
 
 	if len(args) == 0 {
-		busy := tui.NewBusyModel("Fetching instances...")
-		bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
-		busyDone := make(chan struct{})
-		go func() {
-			_, _ = bp.Run()
-			close(busyDone)
-		}()
-
-		instances, err := client.ListInstances()
-		bp.Send(tui.BusyDoneMsg{})
-		<-busyDone
-
-		if err != nil {
+		var instances []api.Instance
+		if err := tui.RunWithBusySpinner("Fetching instances...", os.Stdout, func() error {
+			var e error
+			instances, e = client.ListInstances()
+			return e
+		}); err != nil {
 			return fmt.Errorf("failed to fetch instances: %w", err)
 		}
 
@@ -84,28 +70,16 @@ func runDelete(args []string) error {
 	} else {
 		instanceID = args[0]
 
-		busy := tui.NewBusyModel("Fetching instances...")
-		bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
-		busyDone := make(chan struct{})
-		go func() {
-			_, _ = bp.Run()
-			close(busyDone)
-		}()
-
-		instances, err := client.ListInstances()
-		bp.Send(tui.BusyDoneMsg{})
-		<-busyDone
-
-		if err != nil {
+		var instances []api.Instance
+		if err := tui.RunWithBusySpinner("Fetching instances...", os.Stdout, func() error {
+			var e error
+			instances, e = client.ListInstances()
+			return e
+		}); err != nil {
 			return fmt.Errorf("failed to fetch instances: %w", err)
 		}
 
-		for i := range instances {
-			if instances[i].ID == instanceID || instances[i].UUID == instanceID {
-				selectedInstance = &instances[i]
-				break
-			}
-		}
+		selectedInstance = findInstance(instances, instanceID)
 
 		if selectedInstance == nil {
 			return fmt.Errorf("instance '%s' not found", instanceID)

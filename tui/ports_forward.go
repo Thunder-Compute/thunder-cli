@@ -42,39 +42,12 @@ type portsForwardModel struct {
 	spinner          spinner.Model
 	resp             *api.InstanceModifyResponse
 
-	styles portsForwardStyles
-}
-
-type portsForwardStyles struct {
-	title    lipgloss.Style
-	selected lipgloss.Style
-	cursor   lipgloss.Style
-	panel    lipgloss.Style
-	label    lipgloss.Style
-	help     lipgloss.Style
-}
-
-func newPortsForwardStyles() portsForwardStyles {
-	panelBase := PrimaryStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.PrimaryColor)).
-		Padding(1, 2).
-		MarginTop(1).
-		MarginBottom(1)
-
-	return portsForwardStyles{
-		title:    PrimaryTitleStyle().MarginBottom(1),
-		selected: PrimarySelectedStyle(),
-		cursor:   PrimaryCursorStyle(),
-		panel:    panelBase,
-		label:    LabelStyle(),
-		help:     HelpStyle(),
-	}
+	styles PanelStyles
 }
 
 func NewPortsForwardModel(client *api.Client, instances []api.Instance) tea.Model {
 	InitCommonStyles(os.Stdout)
-	styles := newPortsForwardStyles()
+	styles := NewPanelStyles()
 
 	ti := textinput.New()
 	ti.Placeholder = "e.g., 8080, 3000, 9000-9005"
@@ -313,14 +286,14 @@ func (m portsForwardModel) View() string {
 func (m portsForwardModel) renderSelectInstanceStep() string {
 	var s strings.Builder
 
-	s.WriteString(m.styles.title.Render("Forward HTTP Ports"))
+	s.WriteString(m.styles.Title.Render("Forward HTTP Ports"))
 	s.WriteString("\n")
 	s.WriteString("Select an instance:\n\n")
 
 	for i, instance := range m.instances {
 		cursor := "  "
 		if m.cursor == i {
-			cursor = m.styles.cursor.Render("▶ ")
+			cursor = m.styles.Cursor.Render("▶ ")
 		}
 
 		// Format ports display
@@ -331,7 +304,7 @@ func (m portsForwardModel) renderSelectInstanceStep() string {
 
 		idAndName := fmt.Sprintf("(%s) %s", instance.ID, instance.Name)
 		if m.cursor == i {
-			idAndName = m.styles.selected.Render(idAndName)
+			idAndName = m.styles.Selected.Render(idAndName)
 		}
 
 		// Status style
@@ -352,7 +325,7 @@ func (m portsForwardModel) renderSelectInstanceStep() string {
 	}
 
 	s.WriteString("\n")
-	s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  Q: Quit"))
+	s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Q: Quit"))
 
 	return s.String()
 }
@@ -360,9 +333,9 @@ func (m portsForwardModel) renderSelectInstanceStep() string {
 func (m portsForwardModel) renderEditPortsStep() string {
 	var s strings.Builder
 
-	s.WriteString(m.styles.title.Render("Forward HTTP Ports"))
+	s.WriteString(m.styles.Title.Render("Forward HTTP Ports"))
 	s.WriteString("\n")
-	s.WriteString(m.styles.label.Render(fmt.Sprintf("Instance: (%s) %s", m.selectedInstance.ID, m.selectedInstance.Name)))
+	s.WriteString(m.styles.Label.Render(fmt.Sprintf("Instance: (%s) %s", m.selectedInstance.ID, m.selectedInstance.Name)))
 	s.WriteString("\n\n")
 
 	s.WriteString("Enter the ports to forward (comma-separated or ranges like 8000-8005):\n")
@@ -375,7 +348,7 @@ func (m portsForwardModel) renderEditPortsStep() string {
 		s.WriteString("\n\n")
 	}
 
-	s.WriteString(m.styles.help.Render("Enter: Continue  ESC: Back  Ctrl+C: Quit"))
+	s.WriteString(m.styles.Help.Render("Enter: Continue  ESC: Back  Ctrl+C: Quit"))
 
 	return s.String()
 }
@@ -383,19 +356,19 @@ func (m portsForwardModel) renderEditPortsStep() string {
 func (m portsForwardModel) renderConfirmationStep() string {
 	var s strings.Builder
 
-	s.WriteString(m.styles.title.Render("Forward HTTP Ports"))
+	s.WriteString(m.styles.Title.Render("Forward HTTP Ports"))
 
 	valueStyle := lipgloss.NewStyle().Bold(true)
 
 	var panel strings.Builder
 
-	panel.WriteString(m.styles.label.Render("Instance ID:") + "   " + valueStyle.Render(m.selectedInstance.ID))
+	panel.WriteString(m.styles.Label.Render("Instance ID:") + "   " + valueStyle.Render(m.selectedInstance.ID))
 	panel.WriteString("\n")
-	panel.WriteString(m.styles.label.Render("Instance UUID:") + " " + valueStyle.Render(m.selectedInstance.UUID))
+	panel.WriteString(m.styles.Label.Render("Instance UUID:") + " " + valueStyle.Render(m.selectedInstance.UUID))
 
 	if len(m.removePorts) > 0 {
 		panel.WriteString("\n\n")
-		panel.WriteString(m.styles.label.Render("Remove:") + "        " + utils.FormatPorts(m.removePorts))
+		panel.WriteString(m.styles.Label.Render("Remove:") + "        " + utils.FormatPorts(m.removePorts))
 	}
 
 	if len(m.addPorts) > 0 {
@@ -404,24 +377,24 @@ func (m portsForwardModel) renderConfirmationStep() string {
 		} else {
 			panel.WriteString("\n")
 		}
-		panel.WriteString(m.styles.label.Render("Add:") + "           " + utils.FormatPorts(m.addPorts))
+		panel.WriteString(m.styles.Label.Render("Add:") + "           " + utils.FormatPorts(m.addPorts))
 	}
 
-	s.WriteString(m.styles.panel.Render(panel.String()))
+	s.WriteString(m.styles.Panel.Render(panel.String()))
 	s.WriteString("\n\nConfirm changes?\n\n")
 
 	options := []string{"✓ Apply Changes", "✗ Cancel"}
 	for i, option := range options {
 		cursor := "  "
 		if m.cursor == i {
-			cursor = m.styles.cursor.Render("▶ ")
-			option = m.styles.selected.Render(option)
+			cursor = m.styles.Cursor.Render("▶ ")
+			option = m.styles.Selected.Render(option)
 		}
 		s.WriteString(fmt.Sprintf("%s%s\n", cursor, option))
 	}
 
 	s.WriteString("\n")
-	s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Confirm  ESC: Back"))
+	s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  ESC: Back"))
 
 	return s.String()
 }

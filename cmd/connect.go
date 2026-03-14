@@ -137,15 +137,12 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		Level:    sentry.LevelInfo,
 	})
 
-	busy := tui.NewBusyModel("Fetching instances...")
-	bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
-	busyDone := make(chan struct{})
-	go func() { _, _ = bp.Run(); close(busyDone) }()
-
-	instances, err := client.ListInstances()
-	bp.Send(tui.BusyDoneMsg{})
-	<-busyDone
-	if err != nil {
+	var instances []api.Instance
+	if err := tui.RunWithBusySpinner("Fetching instances...", os.Stdout, func() error {
+		var e error
+		instances, e = client.ListInstances()
+		return e
+	}); err != nil {
 		return fmt.Errorf("failed to list instances: %w", err)
 	}
 	if len(instances) == 0 {
@@ -167,13 +164,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			return err
 		}
 	} else {
-		var foundInstance *api.Instance
-		for i := range instances {
-			if instances[i].ID == instanceID || instances[i].UUID == instanceID || instances[i].Name == instanceID {
-				foundInstance = &instances[i]
-				break
-			}
-		}
+		foundInstance := findInstance(instances, instanceID)
 
 		if foundInstance == nil {
 			return fmt.Errorf("instance '%s' not found", instanceID)
@@ -297,13 +288,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		return fmt.Errorf("failed to list instances: %w", err)
 	}
 
-	var instance *api.Instance
-	for i := range instances {
-		if instances[i].ID == instanceID || instances[i].UUID == instanceID || instances[i].Name == instanceID {
-			instance = &instances[i]
-			break
-		}
-	}
+	instance := findInstance(instances, instanceID)
 
 	if instance == nil {
 		err := fmt.Errorf("instance %s not found", instanceID)

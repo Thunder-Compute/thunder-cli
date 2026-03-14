@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
@@ -34,46 +33,25 @@ type deleteModel struct {
 	spinner   spinner.Model
 	err       error
 
-	styles deleteStyles
-}
-
-type deleteStyles struct {
-	title       lipgloss.Style
-	selected    lipgloss.Style
-	cursor      lipgloss.Style
-	warningBox  lipgloss.Style
-	instanceBox lipgloss.Style
-	label       lipgloss.Style
-	help        lipgloss.Style
-}
-
-func newDeleteStyles() deleteStyles {
-	return deleteStyles{
-		title:      PrimaryTitleStyle().MarginTop(1).MarginBottom(1),
-		selected:   PrimarySelectedStyle(),
-		cursor:     PrimaryCursorStyle(),
-		warningBox: WarningBoxStyle().MarginTop(1).MarginBottom(1),
-		instanceBox: PrimaryStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(theme.PrimaryColor)).
-			Padding(1, 2).
-			MarginTop(1).
-			MarginBottom(1),
-		label: LabelStyle(),
-		help:  HelpStyle(),
-	}
+	styles     PanelStyles
+	warningBox lipgloss.Style
 }
 
 func NewDeleteModel(client *api.Client, instances []api.Instance) deleteModel {
 	s := NewPrimarySpinner()
 
+	ps := NewPanelStyles()
+	// Override title with margins matching delete layout
+	ps.Title = PrimaryTitleStyle().MarginTop(1).MarginBottom(1)
+
 	return deleteModel{
-		step:      deleteStepSelect,
-		client:    client,
-		loading:   false,
-		spinner:   s,
-		instances: instances,
-		styles:    newDeleteStyles(),
+		step:       deleteStepSelect,
+		client:     client,
+		loading:    false,
+		spinner:    s,
+		instances:  instances,
+		styles:     ps,
+		warningBox: WarningBoxStyle().MarginTop(1).MarginBottom(1),
 	}
 }
 
@@ -179,7 +157,7 @@ func (m deleteModel) View() string {
 
 	var s strings.Builder
 
-	s.WriteString(m.styles.title.Render("⚡ Delete Thunder Compute Instance"))
+	s.WriteString(m.styles.Title.Render("⚡ Delete Thunder Compute Instance"))
 	s.WriteString("\n")
 
 	switch m.step {
@@ -189,7 +167,7 @@ func (m deleteModel) View() string {
 		for i, instance := range m.instances {
 			cursor := "  "
 			if m.cursor == i {
-				cursor = m.styles.cursor.Render("▶ ")
+				cursor = m.styles.Cursor.Render("▶ ")
 			}
 
 			// Determine status style
@@ -209,7 +187,7 @@ func (m deleteModel) View() string {
 
 			idAndName := fmt.Sprintf("(%s) %s", instance.ID, instance.Name)
 			if m.cursor == i {
-				idAndName = m.styles.selected.Render(idAndName)
+				idAndName = m.styles.Selected.Render(idAndName)
 			}
 
 			statusText := statusStyle.Render(fmt.Sprintf("(%s)", instance.Status))
@@ -225,7 +203,7 @@ func (m deleteModel) View() string {
 		}
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
 
 	case deleteStepConfirm:
 		warning := "WARNING: This action is IRREVERSIBLE!\n\n" +
@@ -233,18 +211,18 @@ func (m deleteModel) View() string {
 			"• Permanently destroy the instance and ALL data\n" +
 			"• Remove all SSH configuration for this instance\n" +
 			"• This action CANNOT be undone"
-		s.WriteString(m.styles.warningBox.Render(warning))
+		s.WriteString(m.warningBox.Render(warning))
 		s.WriteString("\n\n")
 
 		var instanceInfo strings.Builder
-		instanceInfo.WriteString(m.styles.label.Render("ID:           ") + m.selected.ID + "\n")
-		instanceInfo.WriteString(m.styles.label.Render("Name:         ") + m.selected.Name + "\n")
-		instanceInfo.WriteString(m.styles.label.Render("Status:       ") + m.selected.Status + "\n")
-		instanceInfo.WriteString(m.styles.label.Render("Mode:         ") + utils.Capitalize(m.selected.Mode) + "\n")
-		instanceInfo.WriteString(m.styles.label.Render("GPU:          ") + m.selected.NumGPUs + "x" + utils.FormatGPUType(m.selected.GPUType) + "\n")
-		instanceInfo.WriteString(m.styles.label.Render("Template:     ") + utils.Capitalize(m.selected.Template))
+		instanceInfo.WriteString(m.styles.Label.Render("ID:           ") + m.selected.ID + "\n")
+		instanceInfo.WriteString(m.styles.Label.Render("Name:         ") + m.selected.Name + "\n")
+		instanceInfo.WriteString(m.styles.Label.Render("Status:       ") + m.selected.Status + "\n")
+		instanceInfo.WriteString(m.styles.Label.Render("Mode:         ") + utils.Capitalize(m.selected.Mode) + "\n")
+		instanceInfo.WriteString(m.styles.Label.Render("GPU:          ") + m.selected.NumGPUs + "x" + utils.FormatGPUType(m.selected.GPUType) + "\n")
+		instanceInfo.WriteString(m.styles.Label.Render("Template:     ") + utils.Capitalize(m.selected.Template))
 
-		s.WriteString(m.styles.instanceBox.Render(instanceInfo.String()))
+		s.WriteString(m.styles.Panel.Render(instanceInfo.String()))
 		s.WriteString("\n\n")
 
 		s.WriteString("Are you sure you want to delete this instance?\n\n")
@@ -253,7 +231,7 @@ func (m deleteModel) View() string {
 		for i, option := range options {
 			cursor := "  "
 			if m.cursor == i {
-				cursor = m.styles.cursor.Render("▶ ")
+				cursor = m.styles.Cursor.Render("▶ ")
 			}
 			if i == 0 {
 				s.WriteString(fmt.Sprintf("%s%s\n", cursor, ErrorStyle().Render(option)))
@@ -263,7 +241,7 @@ func (m deleteModel) View() string {
 		}
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Cancel\n"))
 	}
 
 	return s.String()
