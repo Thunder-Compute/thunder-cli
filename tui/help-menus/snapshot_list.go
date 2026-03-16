@@ -13,14 +13,7 @@ func RenderSnapshotListHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                          SNAPSHOT LIST COMMAND                              │
-│                        List all your snapshots                              │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("SNAPSHOT LIST COMMAND", "List all your snapshots")
 
 	output.WriteString(HeaderStyle.Render(header))
 

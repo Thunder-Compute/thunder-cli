@@ -13,14 +13,7 @@ func RenderCompletionHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                             COMPLETION COMMAND                              │
-│                    Generate shell autocompletion scripts                    │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("COMPLETION COMMAND", "Generate shell autocompletion scripts")
 
 	output.WriteString(HeaderStyle.Render(header))
 
@@ -88,19 +81,19 @@ func RenderCompletionHelp(cmd *cobra.Command) {
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Bash"))
-	output.WriteString("         ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Add to ~/.bashrc or ~/.bash_profile"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Zsh"))
-	output.WriteString("          ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Add to ~/.zshrc"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Fish"))
-	output.WriteString("         ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Add to ~/.config/fish/config.fish"))
 	output.WriteString("\n")
 

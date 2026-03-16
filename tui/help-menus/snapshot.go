@@ -13,14 +13,7 @@ func RenderSnapshotHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                              SNAPSHOT COMMAND                               │
-│                     Manage Thunder Compute snapshots                        │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("SNAPSHOT COMMAND", "Manage Thunder Compute snapshots")
 
 	output.WriteString(HeaderStyle.Render(header))
 
@@ -43,7 +36,7 @@ func RenderSnapshotHelp(cmd *cobra.Command) {
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("list"))
-	output.WriteString("     ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("List all snapshots"))
 	output.WriteString("\n")
 
