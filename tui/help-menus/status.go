@@ -13,14 +13,7 @@ func RenderStatusHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                               STATUS COMMAND                                │
-│                    List and monitor Thunder Compute instances               │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("STATUS COMMAND", "List and monitor Thunder Compute instances")
 
 	output.WriteString(HeaderStyle.Render(header))
 

@@ -63,17 +63,39 @@ func RenderRootHelp(cmd *cobra.Command) {
 	output.WriteString(DescStyle.Render("tnr status"))
 	output.WriteString("\n\n")
 
-	// Commands Section
-	output.WriteString(SectionStyle.Render("● AVAILABLE COMMANDS"))
-	output.WriteString("\n\n")
-
+	cmdMap := make(map[string]*cobra.Command)
 	for _, subcmd := range cmd.Commands() {
 		if subcmd.IsAvailableCommand() && subcmd.Name() != "help" {
-			output.WriteString("  ")
-			output.WriteString(CommandStyle.Render(subcmd.Name()))
-			output.WriteString("   ")
-			output.WriteString(DescStyle.Render(subcmd.Short))
-			output.WriteString("\n")
+			cmdMap[subcmd.Name()] = subcmd
+		}
+	}
+
+	type section struct {
+		title    string
+		commands []string
+	}
+	sections := []section{
+		{"CORE", []string{"create", "status", "connect", "modify", "delete"}},
+		{"UTILS", []string{"scp", "ports", "snapshot", "ssh-keys"}},
+		{"SETTINGS", []string{"login", "logout", "update"}},
+	}
+
+	output.WriteString(SectionStyle.Render("● COMMANDS"))
+	output.WriteString("\n")
+
+	for _, sec := range sections {
+		output.WriteString("\n")
+		output.WriteString("  ")
+		output.WriteString(DescStyle.Render(sec.title))
+		output.WriteString("\n")
+		for _, name := range sec.commands {
+			if subcmd, ok := cmdMap[name]; ok {
+				output.WriteString("  ")
+				output.WriteString(CommandStyle.Render(subcmd.Name()))
+				output.WriteString("   ")
+				output.WriteString(DescStyle.Render(subcmd.Short))
+				output.WriteString("\n")
+			}
 		}
 	}
 	output.WriteString("\n")

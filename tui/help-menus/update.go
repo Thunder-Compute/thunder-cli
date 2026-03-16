@@ -13,14 +13,7 @@ func RenderUpdateHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                               UPDATE COMMAND                                │
-│                      Update tnr to the latest version                       │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("UPDATE COMMAND", "Update tnr to the latest version")
 
 	output.WriteString(HeaderStyle.Render(header))
 

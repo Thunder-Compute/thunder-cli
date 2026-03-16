@@ -13,14 +13,7 @@ func RenderSnapshotDeleteHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                         SNAPSHOT DELETE COMMAND                             │
-│                        Delete a snapshot permanently                        │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("SNAPSHOT DELETE COMMAND", "Delete a snapshot permanently")
 
 	output.WriteString(HeaderStyle.Render(header))
 
@@ -29,13 +22,13 @@ func RenderSnapshotDeleteHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Interactive"))
-	output.WriteString("        ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("tnr snapshot delete"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Non-interactive"))
-	output.WriteString("    ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("tnr snapshot delete <snapshot_name>"))
 	output.WriteString("\n\n")
 

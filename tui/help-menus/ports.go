@@ -13,14 +13,7 @@ func RenderPortsHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                               PORTS COMMAND                                 │
-│                   Manage HTTP port forwarding for instances                 │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("PORTS COMMAND", "Manage HTTP port forwarding for instances")
 
 	output.WriteString(HeaderStyle.Render(header))
 
@@ -36,14 +29,14 @@ func RenderPortsHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("list, ls     "))
-	output.WriteString(" ")
+	output.WriteString(CommandStyle.Render("list, ls"))
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("List forwarded ports for all instances"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
-	output.WriteString(CommandStyle.Render("forward, fwd "))
-	output.WriteString(" ")
+	output.WriteString(CommandStyle.Render("forward, fwd"))
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Forward HTTP ports for an instance"))
 	output.WriteString("\n\n")
 
@@ -113,14 +106,7 @@ func RenderPortsForwardHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                            PORTS FORWARD COMMAND                            │
-│                      Forward HTTP ports for an instance                     │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("PORTS FORWARD COMMAND", "Forward HTTP ports for an instance")
 
 	output.WriteString(HeaderStyle.Render(header))
 
@@ -136,7 +122,7 @@ func RenderPortsForwardHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--add"))
-	output.WriteString("      ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Ports to add (comma-separated or ranges like 8000-8005)"))
 	output.WriteString("\n")
 	output.WriteString("  ")
@@ -184,14 +170,7 @@ func RenderPortsListHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                             PORTS LIST COMMAND                              │
-│                   List forwarded ports for all instances                    │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("PORTS LIST COMMAND", "List forwarded ports for all instances")
 
 	output.WriteString(HeaderStyle.Render(header))
 

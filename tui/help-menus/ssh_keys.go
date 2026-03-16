@@ -13,14 +13,7 @@ func RenderSSHKeysHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                             SSH KEYS COMMAND                                │
-│                     Manage saved SSH public keys                            │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("SSH KEYS COMMAND", "Manage saved SSH public keys")
 
 	output.WriteString(HeaderStyle.Render(header))
 
@@ -35,13 +28,13 @@ func RenderSSHKeysHelp(cmd *cobra.Command) {
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("list"))
-	output.WriteString("     ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("List all saved SSH keys"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("add"))
-	output.WriteString("      ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Add an SSH public key"))
 	output.WriteString("\n")
 

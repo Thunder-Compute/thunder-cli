@@ -13,14 +13,7 @@ func RenderSSHKeysListHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                          SSH KEYS LIST COMMAND                              │
-│                        List all saved SSH keys                              │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("SSH KEYS LIST COMMAND", "List all saved SSH keys")
 
 	output.WriteString(HeaderStyle.Render(header))
 

@@ -13,14 +13,7 @@ func RenderSnapshotCreateHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                         SNAPSHOT CREATE COMMAND                             │
-│                     Create snapshots of running instances                   │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("SNAPSHOT CREATE COMMAND", "Create snapshots of running instances")
 
 	output.WriteString(HeaderStyle.Render(header))
 
@@ -29,13 +22,13 @@ func RenderSnapshotCreateHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Interactive"))
-	output.WriteString("        ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("tnr snapshot create"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Non-interactive"))
-	output.WriteString("    ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("tnr snapshot create --instance-id <id> --name <name>"))
 	output.WriteString("\n\n")
 

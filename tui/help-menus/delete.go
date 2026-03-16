@@ -13,14 +13,7 @@ func RenderDeleteHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                               DELETE COMMAND                                │
-│                    Permanently remove Thunder Compute instances             │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("DELETE COMMAND", "Permanently remove Thunder Compute instances")
 
 	output.WriteString(HeaderStyle.Render(header))
 
