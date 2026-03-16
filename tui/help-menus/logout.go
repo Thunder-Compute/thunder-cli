@@ -13,14 +13,7 @@ func RenderLogoutHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                                LOGOUT COMMAND                               │
-│                    Remove Thunder Compute authentication                    │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("LOGOUT COMMAND", "Remove Thunder Compute authentication")
 
 	output.WriteString(HeaderStyle.Render(header))
 

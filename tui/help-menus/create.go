@@ -13,14 +13,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                                CREATE COMMAND                               │
-│                    Create new Thunder Compute GPU instances                 │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("CREATE COMMAND", "Create new Thunder Compute GPU instances")
 
 	output.WriteString(HeaderStyle.Render(header))
 

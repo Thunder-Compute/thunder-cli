@@ -13,14 +13,7 @@ func RenderConnectHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                                 CONNECT COMMAND                             │
-│                     Establish SSH connection to instances                   │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("CONNECT COMMAND", "Establish SSH connection to instances")
 
 	output.WriteString(HeaderStyle.Render(header))
 

@@ -13,14 +13,7 @@ func RenderModifyHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                                MODIFY COMMAND                               │
-│                   Modify Thunder Compute instance configuration             │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("MODIFY COMMAND", "Modify Thunder Compute instance configuration")
 
 	output.WriteString(HeaderStyle.Render(header))
 

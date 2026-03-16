@@ -13,14 +13,7 @@ func RenderSCPHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                                  SCP COMMAND                                │
-│                    Copy files between local and remote instances            │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("SCP COMMAND", "Copy files between local and remote instances")
 
 	output.WriteString(HeaderStyle.Render(header))
 
