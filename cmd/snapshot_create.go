@@ -88,6 +88,10 @@ func runSnapshotCreate(cmd *cobra.Command) error {
 				PrintWarningSimple("User cancelled snapshot creation")
 				return nil
 			}
+			if errors.Is(err, tui.ErrNoRunningInstances) {
+				PrintWarningSimple("No running instances found. Snapshots can only be created from instances in RUNNING state.")
+				return nil
+			}
 			return err
 		}
 		instanceID = createConfig.InstanceID
