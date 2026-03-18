@@ -369,9 +369,9 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 				return req, fmt.Errorf("num-gpus %d is not valid for %s prototyping. Allowed: %s", numGPUs, effectiveGPU, strings.Join(allowedCounts, ", "))
 			}
 		} else {
-			validGPUs := []int{1, 2, 4}
+			validGPUs := []int{1, 2, 4, 8}
 			if !contains(validGPUs, numGPUs) {
-				return req, fmt.Errorf("num-gpus must be 1, 2, or 4")
+				return req, fmt.Errorf("num-gpus must be 1, 2, 4, or 8")
 			}
 		}
 
