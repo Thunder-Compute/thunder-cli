@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -37,6 +38,24 @@ type CreateConfig struct {
 	Confirmed  bool
 }
 
+// CreatePresets holds flag values provided on the command line for hybrid mode.
+// nil pointer means the flag was not set.
+type CreatePresets struct {
+	Mode       *string
+	GPUType    *string
+	NumGPUs    *int
+	VCPUs      *int
+	Template   *string
+	DiskSizeGB *int
+	Yes        bool // skip confirmation step
+}
+
+// IsEmpty returns true if no preset flags were set.
+func (p *CreatePresets) IsEmpty() bool {
+	return p.Mode == nil && p.GPUType == nil && p.NumGPUs == nil &&
+		p.VCPUs == nil && p.Template == nil && p.DiskSizeGB == nil && !p.Yes
+}
+
 type createModel struct {
 	step             createStep
 	cursor           int
@@ -55,8 +74,9 @@ type createModel struct {
 	gpuCountPhase    bool // when true, stepCompute shows GPU count selection before vCPU selection
 	pricing          *utils.PricingData
 	pricingLoaded    bool
-
-	styles PanelStyles
+	presets          *CreatePresets
+	skippedSteps     map[createStep]bool // records which steps were auto-filled
+	styles           PanelStyles
 }
 
 func NewCreateModel(client *api.Client) createModel {
@@ -75,15 +95,237 @@ func NewCreateModel(client *api.Client) createModel {
 	s := NewPrimarySpinner()
 
 	return createModel{
-		step:      stepMode,
-		client:    client,
-		diskInput: ti,
-		spinner:   s,
-		styles:    styles,
+		step:         stepMode,
+		client:       client,
+		diskInput:    ti,
+		spinner:      s,
+		styles:       styles,
+		skippedSteps: make(map[createStep]bool),
 		config: CreateConfig{
 			DiskSizeGB: 100,
 		},
 	}
+}
+
+// NewCreateModelWithPresets creates a createModel with pre-filled values from CLI flags.
+func NewCreateModelWithPresets(client *api.Client, presets *CreatePresets) createModel {
+	m := NewCreateModel(client)
+	m.presets = presets
+	m.trySkipCurrentStep()
+	return m
+}
+
+// resolveGPUForMode normalizes a user-provided GPU string and validates it
+// against the given mode. Returns the canonical GPU type and true if valid.
+func resolveGPUForMode(raw, mode string) (string, bool) {
+	raw = strings.ToLower(raw)
+	gpuMap := map[string]string{"a6000": "a6000", "a100": "a100xl", "h100": "h100"}
+	canonical, ok := gpuMap[raw]
+	if !ok {
+		return "", false
+	}
+	if mode == "production" && canonical == "a6000" {
+		return "", false
+	}
+	return canonical, true
+}
+
+// trySkipCurrentStep is the core hybrid-mode method. It loops forward through
+// steps, auto-filling each one from presets if the preset value is valid given
+// the current config state. Called after every step transition.
+func (m *createModel) trySkipCurrentStep() tea.Cmd {
+	for {
+		skipped := false
+
+		switch m.step {
+		case stepMode:
+			if m.presets != nil && m.presets.Mode != nil {
+				mode := strings.ToLower(*m.presets.Mode)
+				if mode == "prototyping" || mode == "production" {
+					m.config.Mode = mode
+					m.skippedSteps[stepMode] = true
+					skipped = true
+				}
+			}
+
+		case stepGPU:
+			if m.presets != nil && m.presets.GPUType != nil {
+				canonical, ok := resolveGPUForMode(*m.presets.GPUType, m.config.Mode)
+				if ok {
+					m.config.GPUType = canonical
+					m.skippedSteps[stepGPU] = true
+					skipped = true
+				}
+			}
+
+		case stepCompute:
+			skipped = m.trySkipCompute()
+
+		case stepTemplate:
+			return m.trySkipTemplate()
+
+		case stepDiskSize:
+			if m.presets != nil && m.presets.DiskSizeGB != nil {
+				v := *m.presets.DiskSizeGB
+				if v >= 100 && v <= 1000 {
+					m.config.DiskSizeGB = v
+					m.diskInput.SetValue(fmt.Sprintf("%d", v))
+					m.skippedSteps[stepDiskSize] = true
+					skipped = true
+				}
+			}
+
+		case stepConfirmation:
+			if m.presets != nil && m.presets.Yes {
+				m.config.Confirmed = true
+				m.skippedSteps[stepConfirmation] = true
+				m.step = stepComplete
+				return tea.Quit
+			}
+			return nil
+		}
+
+		if !skipped {
+			m.initStep()
+			return nil
+		}
+
+		m.step++
+	}
+}
+
+// trySkipCompute handles the complex compute step with its sub-phases.
+func (m *createModel) trySkipCompute() bool {
+	if m.presets == nil {
+		return false
+	}
+
+	if m.config.Mode == "production" {
+		if m.presets.NumGPUs == nil {
+			return false
+		}
+		if slices.Contains([]int{1, 2, 4, 8}, *m.presets.NumGPUs) {
+			m.config.NumGPUs = *m.presets.NumGPUs
+			m.config.VCPUs = 18 * m.config.NumGPUs
+			return true
+		}
+		return false
+	}
+
+	// Prototyping mode
+	gpuType := m.config.GPUType
+	needsCount := utils.NeedsGPUCountPhase(gpuType)
+
+	if !needsCount {
+		// Single-GPU type (a6000): numGPUs is always 1
+		m.config.NumGPUs = 1
+		if m.presets.VCPUs == nil {
+			return false
+		}
+		if slices.Contains(utils.PrototypingVCPUOptions(gpuType, 1), *m.presets.VCPUs) {
+			m.config.VCPUs = *m.presets.VCPUs
+			return true
+		}
+		return false
+	}
+
+	// Multi-GPU type: need both num-gpus and vcpus to fully skip
+	if m.presets.NumGPUs != nil && m.presets.VCPUs != nil {
+		if slices.Contains(utils.PrototypingGPUCounts(gpuType), *m.presets.NumGPUs) {
+			if slices.Contains(utils.PrototypingVCPUOptions(gpuType, *m.presets.NumGPUs), *m.presets.VCPUs) {
+				m.config.NumGPUs = *m.presets.NumGPUs
+				m.config.VCPUs = *m.presets.VCPUs
+				return true
+			}
+		}
+		return false
+	}
+
+	// Partial: only num-gpus — skip GPU count sub-phase, show vCPU selection
+	if m.presets.NumGPUs != nil {
+		if slices.Contains(utils.PrototypingGPUCounts(gpuType), *m.presets.NumGPUs) {
+			m.config.NumGPUs = *m.presets.NumGPUs
+			m.gpuCountPhase = false
+			return false // don't skip the whole step, just the sub-phase
+		}
+	}
+
+	return false
+}
+
+// trySkipTemplate handles the template step, which depends on async-loaded data.
+func (m *createModel) trySkipTemplate() tea.Cmd {
+	if m.presets == nil || m.presets.Template == nil {
+		m.initStep()
+		return nil
+	}
+
+	if !m.templatesLoaded || !m.snapshotsLoaded {
+		// Data not loaded yet — show spinner, re-attempt when data arrives
+		return nil
+	}
+
+	raw := *m.presets.Template
+
+	// Check templates by key or display name
+	for _, t := range m.templates {
+		if t.Key == raw || strings.EqualFold(t.Template.DisplayName, raw) {
+			m.config.Template = t.Key
+			m.selectedSnapshot = nil
+			m.skippedSteps[stepTemplate] = true
+			if m.presets.DiskSizeGB == nil {
+				m.diskInput.SetValue("100")
+			}
+			m.step++
+			return m.trySkipCurrentStep() // continue the skip chain
+		}
+	}
+
+	// Check snapshots by name
+	for i, s := range m.snapshots {
+		if s.Name == raw {
+			m.config.Template = s.Name
+			m.selectedSnapshot = &m.snapshots[i]
+			m.skippedSteps[stepTemplate] = true
+			if m.presets.DiskSizeGB == nil {
+				m.diskInput.SetValue(fmt.Sprintf("%d", s.MinimumDiskSizeGB))
+			}
+			m.step++
+			return m.trySkipCurrentStep()
+		}
+	}
+
+	// Not found — user picks manually
+	m.initStep()
+	return nil
+}
+
+// initStep sets up step-specific state (cursor, focus, sub-phases) when arriving at a visible step.
+func (m *createModel) initStep() {
+	m.cursor = 0
+	switch m.step {
+	case stepCompute:
+		if m.config.Mode == "prototyping" && utils.NeedsGPUCountPhase(m.config.GPUType) && m.config.NumGPUs == 0 {
+			m.gpuCountPhase = true
+		} else if m.config.Mode == "prototyping" && !utils.NeedsGPUCountPhase(m.config.GPUType) {
+			m.config.NumGPUs = 1
+			m.gpuCountPhase = false
+		}
+	case stepDiskSize:
+		m.diskInput.Focus()
+	default:
+		m.diskInput.Blur()
+	}
+}
+
+// prevVisibleStep returns the previous non-skipped step. Returns -1 if none.
+func (m *createModel) prevVisibleStep(from createStep) createStep {
+	for s := from - 1; s >= stepMode; s-- {
+		if !m.skippedSteps[s] {
+			return s
+		}
+	}
+	return -1
 }
 
 type createTemplatesMsg struct {
@@ -171,6 +413,10 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = fmt.Errorf("no templates available")
 			return m, tea.Quit
 		}
+		// If waiting on template step with a preset, try to skip now
+		if m.step == stepTemplate && m.presets != nil && m.presets.Template != nil {
+			return m, m.trySkipCurrentStep()
+		}
 		return m, m.spinner.Tick
 
 	case createSnapshotsMsg:
@@ -179,6 +425,10 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.snapshots = msg.snapshots
 		}
 		m.snapshotsLoaded = true
+		// If waiting on template step with a preset, try to skip now
+		if m.step == stepTemplate && m.presets != nil && m.presets.Template != nil {
+			return m, m.trySkipCurrentStep()
+		}
 		return m, m.spinner.Tick
 
 	case createPricingMsg:
@@ -208,16 +458,20 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Go back to GPU count selection phase
 				m.gpuCountPhase = true
 				m.cursor = 0
-			} else if m.step > stepMode {
-				m.step--
+			} else {
+				prev := m.prevVisibleStep(m.step)
+				if prev < 0 {
+					m.quitting = true
+					return m, tea.Quit
+				}
+				m.step = prev
 				m.cursor = 0
 				m.gpuCountPhase = false
 				if m.step == stepDiskSize {
+					m.diskInput.Focus()
+				} else {
 					m.diskInput.Blur()
 				}
-			} else if m.step == stepMode {
-				m.quitting = true
-				return m, tea.Quit
 			}
 
 		case "enter":
@@ -254,20 +508,13 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 		modes := []string{"prototyping", "production"}
 		m.config.Mode = modes[m.cursor]
 		m.step = stepGPU
-		m.cursor = 0
+		return m, m.trySkipCurrentStep()
 
 	case stepGPU:
 		gpus := m.getGPUOptions()
 		m.config.GPUType = gpus[m.cursor]
 		m.step = stepCompute
-		m.cursor = 0
-		// Some prototyping GPU types support multi-GPU, so show GPU count selection first
-		if m.config.Mode == "prototyping" && utils.NeedsGPUCountPhase(m.config.GPUType) {
-			m.gpuCountPhase = true
-		} else if m.config.Mode == "prototyping" {
-			m.config.NumGPUs = 1
-			m.gpuCountPhase = false
-		}
+		return m, m.trySkipCurrentStep()
 
 	case stepCompute:
 		if m.gpuCountPhase {
@@ -275,40 +522,48 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.config.NumGPUs = gpuCounts[m.cursor]
 			m.gpuCountPhase = false
 			m.cursor = 0
+			// Check if vCPUs preset can now be applied
+			if m.presets != nil && m.presets.VCPUs != nil {
+				if slices.Contains(utils.PrototypingVCPUOptions(m.config.GPUType, m.config.NumGPUs), *m.presets.VCPUs) {
+					m.config.VCPUs = *m.presets.VCPUs
+					m.step = stepTemplate
+					return m, m.trySkipCurrentStep()
+				}
+			}
 			// Stay on stepCompute to show vCPU options next
 		} else if m.config.Mode == "prototyping" {
 			vcpuOpts := utils.PrototypingVCPUOptions(m.config.GPUType, m.config.NumGPUs)
 			m.config.VCPUs = vcpuOpts[m.cursor]
 			m.step = stepTemplate
-			m.cursor = 0
+			return m, m.trySkipCurrentStep()
 		} else {
 			numGPUs := []int{1, 2, 4, 8}
 			m.config.NumGPUs = numGPUs[m.cursor]
 			m.config.VCPUs = 18 * m.config.NumGPUs
 			m.step = stepTemplate
-			m.cursor = 0
+			return m, m.trySkipCurrentStep()
 		}
 
 	case stepTemplate:
 		totalOptions := len(m.templates) + len(m.snapshots)
 		if m.cursor < totalOptions {
-			// Check if cursor is on a template or snapshot
 			if m.cursor < len(m.templates) {
-				// Selected a template
 				m.config.Template = m.templates[m.cursor].Key
 				m.selectedSnapshot = nil
-				m.diskInput.SetValue("100")
+				if m.presets == nil || m.presets.DiskSizeGB == nil {
+					m.diskInput.SetValue("100")
+				}
 			} else {
-				// Selected a snapshot
 				snapshotIndex := m.cursor - len(m.templates)
 				snapshot := m.snapshots[snapshotIndex]
 				m.config.Template = snapshot.Name
 				m.selectedSnapshot = &snapshot
-				// Set minimum disk size from snapshot
-				m.diskInput.SetValue(fmt.Sprintf("%d", snapshot.MinimumDiskSizeGB))
+				if m.presets == nil || m.presets.DiskSizeGB == nil {
+					m.diskInput.SetValue(fmt.Sprintf("%d", snapshot.MinimumDiskSizeGB))
+				}
 			}
 			m.step = stepDiskSize
-			m.diskInput.Focus()
+			return m, m.trySkipCurrentStep()
 		}
 
 	case stepDiskSize:
@@ -317,20 +572,18 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.validationErr = fmt.Errorf("disk size must be between 100 and 1000 GB")
 			return m, nil
 		}
-		// Check against snapshot minimum if a snapshot was selected
 		if m.selectedSnapshot != nil && diskSize < m.selectedSnapshot.MinimumDiskSizeGB {
 			m.validationErr = fmt.Errorf("disk size must be at least %d GB for snapshot '%s'", m.selectedSnapshot.MinimumDiskSizeGB, m.selectedSnapshot.Name)
 			return m, nil
 		}
 		m.config.DiskSizeGB = diskSize
 		m.validationErr = nil
-		m.step = stepConfirmation
-		m.cursor = 0
 		m.diskInput.Blur()
+		m.step = stepConfirmation
+		return m, m.trySkipCurrentStep()
 
 	case stepConfirmation:
 		if m.cursor == 0 {
-			// Create instance
 			m.config.Confirmed = true
 			m.step = stepComplete
 			return m, tea.Quit
@@ -399,7 +652,7 @@ func (m createModel) View() string {
 		adjustedStep := int(m.step)
 		if i == adjustedStep {
 			progress += m.styles.Selected.Render(fmt.Sprintf("[%s]", stepName))
-		} else if i < adjustedStep {
+		} else if i < adjustedStep || m.skippedSteps[createStep(i)] {
 			progress += fmt.Sprintf("[✓ %s]", stepName)
 		} else {
 			progress += fmt.Sprintf("[%s]", stepName)
@@ -687,9 +940,7 @@ func (m createModel) computePreviewPrice() float64 {
 	return utils.CalculateHourlyPrice(m.pricing, mode, gpuType, numGPUs, vcpus, diskSizeGB)
 }
 
-func RunCreateInteractive(client *api.Client) (*CreateConfig, error) {
-	InitCommonStyles(os.Stdout)
-	m := NewCreateModel(client)
+func runCreateModel(m createModel) (*CreateConfig, error) {
 	p := tea.NewProgram(m)
 	finalModel, err := p.Run()
 	if err != nil {
@@ -710,4 +961,17 @@ func RunCreateInteractive(client *api.Client) (*CreateConfig, error) {
 	}
 
 	return &result.config, nil
+}
+
+func RunCreateInteractive(client *api.Client) (*CreateConfig, error) {
+	InitCommonStyles(os.Stdout)
+	m := NewCreateModel(client)
+	return runCreateModel(m)
+}
+
+// RunCreateHybrid runs the create TUI with some steps pre-filled from CLI flags.
+func RunCreateHybrid(client *api.Client, presets *CreatePresets) (*CreateConfig, error) {
+	InitCommonStyles(os.Stdout)
+	m := NewCreateModelWithPresets(client, presets)
+	return runCreateModel(m)
 }

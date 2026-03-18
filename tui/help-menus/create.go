@@ -69,6 +69,23 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString(CommandTextStyle.Render("tnr create --mode prototyping --gpu a6000 --vcpus 4 --template base --ssh-key my-key"))
 	output.WriteString("\n\n")
 
+	output.WriteString("  ")
+	output.WriteString(ExampleStyle.Render("# Partial flags — interactive wizard skips pre-filled steps"))
+	output.WriteString("\n")
+	output.WriteString("  ")
+	output.WriteString(CommandTextStyle.Render("tnr create --template ollama"))
+	output.WriteString("\n")
+	output.WriteString("  ")
+	output.WriteString(CommandTextStyle.Render("tnr create --mode production --gpu h100"))
+	output.WriteString("\n\n")
+
+	output.WriteString("  ")
+	output.WriteString(ExampleStyle.Render("# Skip confirmation with --yes"))
+	output.WriteString("\n")
+	output.WriteString("  ")
+	output.WriteString(CommandTextStyle.Render("tnr create --mode prototyping --gpu a6000 --vcpus 8 --template base -y"))
+	output.WriteString("\n\n")
+
 	// Flags Section
 	output.WriteString(SectionStyle.Render("● FLAGS"))
 	output.WriteString("\n\n")
@@ -113,6 +130,12 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString(FlagStyle.Render("--ssh-key"))
 	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')"))
+	output.WriteString("\n")
+
+	output.WriteString("  ")
+	output.WriteString(FlagStyle.Render("-y, --yes"))
+	output.WriteString("   ")
+	output.WriteString(DescStyle.Render("Skip confirmation step (auto-confirm)"))
 	output.WriteString("\n\n")
 
 	fmt.Fprint(os.Stdout, output.String())

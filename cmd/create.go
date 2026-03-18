@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,6 +28,7 @@ var (
 	template         string
 	diskSizeGB       int
 	createSSHKeyName string
+	createYes        bool
 )
 
 var createCmd = &cobra.Command{
@@ -71,6 +73,7 @@ func init() {
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (100-1000)")
 	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-key", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
+	createCmd.Flags().BoolVarP(&createYes, "yes", "y", false, "Skip confirmation step (auto-confirm)")
 }
 
 func createInstanceCmd(client *api.Client, req api.CreateInstanceRequest, resp **api.CreateInstanceResponse) tea.Cmd {
@@ -109,17 +112,41 @@ func renderCreateSuccess(resp **api.CreateInstanceResponse) func() string {
 	}
 }
 
+func buildCreatePresets(cmd *cobra.Command) *tui.CreatePresets {
+	p := &tui.CreatePresets{Yes: createYes}
+	if cmd.Flags().Changed("mode") {
+		p.Mode = &mode
+	}
+	if cmd.Flags().Changed("gpu") {
+		p.GPUType = &gpuType
+	}
+	if cmd.Flags().Changed("num-gpus") {
+		p.NumGPUs = &numGPUs
+	}
+	if cmd.Flags().Changed("vcpus") {
+		p.VCPUs = &vcpus
+	}
+	if cmd.Flags().Changed("template") {
+		p.Template = &template
+	}
+	if cmd.Flags().Changed("disk-size-gb") {
+		p.DiskSizeGB = &diskSizeGB
+	}
+	return p
+}
+
 func runCreate(cmd *cobra.Command) error {
 	client, err := getAuthenticatedClient()
 	if err != nil {
 		return err
 	}
 
-	isInteractive := !cmd.Flags().Changed("mode")
+	presets := buildCreatePresets(cmd)
 
 	var createConfig *tui.CreateConfig
 
-	if isInteractive {
+	if presets.IsEmpty() {
+		// No flags set — full interactive TUI
 		createConfig, err = tui.RunCreateInteractive(client)
 		if err != nil {
 			if errors.Is(err, tui.ErrCancelled) {
@@ -128,17 +155,17 @@ func runCreate(cmd *cobra.Command) error {
 			}
 			return err
 		}
-	} else {
+	} else if cmd.Flags().Changed("mode") && !createYes {
+		// Try fully non-interactive path (backward compat for scripting)
 		var templates []api.TemplateEntry
 		var snapshots []api.Snapshot
-		if err := tui.RunWithBusySpinner("Fetching templates and snapshots...", os.Stdout, func() error {
+		if fetchErr := tui.RunWithBusySpinner("Fetching templates and snapshots...", os.Stdout, func() error {
 			var e error
 			templates, e = client.ListTemplates()
 			if e != nil {
 				return e
 			}
 			snapshots, _ = client.ListSnapshots()
-			// Filter for READY snapshots only
 			readySnapshots := make([]api.Snapshot, 0)
 			for _, s := range snapshots {
 				if s.Status == "READY" {
@@ -147,17 +174,15 @@ func runCreate(cmd *cobra.Command) error {
 			}
 			snapshots = readySnapshots
 			return nil
-		}); err != nil {
-			return fmt.Errorf("failed to fetch templates: %w", err)
+		}); fetchErr != nil {
+			return fmt.Errorf("failed to fetch templates: %w", fetchErr)
 		}
 
 		if len(templates) == 0 {
 			return fmt.Errorf("no templates available")
 		}
 
-		// Check if disk size was explicitly set by the user
 		diskSizeWasSet := cmd.Flags().Changed("disk-size-gb")
-
 		createConfig = &tui.CreateConfig{
 			Mode:       mode,
 			GPUType:    gpuType,
@@ -167,23 +192,41 @@ func runCreate(cmd *cobra.Command) error {
 			DiskSizeGB: diskSizeGB,
 		}
 
-		if err := validateCreateConfig(createConfig, templates, snapshots, diskSizeWasSet); err != nil {
+		if valErr := validateCreateConfig(createConfig, templates, snapshots, diskSizeWasSet); valErr != nil {
+			// Validation failed — fall through to hybrid mode
+			createConfig, err = tui.RunCreateHybrid(client, presets)
+			if err != nil {
+				if errors.Is(err, tui.ErrCancelled) {
+					PrintWarningSimple("User cancelled creation process")
+					return nil
+				}
+				return err
+			}
+		} else {
+			// Fully non-interactive succeeded
+			if pricing, pErr := client.FetchPricing(); pErr == nil {
+				pd := &utils.PricingData{Rates: pricing}
+				price := utils.CalculateHourlyPrice(pd, createConfig.Mode, createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB)
+				fmt.Printf("\nEstimated cost: %s\n", utils.FormatPrice(price))
+			}
+
+			if createConfig.Mode == "prototyping" {
+				fmt.Println()
+				PrintWarningSimple("PROTOTYPING MODE DISCLAIMER")
+				fmt.Println("Prototyping instances are designed for development and testing.")
+				fmt.Println("They may experience incompatibilities with some workloads")
+				fmt.Println("for production inference or long-running tasks.")
+			}
+		}
+	} else {
+		// Partial flags or --yes — hybrid TUI
+		createConfig, err = tui.RunCreateHybrid(client, presets)
+		if err != nil {
+			if errors.Is(err, tui.ErrCancelled) {
+				PrintWarningSimple("User cancelled creation process")
+				return nil
+			}
 			return err
-		}
-
-		// Display estimated pricing
-		if pricing, err := client.FetchPricing(); err == nil {
-			pd := &utils.PricingData{Rates: pricing}
-			price := utils.CalculateHourlyPrice(pd, createConfig.Mode, createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB)
-			fmt.Printf("\nEstimated cost: %s\n", utils.FormatPrice(price))
-		}
-
-		if createConfig.Mode == "prototyping" {
-			fmt.Println()
-			PrintWarningSimple("PROTOTYPING MODE DISCLAIMER")
-			fmt.Println("Prototyping instances are designed for development and testing.")
-			fmt.Println("They may experience incompatibilities with some workloads")
-			fmt.Println("for production inference or long-running tasks.")
 		}
 	}
 
@@ -300,14 +343,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 			return fmt.Errorf("prototyping mode requires --vcpus flag (options for %s with %d GPU(s): %v)", config.GPUType, config.NumGPUs, allowedVCPUs)
 		}
 
-		valid := false
-		for _, v := range allowedVCPUs {
-			if config.VCPUs == v {
-				valid = true
-				break
-			}
-		}
-		if !valid {
+		if !slices.Contains(allowedVCPUs, config.VCPUs) {
 			return fmt.Errorf("vcpus must be one of %v for %s with %d GPU(s)", allowedVCPUs, config.GPUType, config.NumGPUs)
 		}
 	} else {
@@ -321,15 +357,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 			return fmt.Errorf("production mode requires --num-gpus flag (1, 2, 4, or 8)")
 		}
 
-		validGPUs := []int{1, 2, 4, 8}
-		valid := false
-		for _, v := range validGPUs {
-			if config.NumGPUs == v {
-				valid = true
-				break
-			}
-		}
-		if !valid {
+		if !slices.Contains([]int{1, 2, 4, 8}, config.NumGPUs) {
 			return fmt.Errorf("num-gpus must be one of: 1, 2, 4, or 8")
 		}
 
