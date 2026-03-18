@@ -13,14 +13,7 @@ func RenderSSHKeysAddHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                           SSH KEYS ADD COMMAND                              │
-│                       Add an SSH public key                                 │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("SSH KEYS ADD COMMAND", "Add an SSH public key")
 
 	output.WriteString(HeaderStyle.Render(header))
 
@@ -28,12 +21,12 @@ func RenderSSHKeysAddHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Interactive"))
-	output.WriteString("        ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("tnr ssh-keys add"))
 	output.WriteString("\n")
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Non-interactive"))
-	output.WriteString("    ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("tnr ssh-keys add --name <name> [--key-file <path> | --key <key>]"))
 	output.WriteString("\n\n")
 
@@ -41,7 +34,7 @@ func RenderSSHKeysAddHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--name"))
-	output.WriteString("       ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Name for the SSH key (required for non-interactive)"))
 	output.WriteString("\n")
 	output.WriteString("  ")
@@ -51,7 +44,7 @@ func RenderSSHKeysAddHelp(cmd *cobra.Command) {
 	output.WriteString("\n")
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--key"))
-	output.WriteString("        ")
+	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("SSH public key string"))
 	output.WriteString("\n\n")
 

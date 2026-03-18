@@ -1,15 +1,16 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
 
+	"github.com/spf13/cobra"
+
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/spf13/cobra"
 )
 
 var snapshotDeleteCmd = &cobra.Command{
@@ -30,35 +31,22 @@ func init() {
 }
 
 func runSnapshotDelete(args []string) error {
-	config, err := LoadConfig()
+	client, err := getAuthenticatedClient()
 	if err != nil {
-		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
+		return err
 	}
-
-	if config.Token == "" {
-		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
-	}
-
-	client := api.NewClient(config.Token, config.APIURL)
 
 	var snapshotID string
 	var selectedSnapshot *api.Snapshot
 
 	if len(args) == 0 {
 		// Interactive mode: fetch snapshots and let user select
-		busy := tui.NewBusyModel("Fetching snapshots...")
-		bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
-		busyDone := make(chan struct{})
-		go func() {
-			_, _ = bp.Run()
-			close(busyDone)
-		}()
-
-		snapshots, err := client.ListSnapshots()
-		bp.Send(tui.BusyDoneMsg{})
-		<-busyDone
-
-		if err != nil {
+		var snapshots []api.Snapshot
+		if err := tui.RunWithBusySpinner("Fetching snapshots...", os.Stdout, func() error {
+			var e error
+			snapshots, e = client.ListSnapshots()
+			return e
+		}); err != nil {
 			return fmt.Errorf("failed to fetch snapshots: %w", err)
 		}
 
@@ -74,7 +62,7 @@ func runSnapshotDelete(args []string) error {
 
 		selectedSnapshot, err = tui.RunSnapshotDeleteInteractive(client, snapshots)
 		if err != nil {
-			if _, ok := err.(*tui.CancellationError); ok {
+			if errors.Is(err, tui.ErrCancelled) {
 				PrintWarningSimple("User cancelled delete process")
 				return nil
 			}
@@ -86,19 +74,12 @@ func runSnapshotDelete(args []string) error {
 		snapshotName := args[0]
 
 		// Validate snapshot exists
-		busy := tui.NewBusyModel("Validating snapshot...")
-		bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
-		busyDone := make(chan struct{})
-		go func() {
-			_, _ = bp.Run()
-			close(busyDone)
-		}()
-
-		snapshots, err := client.ListSnapshots()
-		bp.Send(tui.BusyDoneMsg{})
-		<-busyDone
-
-		if err != nil {
+		var snapshots []api.Snapshot
+		if err := tui.RunWithBusySpinner("Validating snapshot...", os.Stdout, func() error {
+			var e error
+			snapshots, e = client.ListSnapshots()
+			return e
+		}); err != nil {
 			return fmt.Errorf("failed to fetch snapshots: %w", err)
 		}
 

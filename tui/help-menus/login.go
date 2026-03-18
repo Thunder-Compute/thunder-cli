@@ -13,14 +13,7 @@ func RenderLoginHelp(cmd *cobra.Command) {
 
 	var output strings.Builder
 
-	header := `
-╭─────────────────────────────────────────────────────────────────────────────╮
-│                                                                             │
-│                                LOGIN COMMAND                                │
-│                     Authenticate with Thunder Compute                       │
-│                                                                             │
-╰─────────────────────────────────────────────────────────────────────────────╯
-	`
+	header := HelpHeader("LOGIN COMMAND", "Authenticate with Thunder Compute")
 
 	output.WriteString(HeaderStyle.Render(header))
 

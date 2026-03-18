@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 
+	termx "github.com/charmbracelet/x/term"
+	"github.com/spf13/cobra"
+
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
-	tea "github.com/charmbracelet/bubbletea"
-	termx "github.com/charmbracelet/x/term"
-	"github.com/spf13/cobra"
 )
 
 var snapshotListCmd = &cobra.Command{
@@ -32,16 +32,10 @@ func init() {
 }
 
 func runSnapshotList() error {
-	config, err := LoadConfig()
+	client, err := getAuthenticatedClient()
 	if err != nil {
-		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
+		return err
 	}
-
-	if config.Token == "" {
-		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
-	}
-
-	client := api.NewClient(config.Token, config.APIURL)
 	monitoring := !snapshotNoWait
 
 	if monitoring {
@@ -50,20 +44,12 @@ func runSnapshotList() error {
 		}
 	}
 
-	// Show busy spinner while fetching snapshots
-	busy := tui.NewBusyModel("Fetching snapshots...")
-	bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
-	busyDone := make(chan struct{})
-	go func() {
-		_, _ = bp.Run()
-		close(busyDone)
-	}()
-
-	snapshots, err := client.ListSnapshots()
-	bp.Send(tui.BusyDoneMsg{})
-	<-busyDone
-
-	if err != nil {
+	var snapshots []api.Snapshot
+	if err := tui.RunWithBusySpinner("Fetching snapshots...", os.Stdout, func() error {
+		var e error
+		snapshots, e = client.ListSnapshots()
+		return e
+	}); err != nil {
 		return fmt.Errorf("failed to fetch snapshots: %w", err)
 	}
 

@@ -137,15 +137,12 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		Level:    sentry.LevelInfo,
 	})
 
-	busy := tui.NewBusyModel("Fetching instances...")
-	bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
-	busyDone := make(chan struct{})
-	go func() { _, _ = bp.Run(); close(busyDone) }()
-
-	instances, err := client.ListInstances()
-	bp.Send(tui.BusyDoneMsg{})
-	<-busyDone
-	if err != nil {
+	var instances []api.Instance
+	if err := tui.RunWithBusySpinner("Fetching instances...", os.Stdout, func() error {
+		var e error
+		instances, e = client.ListInstances()
+		return e
+	}); err != nil {
 		return fmt.Errorf("failed to list instances: %w", err)
 	}
 	if len(instances) == 0 {
@@ -156,24 +153,18 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	if instanceID == "" {
 		instanceID, err = tui.RunConnectSelectWithInstances(instances)
 		if err != nil {
-			if _, ok := err.(*tui.CancellationError); ok {
+			if errors.Is(err, tui.ErrCancelled) {
 				PrintWarningSimple("User cancelled instance connection")
 				return nil
 			}
-			if err.Error() == "no running instances" {
+			if errors.Is(err, tui.ErrNoRunningInstances) {
 				PrintWarningSimple("No running instances found.")
 				return nil
 			}
 			return err
 		}
 	} else {
-		var foundInstance *api.Instance
-		for i := range instances {
-			if instances[i].ID == instanceID || instances[i].UUID == instanceID || instances[i].Name == instanceID {
-				foundInstance = &instances[i]
-				break
-			}
-		}
+		foundInstance := findInstance(instances, instanceID)
 
 		if foundInstance == nil {
 			return fmt.Errorf("instance '%s' not found", instanceID)
@@ -297,13 +288,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		return fmt.Errorf("failed to list instances: %w", err)
 	}
 
-	var instance *api.Instance
-	for i := range instances {
-		if instances[i].ID == instanceID || instances[i].UUID == instanceID || instances[i].Name == instanceID {
-			instance = &instances[i]
-			break
-		}
-	}
+	instance := findInstance(instances, instanceID)
 
 	if instance == nil {
 		err := fmt.Errorf("instance %s not found", instanceID)
@@ -746,7 +731,8 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	err = sshCmd.Run()
 	// Handle SSH exit codes (130 = Ctrl+C, 255 = connection closed)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			exitCode := exitErr.ExitCode()
 			if exitCode != 0 && exitCode != 130 && exitCode != 255 {
 				return fmt.Errorf("SSH session failed with exit code %d", exitCode)

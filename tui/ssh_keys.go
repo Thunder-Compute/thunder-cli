@@ -6,13 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/internal/sshkeys"
-	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/internal/sshkeys"
 )
 
 // ── SSH Key Add ─────────────────────────────────────────────────────────────
@@ -34,70 +34,43 @@ const (
 )
 
 type sshKeyAddModel struct {
-	step         sshKeyAddStep
-	cursor       int
-	localKeys    []sshkeys.DetectedKey
-	selectedKey  *sshkeys.DetectedKey // nil if "Paste key manually"
-	pasteManual  bool
-	nameInput    textinput.Model
-	keyInput     textinput.Model
-	config       SSHKeyAddConfig
-	quitting     bool
-	confirmed    bool
-	err          error
+	step        sshKeyAddStep
+	cursor      int
+	localKeys   []sshkeys.DetectedKey
+	selectedKey *sshkeys.DetectedKey // nil if "Paste key manually"
+	pasteManual bool
+	nameInput   textinput.Model
+	keyInput    textinput.Model
+	config      SSHKeyAddConfig
+	quitting    bool
+	confirmed   bool
+	err         error
 
-	styles sshKeyAddStyles
-}
-
-type sshKeyAddStyles struct {
-	title    lipgloss.Style
-	selected lipgloss.Style
-	cursor   lipgloss.Style
-	panel    lipgloss.Style
-	label    lipgloss.Style
-	help     lipgloss.Style
-}
-
-func newSSHKeyAddStyles() sshKeyAddStyles {
-	panelBase := PrimaryStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.PrimaryColor)).
-		Padding(1, 2).
-		MarginTop(1).
-		MarginBottom(1)
-
-	return sshKeyAddStyles{
-		title:    PrimaryTitleStyle().MarginBottom(1),
-		selected: PrimarySelectedStyle(),
-		cursor:   PrimaryCursorStyle(),
-		panel:    panelBase,
-		label:    LabelStyle(),
-		help:     HelpStyle(),
-	}
+	styles PanelStyles
 }
 
 func newSSHKeyAddModel(localKeys []sshkeys.DetectedKey) sshKeyAddModel {
-	styles := newSSHKeyAddStyles()
+	styles := NewPanelStyles()
 
 	nameInput := textinput.New()
 	nameInput.Placeholder = "my-key"
 	nameInput.CharLimit = 64
 	nameInput.Width = 40
 	nameInput.Prompt = "▶ "
-	nameInput.PromptStyle = styles.cursor
-	nameInput.TextStyle = styles.cursor
-	nameInput.PlaceholderStyle = styles.cursor
-	nameInput.Cursor.Style = styles.cursor
+	nameInput.PromptStyle = styles.Cursor
+	nameInput.TextStyle = styles.Cursor
+	nameInput.PlaceholderStyle = styles.Cursor
+	nameInput.Cursor.Style = styles.Cursor
 
 	keyInput := textinput.New()
 	keyInput.Placeholder = "ssh-ed25519 AAAA..."
 	keyInput.CharLimit = 2048
 	keyInput.Width = 60
 	keyInput.Prompt = "▶ "
-	keyInput.PromptStyle = styles.cursor
-	keyInput.TextStyle = styles.cursor
-	keyInput.PlaceholderStyle = styles.cursor
-	keyInput.Cursor.Style = styles.cursor
+	keyInput.PromptStyle = styles.Cursor
+	keyInput.TextStyle = styles.Cursor
+	keyInput.PlaceholderStyle = styles.Cursor
+	keyInput.Cursor.Style = styles.Cursor
 
 	return sshKeyAddModel{
 		step:      sshKeyAddStepSelect,
@@ -251,7 +224,7 @@ func (m sshKeyAddModel) View() string {
 	var s strings.Builder
 
 	s.WriteString("\n")
-	s.WriteString(m.styles.title.Render("⚡ Add SSH Key"))
+	s.WriteString(m.styles.Title.Render("⚡ Add SSH Key"))
 	s.WriteString("\n\n")
 
 	switch m.step {
@@ -260,15 +233,15 @@ func (m sshKeyAddModel) View() string {
 
 		// Local keys first
 		if len(m.localKeys) > 0 {
-			s.WriteString(m.styles.label.Render("Detected local keys:") + "\n")
+			s.WriteString(m.styles.Label.Render("Detected local keys:") + "\n")
 			for i, key := range m.localKeys {
 				cursor := "  "
 				if m.cursor == i {
-					cursor = m.styles.cursor.Render("▶ ")
+					cursor = m.styles.Cursor.Render("▶ ")
 				}
 				display := fmt.Sprintf("%s (%s)", key.Name, key.Path)
 				if m.cursor == i {
-					display = m.styles.selected.Render(display)
+					display = m.styles.Selected.Render(display)
 				}
 				s.WriteString(fmt.Sprintf("%s%s\n", cursor, display))
 			}
@@ -279,42 +252,42 @@ func (m sshKeyAddModel) View() string {
 		pasteIdx := len(m.localKeys)
 		cursor := "  "
 		if m.cursor == pasteIdx {
-			cursor = m.styles.cursor.Render("▶ ")
+			cursor = m.styles.Cursor.Render("▶ ")
 		}
 		display := "Paste key manually"
 		if m.cursor == pasteIdx {
-			display = m.styles.selected.Render(display)
+			display = m.styles.Selected.Render(display)
 		}
 		s.WriteString(fmt.Sprintf("%s%s\n", cursor, display))
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
 
 	case sshKeyAddStepName:
 		s.WriteString("Enter a name for this key:\n\n")
 		s.WriteString(m.nameInput.View())
 		s.WriteString("\n\n")
-		s.WriteString(m.styles.help.Render("Enter: Continue  Esc: Back  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("Enter: Continue  Esc: Back  Q: Cancel\n"))
 
 	case sshKeyAddStepPasteKey:
 		s.WriteString("Paste your SSH public key:\n\n")
 		s.WriteString(m.keyInput.View())
 		s.WriteString("\n\n")
-		s.WriteString(m.styles.help.Render("Enter: Continue  Esc: Back  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("Enter: Continue  Esc: Back  Q: Cancel\n"))
 
 	case sshKeyAddStepConfirm:
 		s.WriteString("Review your SSH key:\n")
 
 		var panel strings.Builder
-		panel.WriteString(m.styles.label.Render("Name:       ") + m.config.Name + "\n")
+		panel.WriteString(m.styles.Label.Render("Name:       ") + m.config.Name + "\n")
 
 		// Show key type from public key
 		parts := strings.Fields(m.config.PublicKey)
 		if len(parts) >= 1 {
-			panel.WriteString(m.styles.label.Render("Key Type:   ") + parts[0])
+			panel.WriteString(m.styles.Label.Render("Key Type:   ") + parts[0])
 		}
 
-		s.WriteString(m.styles.panel.Render(panel.String()))
+		s.WriteString(m.styles.Panel.Render(panel.String()))
 		s.WriteString("\n")
 
 		s.WriteString("Add this key?\n\n")
@@ -322,17 +295,17 @@ func (m sshKeyAddModel) View() string {
 		for i, option := range options {
 			cursor := "  "
 			if m.cursor == i {
-				cursor = m.styles.cursor.Render("▶ ")
+				cursor = m.styles.Cursor.Render("▶ ")
 			}
 			text := option
 			if m.cursor == i {
-				text = m.styles.selected.Render(option)
+				text = m.styles.Selected.Render(option)
 			}
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, text))
 		}
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Cancel\n"))
 	}
 
 	return s.String()
@@ -354,14 +327,17 @@ func RunSSHKeyAddInteractive(client *api.Client) (*SSHKeyAddConfig, error) {
 		return nil, fmt.Errorf("error running TUI: %w", err)
 	}
 
-	result := finalModel.(sshKeyAddModel)
+	result, ok := finalModel.(sshKeyAddModel)
+	if !ok {
+		return nil, fmt.Errorf("unexpected model type")
+	}
 
 	if result.err != nil {
 		return nil, result.err
 	}
 
 	if result.quitting || !result.confirmed {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	return &result.config, nil
@@ -388,18 +364,22 @@ type sshKeyDeleteModel struct {
 	spinner   spinner.Model
 	err       error
 
-	styles deleteStyles
+	styles     PanelStyles
+	warningBox lipgloss.Style
 }
 
 func newSSHKeyDeleteModel(client *api.Client, keys api.SSHKeyListResponse) sshKeyDeleteModel {
 	s := NewPrimarySpinner()
+	ps := NewPanelStyles()
+	ps.Title = PrimaryTitleStyle().MarginTop(1).MarginBottom(1)
 
 	return sshKeyDeleteModel{
-		step:    sshKeyDeleteStepSelect,
-		client:  client,
-		spinner: s,
-		keys:    keys,
-		styles:  newDeleteStyles(),
+		step:       sshKeyDeleteStepSelect,
+		client:     client,
+		spinner:    s,
+		keys:       keys,
+		styles:     ps,
+		warningBox: WarningBoxStyle().MarginTop(1).MarginBottom(1),
 	}
 }
 
@@ -495,7 +475,7 @@ func (m sshKeyDeleteModel) View() string {
 
 	var s strings.Builder
 
-	s.WriteString(m.styles.title.Render("⚡ Delete SSH Key"))
+	s.WriteString(m.styles.Title.Render("⚡ Delete SSH Key"))
 	s.WriteString("\n\n")
 
 	switch m.step {
@@ -505,7 +485,7 @@ func (m sshKeyDeleteModel) View() string {
 		for i, key := range m.keys {
 			cursor := "  "
 			if m.cursor == i {
-				cursor = m.styles.cursor.Render("▶ ")
+				cursor = m.styles.Cursor.Render("▶ ")
 			}
 
 			createdTime := time.Unix(key.CreatedAt, 0)
@@ -515,33 +495,33 @@ func (m sshKeyDeleteModel) View() string {
 				createdTime.Format("2006-01-02 15:04"),
 			)
 			if m.cursor == i {
-				display = m.styles.selected.Render(display)
+				display = m.styles.Selected.Render(display)
 			}
 
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, display))
 		}
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
 
 	case sshKeyDeleteStepConfirm:
 		s.WriteString("Are you sure you want to delete this SSH key?\n\n")
 
 		var keyInfo strings.Builder
-		keyInfo.WriteString(m.styles.label.Render("Name:          ") + m.selected.Name + "\n")
-		keyInfo.WriteString(m.styles.label.Render("Fingerprint:   ") + m.selected.Fingerprint + "\n")
-		keyInfo.WriteString(m.styles.label.Render("Key Type:      ") + m.selected.KeyType + "\n")
+		keyInfo.WriteString(m.styles.Label.Render("Name:          ") + m.selected.Name + "\n")
+		keyInfo.WriteString(m.styles.Label.Render("Fingerprint:   ") + m.selected.Fingerprint + "\n")
+		keyInfo.WriteString(m.styles.Label.Render("Key Type:      ") + m.selected.KeyType + "\n")
 		createdTime := time.Unix(m.selected.CreatedAt, 0)
-		keyInfo.WriteString(m.styles.label.Render("Created:       ") + createdTime.Format("2006-01-02 15:04:05"))
+		keyInfo.WriteString(m.styles.Label.Render("Created:       ") + createdTime.Format("2006-01-02 15:04:05"))
 
-		s.WriteString(m.styles.instanceBox.Render(keyInfo.String()))
+		s.WriteString(m.styles.Panel.Render(keyInfo.String()))
 		s.WriteString("\n\n")
 
 		options := []string{"✓ Yes, Delete Key", "✗ No, Cancel"}
 		for i, option := range options {
 			cursor := "  "
 			if m.cursor == i {
-				cursor = m.styles.cursor.Render("▶ ")
+				cursor = m.styles.Cursor.Render("▶ ")
 			}
 			if i == 0 {
 				s.WriteString(fmt.Sprintf("%s%s\n", cursor, ErrorStyle().Render(option)))
@@ -551,7 +531,7 @@ func (m sshKeyDeleteModel) View() string {
 		}
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Cancel\n"))
 	}
 
 	return s.String()
@@ -567,18 +547,21 @@ func RunSSHKeyDeleteInteractive(client *api.Client, keys api.SSHKeyListResponse)
 		return nil, fmt.Errorf("error running TUI: %w", err)
 	}
 
-	result := finalModel.(sshKeyDeleteModel)
+	result, ok := finalModel.(sshKeyDeleteModel)
+	if !ok {
+		return nil, fmt.Errorf("unexpected model type")
+	}
 
 	if result.err != nil {
 		return nil, result.err
 	}
 
 	if result.quitting {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	if !result.confirmed || result.selected == nil {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	return result.selected, nil
@@ -670,7 +653,10 @@ func RunSSHKeyDeleteProgress(client *api.Client, keyID, keyName string) (string,
 		return "", fmt.Errorf("error running deletion: %w", err)
 	}
 
-	result := finalModel.(sshKeyDeleteProgressModel)
+	result, ok := finalModel.(sshKeyDeleteProgressModel)
+	if !ok {
+		return "", fmt.Errorf("unexpected model type")
+	}
 	if result.err != nil {
 		return "", result.err
 	}

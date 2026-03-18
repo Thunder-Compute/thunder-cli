@@ -6,14 +6,14 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/cobra"
+
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/Thunder-Compute/thunder-cli/utils"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/cobra"
 )
 
 // portsListCmd represents the ports list command
@@ -38,31 +38,18 @@ func init() {
 }
 
 func runPortsList() error {
-	config, err := LoadConfig()
+	client, err := getAuthenticatedClient()
 	if err != nil {
-		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
+		return err
 	}
-
-	if config.Token == "" {
-		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
-	}
-
-	client := api.NewClient(config.Token, config.APIURL)
 
 	// Fetch instances with spinner
-	busy := tui.NewBusyModel("Fetching instances...")
-	bp := tea.NewProgram(busy, tea.WithOutput(os.Stdout))
-	busyDone := make(chan struct{})
-	go func() {
-		_, _ = bp.Run()
-		close(busyDone)
-	}()
-
-	instances, err := client.ListInstances()
-	bp.Send(tui.BusyDoneMsg{})
-	<-busyDone
-
-	if err != nil {
+	var instances []api.Instance
+	if err := tui.RunWithBusySpinner("Fetching instances...", os.Stdout, func() error {
+		var e error
+		instances, e = client.ListInstances()
+		return e
+	}); err != nil {
 		return fmt.Errorf("failed to fetch instances: %w", err)
 	}
 

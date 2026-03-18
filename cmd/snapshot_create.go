@@ -1,17 +1,18 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -38,95 +39,18 @@ func init() {
 	snapshotCreateCmd.Flags().StringVar(&snapshotName, "name", "", "Name for the snapshot")
 }
 
-type snapshotCreateProgressModel struct {
-	spinner spinner.Model
-	message string
-
-	client *api.Client
-	req    api.CreateSnapshotRequest
-
-	done      bool
-	err       error
-	cancelled bool
-	resp      *api.CreateSnapshotResponse
-}
-
-type createSnapshotResultMsg struct {
-	resp *api.CreateSnapshotResponse
-	err  error
-}
-
-func newSnapshotCreateProgressModel(client *api.Client, message string, req api.CreateSnapshotRequest) snapshotCreateProgressModel {
-	theme.Init(os.Stdout)
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.Primary()
-
-	return snapshotCreateProgressModel{
-		spinner: s,
-		message: message,
-		client:  client,
-		req:     req,
-	}
-}
-
-func createSnapshotCmd(client *api.Client, req api.CreateSnapshotRequest) tea.Cmd {
+func createSnapshotCmd(client *api.Client, req api.CreateSnapshotRequest, resp **api.CreateSnapshotResponse) tea.Cmd {
 	return func() tea.Msg {
-		resp, err := client.CreateSnapshot(req)
-		return createSnapshotResultMsg{
-			resp: resp,
-			err:  err,
+		r, err := client.CreateSnapshot(req)
+		if err == nil {
+			*resp = r
 		}
+		return tui.ProgressResultMsg{Err: err}
 	}
 }
 
-func (m snapshotCreateProgressModel) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, createSnapshotCmd(m.client, m.req))
-}
-
-func (m snapshotCreateProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case spinner.TickMsg:
-		if m.done {
-			return m, nil
-		}
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-
-	case createSnapshotResultMsg:
-		m.done = true
-		m.err = msg.err
-		if msg.err == nil {
-			m.resp = msg.resp
-		}
-		return m, tea.Quit
-
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
-			m.done = true
-			m.cancelled = true
-			return m, tea.Quit
-		}
-
-	case tea.QuitMsg:
-		return m, nil
-	}
-
-	return m, nil
-}
-
-func (m snapshotCreateProgressModel) View() string {
-	if m.done {
-		if m.cancelled {
-			return ""
-		}
-
-		if m.err != nil {
-			return ""
-		}
-
+func renderSnapshotCreateSuccess(resp **api.CreateSnapshotResponse) func() string {
+	return func() string {
 		labelStyle := theme.Neutral()
 		boxStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -137,30 +61,20 @@ func (m snapshotCreateProgressModel) View() string {
 		successTitleStyle := theme.Success()
 		lines = append(lines, successTitleStyle.Render("✓ Snapshot created successfully!"))
 		lines = append(lines, "")
-		if m.resp.Message != "" {
-			lines = append(lines, labelStyle.Render("Message: ")+m.resp.Message)
+		if (*resp).Message != "" {
+			lines = append(lines, labelStyle.Render("Message: ")+(*resp).Message)
 		}
 
 		content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-		result := "\n" + boxStyle.Render(content) + "\n\n"
-
-		return result
+		return "\n" + boxStyle.Render(content) + "\n\n"
 	}
-
-	return fmt.Sprintf("\n %s %s\n", m.spinner.View(), m.message)
 }
 
 func runSnapshotCreate(cmd *cobra.Command) error {
-	config, err := LoadConfig()
+	client, err := getAuthenticatedClient()
 	if err != nil {
-		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
+		return err
 	}
-
-	if config.Token == "" {
-		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
-	}
-
-	client := api.NewClient(config.Token, config.APIURL)
 
 	isInteractive := !cmd.Flags().Changed("instance-id")
 
@@ -170,8 +84,12 @@ func runSnapshotCreate(cmd *cobra.Command) error {
 		// Run interactive flow
 		createConfig, err := tui.RunSnapshotCreateInteractive(client)
 		if err != nil {
-			if _, ok := err.(*tui.CancellationError); ok {
+			if errors.Is(err, tui.ErrCancelled) {
 				PrintWarningSimple("User cancelled snapshot creation")
+				return nil
+			}
+			if errors.Is(err, tui.ErrNoRunningInstances) {
+				PrintWarningSimple("No running instances found. Snapshots can only be created from instances in RUNNING state.")
 				return nil
 			}
 			return err
@@ -190,31 +108,16 @@ func runSnapshotCreate(cmd *cobra.Command) error {
 		name = snapshotName
 
 		// Validate instance exists and is in RUNNING state
-		busy := tui.NewBusyModel("Validating instance...")
-		bp := tea.NewProgram(busy)
-		busyDone := make(chan struct{})
-
-		go func() {
-			_, _ = bp.Run()
-			close(busyDone)
-		}()
-
-		instances, err := client.ListInstances()
-
-		bp.Send(tui.BusyDoneMsg{})
-		<-busyDone
-
-		if err != nil {
+		var instances []api.Instance
+		if err := tui.RunWithBusySpinner("Validating instance...", os.Stdout, func() error {
+			var e error
+			instances, e = client.ListInstances()
+			return e
+		}); err != nil {
 			return fmt.Errorf("failed to fetch instances: %w", err)
 		}
 
-		var foundInstance *api.Instance
-		for i := range instances {
-			if instances[i].ID == instanceID || instances[i].UUID == instanceID {
-				foundInstance = &instances[i]
-				break
-			}
-		}
+		foundInstance := findInstance(instances, instanceID)
 
 		if foundInstance == nil {
 			return fmt.Errorf("instance '%s' not found", instanceID)
@@ -233,25 +136,26 @@ func runSnapshotCreate(cmd *cobra.Command) error {
 		Name:       name,
 	}
 
-	progressModel := newSnapshotCreateProgressModel(client, "Creating snapshot...", req)
+	var snapshotResp *api.CreateSnapshotResponse
+	progressModel := tui.NewProgressModel("Creating snapshot...",
+		createSnapshotCmd(client, req, &snapshotResp),
+		renderSnapshotCreateSuccess(&snapshotResp),
+	)
 	program := tea.NewProgram(progressModel)
 	finalModel, runErr := program.Run()
 	if runErr != nil {
 		return fmt.Errorf("failed to render progress: %w", runErr)
 	}
 
-	result, ok := finalModel.(snapshotCreateProgressModel)
-	if !ok {
-		return fmt.Errorf("unexpected result from progress renderer")
-	}
+	result := finalModel.(tui.ProgressModel)
 
-	if result.cancelled {
+	if result.Cancelled() {
 		PrintWarningSimple("User cancelled snapshot creation")
 		return nil
 	}
 
-	if result.err != nil {
-		return fmt.Errorf("failed to create snapshot: %w", result.err)
+	if result.Err() != nil {
+		return fmt.Errorf("failed to create snapshot: %w", result.Err())
 	}
 
 	return nil

@@ -6,10 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Thunder-Compute/thunder-cli/api"
 )
 
 type snapshotDeleteStep int
@@ -31,18 +32,22 @@ type snapshotDeleteModel struct {
 	spinner   spinner.Model
 	err       error
 
-	styles deleteStyles
+	styles     PanelStyles
+	warningBox lipgloss.Style
 }
 
 func NewSnapshotDeleteModel(client *api.Client, snapshots api.ListSnapshotsResponse) snapshotDeleteModel {
 	s := NewPrimarySpinner()
+	ps := NewPanelStyles()
+	ps.Title = PrimaryTitleStyle().MarginTop(1).MarginBottom(1)
 
 	return snapshotDeleteModel{
-		step:      snapshotDeleteStepSelect,
-		client:    client,
-		spinner:   s,
-		snapshots: snapshots,
-		styles:    newDeleteStyles(),
+		step:       snapshotDeleteStepSelect,
+		client:     client,
+		spinner:    s,
+		snapshots:  snapshots,
+		styles:     ps,
+		warningBox: WarningBoxStyle().MarginTop(1).MarginBottom(1),
 	}
 }
 
@@ -138,7 +143,7 @@ func (m snapshotDeleteModel) View() string {
 
 	var s strings.Builder
 
-	s.WriteString(m.styles.title.Render("⚡ Delete Snapshot"))
+	s.WriteString(m.styles.Title.Render("⚡ Delete Snapshot"))
 	s.WriteString("\n\n")
 
 	switch m.step {
@@ -148,7 +153,7 @@ func (m snapshotDeleteModel) View() string {
 		for i, snapshot := range m.snapshots {
 			cursor := "  "
 			if m.cursor == i {
-				cursor = m.styles.cursor.Render("▶ ")
+				cursor = m.styles.Cursor.Render("▶ ")
 			}
 
 			// Determine status style
@@ -172,7 +177,7 @@ func (m snapshotDeleteModel) View() string {
 				snapshot.MinimumDiskSizeGB,
 			)
 			if m.cursor == i {
-				display = m.styles.selected.Render(display)
+				display = m.styles.Selected.Render(display)
 			}
 
 			statusText := statusStyle.Render(fmt.Sprintf("(%s)", status))
@@ -181,24 +186,24 @@ func (m snapshotDeleteModel) View() string {
 		}
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
 
 	case snapshotDeleteStepConfirm:
 		warning := "WARNING: This action is IRREVERSIBLE!\n\n" +
 			"Deleting this snapshot will:\n" +
 			"• Permanently destroy the snapshot\n" +
 			"• This action CANNOT be undone"
-		s.WriteString(m.styles.warningBox.Render(warning))
+		s.WriteString(m.warningBox.Render(warning))
 		s.WriteString("\n\n")
 
 		var snapshotInfo strings.Builder
-		snapshotInfo.WriteString(m.styles.label.Render("Name:        ") + m.selected.Name + "\n")
-		snapshotInfo.WriteString(m.styles.label.Render("Status:      ") + m.selected.Status + "\n")
-		snapshotInfo.WriteString(m.styles.label.Render("Disk Size:   ") + fmt.Sprintf("%d GB", m.selected.MinimumDiskSizeGB) + "\n")
+		snapshotInfo.WriteString(m.styles.Label.Render("Name:        ") + m.selected.Name + "\n")
+		snapshotInfo.WriteString(m.styles.Label.Render("Status:      ") + m.selected.Status + "\n")
+		snapshotInfo.WriteString(m.styles.Label.Render("Disk Size:   ") + fmt.Sprintf("%d GB", m.selected.MinimumDiskSizeGB) + "\n")
 		createdTime := time.Unix(m.selected.CreatedAt, 0)
-		snapshotInfo.WriteString(m.styles.label.Render("Created:     ") + createdTime.Format("2006-01-02 15:04:05"))
+		snapshotInfo.WriteString(m.styles.Label.Render("Created:     ") + createdTime.Format("2006-01-02 15:04:05"))
 
-		s.WriteString(m.styles.instanceBox.Render(snapshotInfo.String()))
+		s.WriteString(m.styles.Panel.Render(snapshotInfo.String()))
 		s.WriteString("\n\n")
 
 		s.WriteString("Are you sure you want to delete this snapshot?\n\n")
@@ -207,7 +212,7 @@ func (m snapshotDeleteModel) View() string {
 		for i, option := range options {
 			cursor := "  "
 			if m.cursor == i {
-				cursor = m.styles.cursor.Render("▶ ")
+				cursor = m.styles.Cursor.Render("▶ ")
 			}
 			if i == 0 {
 				s.WriteString(fmt.Sprintf("%s%s\n", cursor, ErrorStyle().Render(option)))
@@ -217,7 +222,7 @@ func (m snapshotDeleteModel) View() string {
 		}
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Cancel\n"))
 	}
 
 	return s.String()
@@ -232,18 +237,21 @@ func RunSnapshotDeleteInteractive(client *api.Client, snapshots api.ListSnapshot
 		return nil, fmt.Errorf("error running TUI: %w", err)
 	}
 
-	result := finalModel.(snapshotDeleteModel)
+	result, ok := finalModel.(snapshotDeleteModel)
+	if !ok {
+		return nil, fmt.Errorf("unexpected model type")
+	}
 
 	if result.err != nil {
 		return nil, result.err
 	}
 
 	if result.quitting {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	if !result.confirmed || result.selected == nil {
-		return nil, &CancellationError{}
+		return nil, ErrCancelled
 	}
 
 	return result.selected, nil
@@ -332,7 +340,10 @@ func RunSnapshotDeleteProgress(client *api.Client, snapshotID, snapshotName stri
 		return "", fmt.Errorf("error running deletion: %w", err)
 	}
 
-	result := finalModel.(snapshotDeleteProgressModel)
+	result, ok := finalModel.(snapshotDeleteProgressModel)
+	if !ok {
+		return "", fmt.Errorf("unexpected model type")
+	}
 	if result.err != nil {
 		return "", result.err
 	}
