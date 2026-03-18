@@ -106,19 +106,30 @@ func getInstanceID() string {
 	return "unknown"
 }
 
-// Noisy Sentry errors I think we should ignore.
+// Noisy Sentry errors we should ignore — these are expected user errors,
+// not bugs worth investigating.
 var ignoredErrors = []string{
-	// Our errors
+	// Auth errors (user needs to login / token expired)
 	"not authenticated",
-	"authentication failed: invalid token",
+	"authentication failed",
 	"token validation failed",
+
+	// CLI usage errors
 	"unknown flag",
 	"unknown command",
 	"unknown shorthand flag",
 	"flag needs an argument",
 	"invalid argument",
+	"not a tty",
 
-	// Misc errors
+	// User file/instance errors
+	"local file not found",
+	"remote file not found",
+	"not found",
+	"not running",
+	"transfer cancelled",
+
+	// Network errors
 	"context deadline exceeded",
 	"connection reset",
 	"ECONNRESET",

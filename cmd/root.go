@@ -40,6 +40,7 @@ func Execute() {
 			sentry.WithScope(func(scope *sentry.Scope) {
 				scope.SetTag("command", cmd.Name())
 				scope.SetTag("version", version.BuildVersion)
+				scope.SetFingerprint([]string{cmd.Name(), err.Error()})
 				sentry.CaptureException(err)
 			})
 			sentry.Flush(2 * time.Second)
