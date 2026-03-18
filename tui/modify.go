@@ -47,13 +47,12 @@ type ModifyPresets struct {
 	NumGPUs    *int
 	VCPUs      *int
 	DiskSizeGB *int
-	Yes        bool
 }
 
 // IsEmpty returns true if no preset flags were set.
 func (p *ModifyPresets) IsEmpty() bool {
 	return p.Mode == nil && p.GPUType == nil && p.NumGPUs == nil &&
-		p.VCPUs == nil && p.DiskSizeGB == nil && !p.Yes
+		p.VCPUs == nil && p.DiskSizeGB == nil
 }
 
 type modifyModel struct {
@@ -163,19 +162,6 @@ func (m *modifyModel) trySkipCurrentStep() {
 			}
 
 		case modifyStepConfirmation:
-			if m.presets != nil && m.presets.Yes {
-				// Check for no-changes before auto-confirming
-				if !m.config.ModeChanged && !m.config.GPUChanged && !m.config.ComputeChanged && !m.config.DiskChanged {
-					m.err = ErrNoChanges
-					m.quitting = true
-					return
-				}
-				m.config.Confirmed = true
-				m.skippedSteps[modifyStepConfirmation] = true
-				m.step = modifyStepComplete
-				m.quitting = true
-				return
-			}
 			return
 		}
 

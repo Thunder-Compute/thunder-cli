@@ -47,13 +47,12 @@ type CreatePresets struct {
 	VCPUs      *int
 	Template   *string
 	DiskSizeGB *int
-	Yes        bool // skip confirmation step
 }
 
 // IsEmpty returns true if no preset flags were set.
 func (p *CreatePresets) IsEmpty() bool {
 	return p.Mode == nil && p.GPUType == nil && p.NumGPUs == nil &&
-		p.VCPUs == nil && p.Template == nil && p.DiskSizeGB == nil && !p.Yes
+		p.VCPUs == nil && p.Template == nil && p.DiskSizeGB == nil
 }
 
 type createModel struct {
@@ -176,12 +175,6 @@ func (m *createModel) trySkipCurrentStep() tea.Cmd {
 			}
 
 		case stepConfirmation:
-			if m.presets != nil && m.presets.Yes {
-				m.config.Confirmed = true
-				m.skippedSteps[stepConfirmation] = true
-				m.step = stepComplete
-				return tea.Quit
-			}
 			return nil
 		}
 

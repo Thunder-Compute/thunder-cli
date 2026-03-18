@@ -35,7 +35,6 @@ func init() {
 	modifyCmd.Flags().Int("num-gpus", 0, "Number of GPUs (production mode: 1, 2, or 4)")
 	modifyCmd.Flags().Int("vcpus", 0, "CPU cores (prototyping only): options vary by GPU type and count")
 	modifyCmd.Flags().Int("disk-size-gb", 0, "Disk size in GB (100-1000, cannot shrink)")
-	modifyCmd.Flags().BoolP("yes", "y", false, "Skip confirmation step (auto-confirm)")
 
 	modifyCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		helpmenus.RenderModifyHelp(cmd)
@@ -128,8 +127,8 @@ func runModify(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-	} else if !modifyPresets.Yes && hasAllModifyFlags(cmd) {
-		// All flags provided and no --yes — try fully non-interactive (backward compat)
+	} else if hasAllModifyFlags(cmd) {
+		// All flags provided -> try fully non-interactive (skip confirmation)
 		modifyReq, err = buildModifyRequestFromFlags(cmd, selectedInstance)
 		if err != nil {
 			// Fall through to hybrid
@@ -151,7 +150,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 			}
 		}
 	} else {
-		// Partial flags or --yes — hybrid TUI
+		// Partial flags — hybrid TUI (confirmation always shown)
 		modifyConfig, err = tui.RunModifyHybrid(client, selectedInstance, modifyPresets)
 		if err != nil {
 			if errors.Is(err, tui.ErrCancelled) {
@@ -257,9 +256,6 @@ func buildModifyPresets(cmd *cobra.Command) *tui.ModifyPresets {
 	if cmd.Flags().Changed("disk-size-gb") {
 		v, _ := cmd.Flags().GetInt("disk-size-gb")
 		p.DiskSizeGB = &v
-	}
-	if yes, _ := cmd.Flags().GetBool("yes"); yes {
-		p.Yes = true
 	}
 	return p
 }

@@ -55,13 +55,6 @@ func RenderModifyHelp(cmd *cobra.Command) {
 	output.WriteString(CommandTextStyle.Render("tnr modify 0 --gpu h100"))
 	output.WriteString("\n\n")
 
-	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Auto-confirm with --yes"))
-	output.WriteString("\n")
-	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr modify 0 --disk-size-gb 500 -y"))
-	output.WriteString("\n\n")
-
 	// Flags Section
 	output.WriteString(SectionStyle.Render("● FLAGS"))
 	output.WriteString("\n\n")
@@ -96,11 +89,6 @@ func RenderModifyHelp(cmd *cobra.Command) {
 	output.WriteString(DescStyle.Render("Disk storage in GB"))
 	output.WriteString("\n")
 
-	output.WriteString("  ")
-	output.WriteString(FlagStyle.Render("-y, --yes"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Skip confirmation step (auto-confirm)"))
-	output.WriteString("\n\n")
 
 	// Important Notes Section
 	output.WriteString(SectionStyle.Render("● IMPORTANT NOTES"))

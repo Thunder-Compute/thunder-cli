@@ -28,7 +28,6 @@ var (
 	template         string
 	diskSizeGB       int
 	createSSHKeyName string
-	createYes        bool
 )
 
 var createCmd = &cobra.Command{
@@ -48,9 +47,15 @@ var (
 
 	// Prototyping specs: allowed GPU counts and vCPU options per GPU type
 	prototypingSpecs = map[string]map[int][]int{
-		"a6000":  {1: {4, 8}},
-		"a100xl": {1: {4, 8, 12}, 2: {8, 12, 16, 20, 24}},
-		"h100":   {1: {4, 8, 12, 16}, 2: {8, 12, 16, 20, 24}},
+		"a6000": {1: {4, 8}},
+		"a100xl": {
+			1: {4, 8, 12},
+			2: {8, 12, 16, 20, 24},
+		},
+		"h100": {
+			1: {4, 8, 12, 16},
+			2: {8, 12, 16, 20, 24},
+		},
 	}
 
 	productionGPUMap = map[string]string{
@@ -73,7 +78,6 @@ func init() {
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (100-1000)")
 	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-key", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
-	createCmd.Flags().BoolVarP(&createYes, "yes", "y", false, "Skip confirmation step (auto-confirm)")
 }
 
 func createInstanceCmd(client *api.Client, req api.CreateInstanceRequest, resp **api.CreateInstanceResponse) tea.Cmd {
@@ -113,7 +117,7 @@ func renderCreateSuccess(resp **api.CreateInstanceResponse) func() string {
 }
 
 func buildCreatePresets(cmd *cobra.Command) *tui.CreatePresets {
-	p := &tui.CreatePresets{Yes: createYes}
+	p := &tui.CreatePresets{}
 	if cmd.Flags().Changed("mode") {
 		p.Mode = &mode
 	}
@@ -133,6 +137,18 @@ func buildCreatePresets(cmd *cobra.Command) *tui.CreatePresets {
 		p.DiskSizeGB = &diskSizeGB
 	}
 	return p
+}
+
+func hasAllCreateFlags(cmd *cobra.Command) bool {
+	if !cmd.Flags().Changed("mode") || !cmd.Flags().Changed("gpu") ||
+		!cmd.Flags().Changed("template") || !cmd.Flags().Changed("disk-size-gb") {
+		return false
+	}
+	m, _ := cmd.Flags().GetString("mode")
+	if strings.ToLower(m) == "prototyping" {
+		return cmd.Flags().Changed("vcpus")
+	}
+	return cmd.Flags().Changed("num-gpus")
 }
 
 func runCreate(cmd *cobra.Command) error {
@@ -155,8 +171,8 @@ func runCreate(cmd *cobra.Command) error {
 			}
 			return err
 		}
-	} else if cmd.Flags().Changed("mode") && !createYes {
-		// Try fully non-interactive path (backward compat for scripting)
+	} else if hasAllCreateFlags(cmd) {
+		// All flags explicitly provided → non-interactive (skip confirmation)
 		var templates []api.TemplateEntry
 		var snapshots []api.Snapshot
 		if fetchErr := tui.RunWithBusySpinner("Fetching templates and snapshots...", os.Stdout, func() error {
@@ -219,7 +235,7 @@ func runCreate(cmd *cobra.Command) error {
 			}
 		}
 	} else {
-		// Partial flags or --yes — hybrid TUI
+		// Partial flags — hybrid TUI
 		createConfig, err = tui.RunCreateHybrid(client, presets)
 		if err != nil {
 			if errors.Is(err, tui.ErrCancelled) {
