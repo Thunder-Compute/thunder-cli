@@ -48,6 +48,13 @@ func RenderModifyHelp(cmd *cobra.Command) {
 	output.WriteString(CommandTextStyle.Render("tnr modify 0 --gpu h100 --disk-size-gb 500"))
 	output.WriteString("\n\n")
 
+	output.WriteString("  ")
+	output.WriteString(ExampleStyle.Render("# Partial flags — wizard skips pre-filled steps"))
+	output.WriteString("\n")
+	output.WriteString("  ")
+	output.WriteString(CommandTextStyle.Render("tnr modify 0 --gpu h100"))
+	output.WriteString("\n\n")
+
 	// Flags Section
 	output.WriteString(SectionStyle.Render("● FLAGS"))
 	output.WriteString("\n\n")
@@ -80,7 +87,8 @@ func RenderModifyHelp(cmd *cobra.Command) {
 	output.WriteString(FlagStyle.Render("--disk-size-gb"))
 	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Disk storage in GB"))
-	output.WriteString("\n\n")
+	output.WriteString("\n")
+
 
 	// Important Notes Section
 	output.WriteString(SectionStyle.Render("● IMPORTANT NOTES"))

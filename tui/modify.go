@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -39,6 +40,21 @@ type ModifyConfig struct {
 	DiskChanged    bool
 }
 
+// ModifyPresets holds flag values provided on the command line for hybrid mode.
+type ModifyPresets struct {
+	Mode       *string
+	GPUType    *string
+	NumGPUs    *int
+	VCPUs      *int
+	DiskSizeGB *int
+}
+
+// IsEmpty returns true if no preset flags were set.
+func (p *ModifyPresets) IsEmpty() bool {
+	return p.Mode == nil && p.GPUType == nil && p.NumGPUs == nil &&
+		p.VCPUs == nil && p.DiskSizeGB == nil
+}
+
 type modifyModel struct {
 	step             modifyStep
 	cursor           int
@@ -55,6 +71,8 @@ type modifyModel struct {
 	pricing          *utils.PricingData
 	pricingLoaded    bool
 	specs            *utils.SpecStore
+	presets          *ModifyPresets
+	skippedSteps     map[modifyStep]bool
 
 	styles PanelStyles
 }
@@ -77,6 +95,7 @@ func NewModifyModel(client *api.Client, instance *api.Instance, specs *utils.Spe
 		client:           client,
 		diskInput:        ti,
 		diskInputTouched: false,
+		skippedSteps:     make(map[modifyStep]bool),
 		styles:           styles,
 		specs:            specs,
 	}
@@ -89,6 +108,179 @@ func NewModifyModel(client *api.Client, instance *api.Instance, specs *utils.Spe
 	}
 
 	return m
+}
+
+// NewModifyModelWithPresets creates a modifyModel with pre-filled values from CLI flags.
+func NewModifyModelWithPresets(client *api.Client, instance *api.Instance, specs *utils.SpecStore, presets *ModifyPresets) modifyModel {
+	m := NewModifyModel(client, instance, specs).(modifyModel)
+	m.presets = presets
+	m.trySkipCurrentStep()
+	return m
+}
+
+// trySkipCurrentStep loops forward through steps, auto-filling each one from
+// presets if the preset value is valid given the current config state.
+func (m *modifyModel) trySkipCurrentStep() {
+	for {
+		skipped := false
+
+		switch m.step {
+		case modifyStepMode:
+			if m.presets != nil && m.presets.Mode != nil {
+				mode := strings.ToLower(*m.presets.Mode)
+				if mode == "prototyping" || mode == "production" {
+					m.config.Mode = mode
+					m.config.ModeChanged = !strings.EqualFold(mode, m.currentInstance.Mode)
+					m.skippedSteps[modifyStepMode] = true
+					skipped = true
+				}
+			}
+
+		case modifyStepGPU:
+			if m.presets != nil && m.presets.GPUType != nil {
+				effectiveMode := m.getEffectiveMode()
+				canonical, ok := resolveGPUForMode(*m.presets.GPUType, effectiveMode)
+				if ok {
+					m.config.GPUType = canonical
+					m.config.GPUChanged = !strings.EqualFold(canonical, m.currentInstance.GPUType)
+					m.skippedSteps[modifyStepGPU] = true
+					skipped = true
+				}
+			}
+
+		case modifyStepCompute:
+			skipped = m.trySkipModifyCompute()
+
+		case modifyStepDiskSize:
+			if m.presets != nil && m.presets.DiskSizeGB != nil {
+				v := *m.presets.DiskSizeGB
+				if v >= m.currentInstance.Storage && v <= 1000 {
+					m.config.DiskSizeGB = v
+					m.config.DiskChanged = v != m.currentInstance.Storage
+					m.diskInput.SetValue(fmt.Sprintf("%d", v))
+					m.skippedSteps[modifyStepDiskSize] = true
+					skipped = true
+				}
+			}
+
+		case modifyStepConfirmation:
+			return
+		}
+
+		if !skipped {
+			m.initModifyStep()
+			return
+		}
+
+		m.step++
+	}
+}
+
+// trySkipModifyCompute handles the compute step preset logic for modify.
+func (m *modifyModel) trySkipModifyCompute() bool {
+	if m.presets == nil {
+		return false
+	}
+
+	effectiveMode := m.getEffectiveMode()
+	effectiveGPU := m.config.GPUType
+	if effectiveGPU == "" {
+		effectiveGPU = strings.ToLower(m.currentInstance.GPUType)
+	}
+
+	needsCount := m.specs.NeedsGPUCountPhase(effectiveGPU, effectiveMode)
+
+	if !needsCount {
+		m.config.NumGPUs = 1
+		if m.presets.VCPUs == nil {
+			return false
+		}
+		if slices.Contains(m.specs.VCPUOptions(effectiveGPU, 1, effectiveMode), *m.presets.VCPUs) {
+			m.config.VCPUs = *m.presets.VCPUs
+			currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
+			m.config.ComputeChanged = m.config.VCPUs != currentVCPUs
+			return true
+		}
+		return false
+	}
+
+	// Multi-GPU: need both to fully skip
+	if m.presets.NumGPUs != nil && m.presets.VCPUs != nil {
+		if slices.Contains(m.specs.GPUCountsForMode(effectiveGPU, effectiveMode), *m.presets.NumGPUs) {
+			vcpuOpts := m.specs.VCPUOptions(effectiveGPU, *m.presets.NumGPUs, effectiveMode)
+			if len(vcpuOpts) == 1 {
+				m.config.NumGPUs = *m.presets.NumGPUs
+				m.config.VCPUs = vcpuOpts[0]
+				currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
+				currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
+				m.config.ComputeChanged = (m.config.VCPUs != currentVCPUs) || (m.config.NumGPUs != currentNumGPUs)
+				return true
+			}
+			if slices.Contains(vcpuOpts, *m.presets.VCPUs) {
+				m.config.NumGPUs = *m.presets.NumGPUs
+				m.config.VCPUs = *m.presets.VCPUs
+				currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
+				currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
+				m.config.ComputeChanged = (m.config.VCPUs != currentVCPUs) || (m.config.NumGPUs != currentNumGPUs)
+				return true
+			}
+		}
+		return false
+	}
+
+	// Only num-gpus provided
+	if m.presets.NumGPUs != nil {
+		if slices.Contains(m.specs.GPUCountsForMode(effectiveGPU, effectiveMode), *m.presets.NumGPUs) {
+			m.config.NumGPUs = *m.presets.NumGPUs
+			vcpuOpts := m.specs.VCPUOptions(effectiveGPU, *m.presets.NumGPUs, effectiveMode)
+			if len(vcpuOpts) == 1 {
+				m.config.VCPUs = vcpuOpts[0]
+				currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
+				currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
+				m.config.ComputeChanged = (m.config.VCPUs != currentVCPUs) || (m.config.NumGPUs != currentNumGPUs)
+				return true
+			}
+			m.gpuCountPhase = false
+			return false // don't skip whole step
+		}
+	}
+
+	return false
+}
+
+// initModifyStep sets up step-specific state when arriving at a visible step.
+func (m *modifyModel) initModifyStep() {
+	m.cursor = 0
+	switch m.step {
+	case modifyStepGPU:
+		m.cursor = m.getCurrentGPUCursorPosition()
+	case modifyStepCompute:
+		if m.needsGPUCountPhase() && m.config.NumGPUs == 0 {
+			m.gpuCountPhase = true
+			m.cursor = m.getCurrentGPUCountCursorPosition()
+		} else if m.getEffectiveMode() == "prototyping" && !m.needsGPUCountPhase() {
+			m.config.NumGPUs = 1
+			m.gpuCountPhase = false
+			m.cursor = m.getCurrentComputeCursorPosition()
+		} else {
+			m.cursor = m.getCurrentComputeCursorPosition()
+		}
+	case modifyStepDiskSize:
+		m.diskInput.Focus()
+		m.diskInputTouched = false
+	default:
+		m.diskInput.Blur()
+	}
+}
+
+// prevVisibleStep returns the previous non-skipped step. Returns -1 if none.
+func (m *modifyModel) prevVisibleStep(from modifyStep) modifyStep {
+	for s := from - 1; s >= modifyStepMode; s-- {
+		if !m.skippedSteps[s] {
+			return s
+		}
+	}
+	return -1
 }
 
 type modifyPricingMsg struct {
@@ -139,23 +331,23 @@ func (m modifyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				return m, nil
 			}
-			if m.step > modifyStepMode {
-				m.step--
-				m.cursor = 0
-				m.gpuCountPhase = false
-				m.validationErr = nil
-				if m.step == modifyStepDiskSize {
-					m.diskInput.Focus()
-					// Reset the touched flag when going back to disk size step
-					m.diskInputTouched = false
-				} else {
-					m.diskInput.Blur()
-				}
-				return m, nil
+			prev := m.prevVisibleStep(m.step)
+			if prev < 0 {
+				m.cancelled = true
+				m.quitting = true
+				return m, tea.Quit
 			}
-			m.cancelled = true
-			m.quitting = true
-			return m, tea.Quit
+			m.step = prev
+			m.cursor = 0
+			m.gpuCountPhase = false
+			m.validationErr = nil
+			if m.step == modifyStepDiskSize {
+				m.diskInput.Focus()
+				m.diskInputTouched = false
+			} else {
+				m.diskInput.Blur()
+			}
+			return m, nil
 
 		case "up", "k":
 			if m.step != modifyStepDiskSize {
@@ -203,30 +395,27 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		modeOptions := []string{"prototyping", "production"}
 		newMode := modeOptions[m.cursor]
 		m.config.Mode = newMode
-		// Case-insensitive comparison
 		m.config.ModeChanged = !strings.EqualFold(newMode, m.currentInstance.Mode)
 		m.step = modifyStepGPU
-		// Set cursor to current GPU position for next step
-		m.cursor = m.getCurrentGPUCursorPosition()
+		m.trySkipCurrentStep()
+		// If we're on the GPU step after skipping, set cursor to current GPU position
+		if m.step == modifyStepGPU {
+			m.cursor = m.getCurrentGPUCursorPosition()
+		}
+		if m.quitting {
+			return m, tea.Quit
+		}
 		return m, nil
 
 	case modifyStepGPU:
 		effectiveMode := m.getEffectiveMode()
 		gpuValues := m.specs.GPUOptionsForMode(effectiveMode)
 		m.config.GPUType = gpuValues[m.cursor]
-		// Case-insensitive comparison
 		m.config.GPUChanged = !strings.EqualFold(m.config.GPUType, m.currentInstance.GPUType)
 		m.step = modifyStepCompute
-		// H100 prototyping supports multi-GPU, so show GPU count selection first
-		if m.needsGPUCountPhase() {
-			m.gpuCountPhase = true
-			m.cursor = m.getCurrentGPUCountCursorPosition()
-		} else {
-			m.gpuCountPhase = false
-			if effectiveMode == "prototyping" {
-				m.config.NumGPUs = 1
-			}
-			m.cursor = m.getCurrentComputeCursorPosition()
+		m.trySkipCurrentStep()
+		if m.quitting {
+			return m, tea.Quit
 		}
 		return m, nil
 
@@ -237,8 +426,22 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 			gpuCounts := m.specs.GPUCountsForMode(m.config.GPUType, effectiveMode)
 			m.config.NumGPUs = gpuCounts[m.cursor]
 			m.gpuCountPhase = false
+			// Check if vCPUs preset can now be applied
+			if m.presets != nil && m.presets.VCPUs != nil {
+				if slices.Contains(m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, effectiveMode), *m.presets.VCPUs) {
+					m.config.VCPUs = *m.presets.VCPUs
+					currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
+					currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
+					m.config.ComputeChanged = (m.config.VCPUs != currentVCPUs) || (m.config.NumGPUs != currentNumGPUs)
+					m.step = modifyStepDiskSize
+					m.trySkipCurrentStep()
+					if m.quitting {
+						return m, tea.Quit
+					}
+					return m, nil
+				}
+			}
 			m.cursor = m.getCurrentComputeCursorPosition()
-			// Stay on modifyStepCompute to show vCPU options next
 			return m, nil
 		}
 
@@ -248,9 +451,10 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
 		m.config.ComputeChanged = (m.config.VCPUs != currentVCPUs) || (m.config.NumGPUs != currentNumGPUs)
 		m.step = modifyStepDiskSize
-		m.cursor = 0
-		m.diskInputTouched = false
-		m.diskInput.Focus()
+		m.trySkipCurrentStep()
+		if m.quitting {
+			return m, tea.Quit
+		}
 		return m, nil
 
 	case modifyStepDiskSize:
@@ -262,7 +466,6 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Check against current instance size
 		if diskSize < m.currentInstance.Storage {
 			m.validationErr = fmt.Errorf("disk size cannot be smaller than current size (%d GB)", m.currentInstance.Storage)
 			return m, nil
@@ -272,26 +475,27 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		m.config.DiskChanged = (diskSize != m.currentInstance.Storage)
 		m.validationErr = nil
 
-		// Check if any changes were made
 		if !m.config.ModeChanged && !m.config.GPUChanged && !m.config.ComputeChanged && !m.config.DiskChanged {
-			// No changes, exit with a special error
 			m.err = ErrNoChanges
 			m.quitting = true
 			return m, tea.Quit
 		}
 
-		m.step = modifyStepConfirmation
-		m.cursor = 0
 		m.diskInput.Blur()
+		m.step = modifyStepConfirmation
+		m.trySkipCurrentStep()
+		if m.quitting {
+			return m, tea.Quit
+		}
+		return m, nil
 
 	case modifyStepConfirmation:
-		if m.cursor == 0 { // Apply Changes
+		if m.cursor == 0 {
 			m.config.Confirmed = true
 			m.step = modifyStepComplete
 			m.quitting = true
 			return m, tea.Quit
 		}
-		// Cancel
 		m.cancelled = true
 		m.quitting = true
 		return m, tea.Quit
@@ -688,11 +892,8 @@ func (m modifyModel) renderConfirmationStep() string {
 	return s.String()
 }
 
-// RunModifyInteractive starts the interactive modify flow
-func RunModifyInteractive(client *api.Client, instance *api.Instance, specs *utils.SpecStore) (*ModifyConfig, error) {
-	m := NewModifyModel(client, instance, specs)
+func runModifyModel(m tea.Model) (*ModifyConfig, error) {
 	p := tea.NewProgram(m)
-
 	finalModel, err := p.Run()
 	if err != nil {
 		return nil, fmt.Errorf("error running interactive modify: %w", err)
@@ -712,6 +913,18 @@ func RunModifyInteractive(client *api.Client, instance *api.Instance, specs *uti
 	}
 
 	return &finalModifyModel.config, nil
+}
+
+// RunModifyInteractive starts the interactive modify flow
+func RunModifyInteractive(client *api.Client, instance *api.Instance, specs *utils.SpecStore) (*ModifyConfig, error) {
+	m := NewModifyModel(client, instance, specs)
+	return runModifyModel(m)
+}
+
+// RunModifyHybrid runs the modify TUI with some steps pre-filled from CLI flags.
+func RunModifyHybrid(client *api.Client, instance *api.Instance, specs *utils.SpecStore, presets *ModifyPresets) (*ModifyConfig, error) {
+	m := NewModifyModelWithPresets(client, instance, specs, presets)
+	return runModifyModel(m)
 }
 
 // RunModifyInstanceSelector shows an interactive instance selector for modify

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -108,18 +109,14 @@ func runModify(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("instance must be in RUNNING state to modify (current state: %s)", selectedInstance.Status)
 	}
 
-	// Check if interactive mode (no flags set) or flag mode
-	isInteractive := !cmd.Flags().Changed("mode") &&
-		!cmd.Flags().Changed("gpu") &&
-		!cmd.Flags().Changed("num-gpus") &&
-		!cmd.Flags().Changed("vcpus") &&
-		!cmd.Flags().Changed("disk-size-gb")
+	// Build presets from flags
+	modifyPresets := buildModifyPresets(cmd)
 
 	var modifyConfig *tui.ModifyConfig
 	var modifyReq api.InstanceModifyRequest
 
-	if isInteractive {
-		// Run interactive mode
+	if modifyPresets.IsEmpty() {
+		// No flags set — full interactive mode
 		modifyConfig, err = tui.RunModifyInteractive(client, selectedInstance, specs)
 		if err != nil {
 			if errors.Is(err, tui.ErrCancelled) {
@@ -133,14 +130,48 @@ func runModify(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		// Build request from interactive config
 		modifyReq, err = buildModifyRequestFromConfig(modifyConfig, selectedInstance)
 		if err != nil {
 			return err
 		}
-	} else {
-		// Flag mode - validate flags and build request
+	} else if hasAllModifyFlags(cmd) {
+		// All flags provided -> try fully non-interactive (skip confirmation)
 		modifyReq, err = buildModifyRequestFromFlags(cmd, selectedInstance, specs)
+		if err != nil {
+			// Fall through to hybrid
+			modifyConfig, err = tui.RunModifyHybrid(client, selectedInstance, specs, modifyPresets)
+			if err != nil {
+				if errors.Is(err, tui.ErrCancelled) {
+					PrintWarningSimple("User cancelled modification process")
+					return nil
+				}
+				if errors.Is(err, tui.ErrNoChanges) {
+					PrintWarningSimple("No changes were requested. Instance configuration unchanged.")
+					return nil
+				}
+				return err
+			}
+			modifyReq, err = buildModifyRequestFromConfig(modifyConfig, selectedInstance)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		// Partial flags — hybrid TUI (confirmation always shown)
+		modifyConfig, err = tui.RunModifyHybrid(client, selectedInstance, specs, modifyPresets)
+		if err != nil {
+			if errors.Is(err, tui.ErrCancelled) {
+				PrintWarningSimple("User cancelled modification process")
+				return nil
+			}
+			if errors.Is(err, tui.ErrNoChanges) {
+				PrintWarningSimple("No changes were requested. Instance configuration unchanged.")
+				return nil
+			}
+			return err
+		}
+
+		modifyReq, err = buildModifyRequestFromConfig(modifyConfig, selectedInstance)
 		if err != nil {
 			return err
 		}
@@ -213,6 +244,37 @@ func runModify(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func buildModifyPresets(cmd *cobra.Command) *tui.ModifyPresets {
+	p := &tui.ModifyPresets{}
+	if cmd.Flags().Changed("mode") {
+		v, _ := cmd.Flags().GetString("mode")
+		p.Mode = &v
+	}
+	if cmd.Flags().Changed("gpu") {
+		v, _ := cmd.Flags().GetString("gpu")
+		p.GPUType = &v
+	}
+	if cmd.Flags().Changed("num-gpus") {
+		v, _ := cmd.Flags().GetInt("num-gpus")
+		p.NumGPUs = &v
+	}
+	if cmd.Flags().Changed("vcpus") {
+		v, _ := cmd.Flags().GetInt("vcpus")
+		p.VCPUs = &v
+	}
+	if cmd.Flags().Changed("disk-size-gb") {
+		v, _ := cmd.Flags().GetInt("disk-size-gb")
+		p.DiskSizeGB = &v
+	}
+	return p
+}
+
+func hasAllModifyFlags(cmd *cobra.Command) bool {
+	return cmd.Flags().Changed("mode") || cmd.Flags().Changed("gpu") ||
+		cmd.Flags().Changed("num-gpus") || cmd.Flags().Changed("vcpus") ||
+		cmd.Flags().Changed("disk-size-gb")
+}
+
 func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api.Instance) (api.InstanceModifyRequest, error) {
 	req := api.InstanceModifyRequest{}
 
@@ -253,16 +315,6 @@ func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api
 func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instance, specs *utils.SpecStore) (api.InstanceModifyRequest, error) {
 	req := api.InstanceModifyRequest{}
 	hasChanges := false
-
-	// Helper function to check if value is in slice
-	contains := func(slice []int, val int) bool {
-		for _, item := range slice {
-			if item == val {
-				return true
-			}
-		}
-		return false
-	}
 
 	// Mode validation
 	if cmd.Flags().Changed("mode") {
@@ -331,7 +383,7 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 		}
 
 		allowedVCPUs := specs.VCPUOptions(effectiveGPU, effectiveNumGPUs, effectiveMode)
-		if allowedVCPUs != nil && !contains(allowedVCPUs, vcpus) {
+		if allowedVCPUs != nil && !slices.Contains(allowedVCPUs, vcpus) {
 			return req, fmt.Errorf("vcpus must be one of %v for %s with %d GPU(s)", allowedVCPUs, effectiveGPU, effectiveNumGPUs)
 		}
 
@@ -348,7 +400,7 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 			effectiveGPU = *req.GPUType
 		}
 		allowedGPUCounts := specs.GPUCountsForMode(effectiveGPU, effectiveMode)
-		if !contains(allowedGPUCounts, numGPUs) {
+		if !slices.Contains(allowedGPUCounts, numGPUs) {
 			return req, fmt.Errorf("num-gpus %d is not valid for %s %s. Allowed: %v", numGPUs, effectiveGPU, effectiveMode, allowedGPUCounts)
 		}
 
