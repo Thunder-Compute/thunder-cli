@@ -52,6 +52,8 @@ func init() {
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (range depends on GPU config)")
 	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-key", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
+	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-keys", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
+	_ = createCmd.Flags().MarkHidden("ssh-keys")
 }
 
 func createInstanceCmd(client *api.Client, req api.CreateInstanceRequest, resp **api.CreateInstanceResponse) tea.Cmd {
