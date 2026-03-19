@@ -121,14 +121,19 @@ func TestValidateCreateConfig(t *testing.T) {
 			errorContains: "production mode supports GPU types:",
 		},
 		{
-			name: "production without num-gpus",
+			name: "production with invalid num-gpus",
 			config: &tui.CreateConfig{
-				Mode:    "production",
-				GPUType: "a100",
-				NumGPUs: 0,
+				Mode:       "production",
+				GPUType:    "a100",
+				NumGPUs:    3,
+				Template:   "base",
+				DiskSizeGB: 100,
+			},
+			templates: []api.TemplateEntry{
+				tmplEntry("base", "Base ML Environment"),
 			},
 			expectError:   true,
-			errorContains: "GPU count",
+			errorContains: "GPU count 3 is not valid",
 		},
 		{
 			name: "invalid num-gpus for production",
@@ -171,15 +176,17 @@ func TestValidateCreateConfig(t *testing.T) {
 			errorContains: "disk size must be between 100 and 300 GB",
 		},
 		{
-			name: "missing template",
+			name: "empty template defaults to base",
 			config: &tui.CreateConfig{
 				Mode:       "prototyping",
 				GPUType:    "a6000",
 				VCPUs:      8,
 				DiskSizeGB: 100,
 			},
-			expectError:   true,
-			errorContains: "template is required",
+			templates: []api.TemplateEntry{
+				tmplEntry("base", "Base ML Environment"),
+			},
+			expectError: false,
 		},
 		{
 			name: "template not found",

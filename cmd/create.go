@@ -346,7 +346,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	}
 
 	if config.Template == "" {
-		return fmt.Errorf("template is required (use --template flag)")
+		config.Template = "base"
 	}
 
 	// Check if template is actually a snapshot

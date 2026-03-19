@@ -15,6 +15,8 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
+const templatePageSize = 10
+
 type createStep int
 
 const (
@@ -71,6 +73,8 @@ type createModel struct {
 	spinner          spinner.Model
 	selectedSnapshot *api.Snapshot
 	gpuCountPhase    bool // when true, stepCompute shows GPU count selection before vCPU selection
+	templateBrowse   bool // when true, stepTemplate shows full template/snapshot list
+	templatePage     int  // current page when browsing templates
 	pricing          *utils.PricingData
 	pricingLoaded    bool
 	specs            *utils.SpecStore
@@ -450,7 +454,12 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "esc":
-			if m.step == stepCompute && !m.gpuCountPhase && m.specs.NeedsGPUCountPhase(m.config.GPUType, m.config.Mode) {
+			if m.step == stepTemplate && m.templateBrowse {
+				// Go back to None/Browse phase
+				m.templateBrowse = false
+				m.templatePage = 0
+				m.cursor = 0
+			} else if m.step == stepCompute && !m.gpuCountPhase && m.specs.NeedsGPUCountPhase(m.config.GPUType, m.config.Mode) {
 				// Go back to GPU count selection phase
 				m.gpuCountPhase = true
 				m.cursor = 0
@@ -463,6 +472,7 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.step = prev
 				m.cursor = 0
 				m.gpuCountPhase = false
+				m.templateBrowse = false
 				if m.step == stepDiskSize {
 					m.diskInput.Focus()
 				} else {
@@ -483,6 +493,23 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.step != stepDiskSize && m.cursor < maxCursor {
 				m.cursor++
 			}
+
+		case "left", "h":
+			if m.step == stepTemplate && m.templateBrowse && m.templatePage > 0 {
+				m.templatePage--
+				m.cursor = 0
+			}
+
+		case "right", "l":
+			if m.step == stepTemplate && m.templateBrowse {
+				totalItems := len(m.templates) + len(m.snapshots)
+				maxPage := (totalItems - 1) / templatePageSize
+				if m.templatePage < maxPage {
+					m.templatePage++
+					m.cursor = 0
+				}
+			}
+
 		default:
 			// Only update text input for non-handled keys
 			if m.step == stepDiskSize {
@@ -540,25 +567,45 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 		}
 
 	case stepTemplate:
-		totalOptions := len(m.templates) + len(m.snapshots)
-		if m.cursor < totalOptions {
-			if m.cursor < len(m.templates) {
-				m.config.Template = m.templates[m.cursor].Key
+		if !m.templateBrowse {
+			// Phase 1: None / Browse selection
+			if m.cursor == 0 {
+				// "None" — use base template, advance to disk size
+				m.config.Template = "base"
 				m.selectedSnapshot = nil
 				if m.presets == nil || m.presets.DiskSizeGB == nil {
 					m.diskInput.SetValue("100")
 				}
-			} else {
-				snapshotIndex := m.cursor - len(m.templates)
-				snapshot := m.snapshots[snapshotIndex]
-				m.config.Template = snapshot.Name
-				m.selectedSnapshot = &snapshot
-				if m.presets == nil || m.presets.DiskSizeGB == nil {
-					m.diskInput.SetValue(fmt.Sprintf("%d", snapshot.MinimumDiskSizeGB))
-				}
+				m.step = stepDiskSize
+				return m, m.trySkipCurrentStep()
 			}
-			m.step = stepDiskSize
-			return m, m.trySkipCurrentStep()
+			// "Browse Templates..." — enter browse phase
+			m.templateBrowse = true
+			m.templatePage = 0
+			m.cursor = 0
+		} else {
+			// Phase 2: Full template/snapshot selection (paginated)
+			absIndex := m.templatePage*templatePageSize + m.cursor
+			totalOptions := len(m.templates) + len(m.snapshots)
+			if absIndex < totalOptions {
+				if absIndex < len(m.templates) {
+					m.config.Template = m.templates[absIndex].Key
+					m.selectedSnapshot = nil
+					if m.presets == nil || m.presets.DiskSizeGB == nil {
+						m.diskInput.SetValue("100")
+					}
+				} else {
+					snapshotIndex := absIndex - len(m.templates)
+					snapshot := m.snapshots[snapshotIndex]
+					m.config.Template = snapshot.Name
+					m.selectedSnapshot = &snapshot
+					if m.presets == nil || m.presets.DiskSizeGB == nil {
+						m.diskInput.SetValue(fmt.Sprintf("%d", snapshot.MinimumDiskSizeGB))
+					}
+				}
+				m.step = stepDiskSize
+				return m, m.trySkipCurrentStep()
+			}
 		}
 
 	case stepDiskSize:
@@ -607,7 +654,12 @@ func (m createModel) getMaxCursor() int {
 		}
 		return len(m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, m.config.Mode)) - 1
 	case stepTemplate:
-		return len(m.templates) + len(m.snapshots) - 1
+		if !m.templateBrowse {
+			return 1 // None / Browse
+		}
+		totalItems := len(m.templates) + len(m.snapshots)
+		pageStart := m.templatePage * templatePageSize
+		return min(totalItems-pageStart, templatePageSize) - 1
 	case stepConfirmation:
 		return 1
 	}
@@ -633,21 +685,19 @@ func (m createModel) View() string {
 	s.WriteString("\n")
 
 	progressSteps := []string{"Mode", "GPU", "Size", "Template", "Disk", "Confirm"}
-	progress := ""
 	for i, stepName := range progressSteps {
 		adjustedStep := int(m.step)
 		if i == adjustedStep {
-			progress += m.styles.Selected.Render(fmt.Sprintf("[%s]", stepName))
+			s.WriteString(m.styles.Selected.Render(fmt.Sprintf("[%s]", stepName)))
 		} else if i < adjustedStep || m.skippedSteps[createStep(i)] {
-			progress += fmt.Sprintf("[✓ %s]", stepName)
+			s.WriteString(fmt.Sprintf("[✓ %s]", stepName))
 		} else {
-			progress += fmt.Sprintf("[%s]", stepName)
+			s.WriteString(fmt.Sprintf("[%s]", stepName))
 		}
 		if i < len(progressSteps)-1 {
-			progress += " → "
+			s.WriteString(" → ")
 		}
 	}
-	s.WriteString(progress)
 	s.WriteString("\n\n")
 
 	switch m.step {
@@ -730,42 +780,79 @@ func (m createModel) View() string {
 		}
 
 	case stepTemplate:
-		s.WriteString("Select OS template or custom snapshot:\n\n")
-		if !m.templatesLoaded || !m.snapshotsLoaded {
-			s.WriteString(fmt.Sprintf("%s Loading options...\n", m.spinner.View()))
-		} else {
-			// Display templates first
-			s.WriteString(m.styles.Label.Render("Templates:") + "\n")
-			for i, entry := range m.templates {
+		if !m.templateBrowse {
+			// Phase 1: None / Browse
+			s.WriteString("Select environment template:\n\n")
+			options := []string{"None (Base ML Environment)", "Browse Templates..."}
+			for i, opt := range options {
 				cursor := "  "
 				if m.cursor == i {
 					cursor = m.styles.Cursor.Render("▶ ")
 				}
-				name := entry.Template.DisplayName
-				if entry.Template.ExtendedDescription != "" {
-					name += fmt.Sprintf(" - %s", entry.Template.ExtendedDescription)
-				}
+				display := opt
 				if m.cursor == i {
-					name = m.styles.Selected.Render(name)
+					display = m.styles.Selected.Render(opt)
 				}
-				s.WriteString(fmt.Sprintf("%s%s\n", cursor, name))
+				s.WriteString(fmt.Sprintf("%s%s\n", cursor, display))
 			}
+		} else {
+			// Phase 2: Paginated template/snapshot list
+			if !m.templatesLoaded || !m.snapshotsLoaded {
+				s.WriteString("Select a template:\n\n")
+				s.WriteString(fmt.Sprintf("%s Loading options...\n", m.spinner.View()))
+			} else {
+				totalItems := len(m.templates) + len(m.snapshots)
+				totalPages := (totalItems + templatePageSize - 1) / templatePageSize
+				pageStart := m.templatePage * templatePageSize
+				pageEnd := min(pageStart+templatePageSize, totalItems)
 
-			// Display snapshots if any
-			if len(m.snapshots) > 0 {
-				s.WriteString("\n")
-				s.WriteString(m.styles.Label.Render("Custom Snapshots:") + "\n")
-				for i, snapshot := range m.snapshots {
-					cursorIndex := len(m.templates) + i
+				s.WriteString(fmt.Sprintf("Select a template (page %d/%d):\n\n", m.templatePage+1, totalPages))
+
+				// Track local cursor index within the page
+				localIdx := 0
+				// Show section labels when the section starts on or spans this page
+				if pageStart < len(m.templates) {
+					s.WriteString(m.styles.Label.Render("Templates:") + "\n")
+				}
+				for i := pageStart; i < pageEnd && i < len(m.templates); i++ {
+					entry := m.templates[i]
 					cursor := "  "
-					if m.cursor == cursorIndex {
+					if m.cursor == localIdx {
 						cursor = m.styles.Cursor.Render("▶ ")
 					}
-					name := fmt.Sprintf("%s (%d GB)", snapshot.Name, snapshot.MinimumDiskSizeGB)
-					if m.cursor == cursorIndex {
+					name := entry.Template.DisplayName
+					if entry.Template.ExtendedDescription != "" {
+						name += fmt.Sprintf(" - %s", entry.Template.ExtendedDescription)
+					}
+					if m.cursor == localIdx {
 						name = m.styles.Selected.Render(name)
 					}
 					s.WriteString(fmt.Sprintf("%s%s\n", cursor, name))
+					localIdx++
+				}
+
+				if pageEnd > len(m.templates) && len(m.snapshots) > 0 {
+					snapshotStart := 0
+					if pageStart > len(m.templates) {
+						snapshotStart = pageStart - len(m.templates)
+					}
+					snapshotEnd := min(pageEnd-len(m.templates), len(m.snapshots))
+
+					s.WriteString("\n")
+					s.WriteString(m.styles.Label.Render("Custom Snapshots:") + "\n")
+					for i := snapshotStart; i < snapshotEnd; i++ {
+						snapshot := m.snapshots[i]
+						cursor := "  "
+						if m.cursor == localIdx {
+							cursor = m.styles.Cursor.Render("▶ ")
+						}
+						name := fmt.Sprintf("%s (%d GB)", snapshot.Name, snapshot.MinimumDiskSizeGB)
+						if m.cursor == localIdx {
+							name = m.styles.Selected.Render(name)
+						}
+						s.WriteString(fmt.Sprintf("%s%s\n", cursor, name))
+						localIdx++
+					}
 				}
 			}
 		}
@@ -829,7 +916,16 @@ func (m createModel) View() string {
 
 	if m.step != stepConfirmation {
 		s.WriteString("\n")
-		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n"))
+		if m.step == stepTemplate && m.templateBrowse {
+			totalItems := len(m.templates) + len(m.snapshots)
+			if totalItems > templatePageSize {
+				s.WriteString(m.styles.Help.Render("↑/↓: Navigate  ←/→: Page  Enter: Select  Esc: Back  Q: Cancel\n"))
+			} else {
+				s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n"))
+			}
+		} else {
+			s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n"))
+		}
 	} else {
 		s.WriteString("\n")
 		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Q: Cancel\n"))
