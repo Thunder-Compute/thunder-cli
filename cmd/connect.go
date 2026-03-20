@@ -729,14 +729,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	sshCmd.Stderr = os.Stderr
 
 	err = sshCmd.Run()
-	// Handle SSH exit codes (130 = Ctrl+C, 255 = connection closed)
 	if err != nil {
 		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			exitCode := exitErr.ExitCode()
-			if exitCode != 0 && exitCode != 130 && exitCode != 255 {
-				return fmt.Errorf("SSH session failed with exit code %d", exitCode)
-			}
+		if !errors.As(err, &exitErr) {
+			return fmt.Errorf("SSH session failed: %w", err)
 		}
 	}
 
