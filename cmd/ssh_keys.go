@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -211,6 +212,10 @@ func runSSHKeysAddNonInteractive(client *api.Client, cmd *cobra.Command) error {
 		resp, e = client.AddSSHKeyToOrg(sshKeyAddName, publicKey)
 		return e
 	}); err != nil {
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "ssh_key_add")
+			sentry.CaptureException(err)
+		})
 		return fmt.Errorf("failed to add SSH key: %w", err)
 	}
 
@@ -234,6 +239,10 @@ func runSSHKeysAddInteractive(client *api.Client) error {
 		resp, e = client.AddSSHKeyToOrg(addConfig.Name, addConfig.PublicKey)
 		return e
 	}); err != nil {
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "ssh_key_add")
+			sentry.CaptureException(err)
+		})
 		return fmt.Errorf("failed to add SSH key: %w", err)
 	}
 
@@ -335,6 +344,10 @@ func runSSHKeysDelete(args []string) error {
 	// Run deletion with progress
 	successMsg, err := tui.RunSSHKeyDeleteProgress(client, keyID, selectedKey.Name)
 	if err != nil {
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "ssh_key_delete")
+			sentry.CaptureException(err)
+		})
 		return fmt.Errorf("failed to delete SSH key: %w", err)
 	}
 

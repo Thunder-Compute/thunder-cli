@@ -9,10 +9,12 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/getsentry/sentry-go"
+	"github.com/spf13/cobra"
+
 	"github.com/Thunder-Compute/thunder-cli/api"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/utils"
-	"github.com/spf13/cobra"
 )
 
 var scpCmd = &cobra.Command{
@@ -112,10 +114,18 @@ func runSCP(sources []string, destination string) error {
 	if !utils.KeyExists(target.UUID) {
 		keyResp, err := client.AddSSHKey(target.ID)
 		if err != nil {
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "scp_ssh_key_add")
+				sentry.CaptureException(err)
+			})
 			return fmt.Errorf("failed to add SSH key: %w", err)
 		}
 		if keyResp.Key != nil {
 			if err := utils.SavePrivateKey(target.UUID, *keyResp.Key); err != nil {
+				sentry.WithScope(func(scope *sentry.Scope) {
+					scope.SetTag("operation", "scp_ssh_key_save")
+					sentry.CaptureException(err)
+				})
 				return fmt.Errorf("failed to save private key: %w", err)
 			}
 		}
@@ -151,6 +161,10 @@ func runSCP(sources []string, destination string) error {
 
 		err := utils.Transfer(ctx, keyFile, target.GetIP(), target.Port, localPath, remotePath, direction == "upload")
 		if err != nil {
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "scp_transfer")
+				sentry.CaptureException(err)
+			})
 			return err
 		}
 	}

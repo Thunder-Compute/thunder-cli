@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -65,9 +64,8 @@ type createModel struct {
 	snapshots        []api.Snapshot
 	templatesLoaded  bool
 	snapshotsLoaded  bool
-	diskInput        textinput.Model
+	diskOptions      []int
 	err              error
-	validationErr    error
 	quitting         bool
 	client           *api.Client
 	spinner          spinner.Model
@@ -85,23 +83,11 @@ type createModel struct {
 
 func NewCreateModel(client *api.Client, specs *utils.SpecStore) createModel {
 	styles := NewPanelStyles()
-
-	ti := textinput.New()
-	ti.Placeholder = "100"
-	ti.CharLimit = 4
-	ti.Width = 20
-	ti.Prompt = "▶ "
-	ti.PromptStyle = styles.Cursor
-	ti.TextStyle = styles.Cursor
-	ti.PlaceholderStyle = styles.Cursor
-	ti.Cursor.Style = styles.Cursor
-
 	s := NewPrimarySpinner()
 
 	return createModel{
 		step:         stepMode,
 		client:       client,
-		diskInput:    ti,
 		spinner:      s,
 		styles:       styles,
 		specs:        specs,
@@ -172,15 +158,16 @@ func (m *createModel) trySkipCurrentStep() tea.Cmd {
 		case stepDiskSize:
 			if m.presets != nil && m.presets.DiskSizeGB != nil {
 				v := *m.presets.DiskSizeGB
-				if v >= 100 && v <= 1000 {
+				minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
+				if v >= minDisk && v <= maxDisk {
 					m.config.DiskSizeGB = v
-					m.diskInput.SetValue(fmt.Sprintf("%d", v))
 					m.skippedSteps[stepDiskSize] = true
 					skipped = true
 				}
 			}
 
 		case stepConfirmation:
+			m.initStep()
 			return nil
 		}
 
@@ -274,7 +261,7 @@ func (m *createModel) trySkipTemplate() tea.Cmd {
 			m.selectedSnapshot = nil
 			m.skippedSteps[stepTemplate] = true
 			if m.presets.DiskSizeGB == nil {
-				m.diskInput.SetValue("100")
+				m.config.DiskSizeGB = 100
 			}
 			m.step++
 			return m.trySkipCurrentStep() // continue the skip chain
@@ -288,7 +275,7 @@ func (m *createModel) trySkipTemplate() tea.Cmd {
 			m.selectedSnapshot = &m.snapshots[i]
 			m.skippedSteps[stepTemplate] = true
 			if m.presets.DiskSizeGB == nil {
-				m.diskInput.SetValue(fmt.Sprintf("%d", s.MinimumDiskSizeGB))
+				m.config.DiskSizeGB = s.MinimumDiskSizeGB
 			}
 			m.step++
 			return m.trySkipCurrentStep()
@@ -312,9 +299,24 @@ func (m *createModel) initStep() {
 			m.gpuCountPhase = false
 		}
 	case stepDiskSize:
-		m.diskInput.Focus()
-	default:
-		m.diskInput.Blur()
+		options := m.specs.StorageOptions(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
+		if m.selectedSnapshot != nil {
+			filtered := make([]int, 0, len(options))
+			for _, opt := range options {
+				if opt >= m.selectedSnapshot.MinimumDiskSizeGB {
+					filtered = append(filtered, opt)
+				}
+			}
+			options = filtered
+		}
+		m.diskOptions = options
+		// Position cursor on current DiskSizeGB if it matches an option
+		for i, opt := range m.diskOptions {
+			if opt >= m.config.DiskSizeGB {
+				m.cursor = i
+				break
+			}
+		}
 	}
 }
 
@@ -470,27 +472,22 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, tea.Quit
 				}
 				m.step = prev
-				m.cursor = 0
 				m.gpuCountPhase = false
 				m.templateBrowse = false
-				if m.step == stepDiskSize {
-					m.diskInput.Focus()
-				} else {
-					m.diskInput.Blur()
-				}
+				m.initStep()
 			}
 
 		case "enter":
 			return m.handleEnter()
 
 		case "up", "k":
-			if m.step != stepDiskSize && m.cursor > 0 {
+			if m.cursor > 0 {
 				m.cursor--
 			}
 
 		case "down", "j":
 			maxCursor := m.getMaxCursor()
-			if m.step != stepDiskSize && m.cursor < maxCursor {
+			if m.cursor < maxCursor {
 				m.cursor++
 			}
 
@@ -510,15 +507,6 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-		default:
-			// Only update text input for non-handled keys
-			if m.step == stepDiskSize {
-				var cmd tea.Cmd
-				m.diskInput, cmd = m.diskInput.Update(msg)
-				// Clear validation error when user modifies input (but not on enter)
-				m.validationErr = nil
-				return m, cmd
-			}
 		}
 	}
 
@@ -574,7 +562,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 				m.config.Template = "base"
 				m.selectedSnapshot = nil
 				if m.presets == nil || m.presets.DiskSizeGB == nil {
-					m.diskInput.SetValue("100")
+					m.config.DiskSizeGB = 100
 				}
 				m.step = stepDiskSize
 				return m, m.trySkipCurrentStep()
@@ -592,7 +580,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 					m.config.Template = m.templates[absIndex].Key
 					m.selectedSnapshot = nil
 					if m.presets == nil || m.presets.DiskSizeGB == nil {
-						m.diskInput.SetValue("100")
+						m.config.DiskSizeGB = 100
 					}
 				} else {
 					snapshotIndex := absIndex - len(m.templates)
@@ -600,7 +588,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 					m.config.Template = snapshot.Name
 					m.selectedSnapshot = &snapshot
 					if m.presets == nil || m.presets.DiskSizeGB == nil {
-						m.diskInput.SetValue(fmt.Sprintf("%d", snapshot.MinimumDiskSizeGB))
+						m.config.DiskSizeGB = snapshot.MinimumDiskSizeGB
 					}
 				}
 				m.step = stepDiskSize
@@ -609,19 +597,9 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 		}
 
 	case stepDiskSize:
-		minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
-		diskSize, err := strconv.Atoi(m.diskInput.Value())
-		if err != nil || diskSize < minDisk || diskSize > maxDisk {
-			m.validationErr = fmt.Errorf("disk size must be between %d and %d GB", minDisk, maxDisk)
-			return m, nil
+		if len(m.diskOptions) > 0 {
+			m.config.DiskSizeGB = m.diskOptions[m.cursor]
 		}
-		if m.selectedSnapshot != nil && diskSize < m.selectedSnapshot.MinimumDiskSizeGB {
-			m.validationErr = fmt.Errorf("disk size must be at least %d GB for snapshot '%s'", m.selectedSnapshot.MinimumDiskSizeGB, m.selectedSnapshot.Name)
-			return m, nil
-		}
-		m.config.DiskSizeGB = diskSize
-		m.validationErr = nil
-		m.diskInput.Blur()
 		m.step = stepConfirmation
 		return m, m.trySkipCurrentStep()
 
@@ -660,6 +638,8 @@ func (m createModel) getMaxCursor() int {
 		totalItems := len(m.templates) + len(m.snapshots)
 		pageStart := m.templatePage * templatePageSize
 		return min(totalItems-pageStart, templatePageSize) - 1
+	case stepDiskSize:
+		return len(m.diskOptions) - 1
 	case stepConfirmation:
 		return 1
 	}
@@ -858,28 +838,30 @@ func (m createModel) View() string {
 		}
 
 	case stepDiskSize:
-		minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
-		s.WriteString("Enter disk size (GB):\n\n")
-		s.WriteString(fmt.Sprintf("Range: %d-%d GB\n\n", minDisk, maxDisk))
-		s.WriteString(m.diskInput.View())
-		s.WriteString("\n\n")
-		if m.validationErr != nil {
-			s.WriteString(errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v", m.validationErr)))
-			s.WriteString("\n")
+		s.WriteString("Select disk size (GB):\n\n")
+		for i, opt := range m.diskOptions {
+			cursor := "  "
+			if m.cursor == i {
+				cursor = m.styles.Cursor.Render("▶ ")
+			}
+			text := fmt.Sprintf("%d GB", opt)
+			if m.cursor == i {
+				text = m.styles.Selected.Render(text)
+			}
+			s.WriteString(fmt.Sprintf("%s%s\n", cursor, text))
 		}
-		s.WriteString(m.styles.Help.Render("Press Enter to continue\n"))
 
 	case stepConfirmation:
 		s.WriteString("Review your configuration:\n")
 
 		var panel strings.Builder
 		panel.WriteString(m.styles.Label.Render("Mode:       ") + utils.Capitalize(m.config.Mode) + "\n")
+		panel.WriteString(m.styles.Label.Render("Template:   ") + utils.Capitalize(m.config.Template) + "\n")
 		panel.WriteString(m.styles.Label.Render("GPU Type:   ") + utils.FormatGPUType(m.config.GPUType) + "\n")
 		panel.WriteString(m.styles.Label.Render("GPUs:       ") + strconv.Itoa(m.config.NumGPUs) + "\n")
 		panel.WriteString(m.styles.Label.Render("vCPUs:      ") + strconv.Itoa(m.config.VCPUs) + "\n")
 		confirmRamPerVCPU := m.specs.RamPerVCPU(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
 		panel.WriteString(m.styles.Label.Render("RAM:        ") + strconv.Itoa(m.config.VCPUs*confirmRamPerVCPU) + " GB\n")
-		panel.WriteString(m.styles.Label.Render("Template:   ") + utils.Capitalize(m.config.Template) + "\n")
 		panel.WriteString(m.styles.Label.Render("Disk Size:  ") + strconv.Itoa(m.config.DiskSizeGB) + " GB")
 
 		s.WriteString(m.styles.Panel.Render(panel.String()))
@@ -928,7 +910,7 @@ func (m createModel) View() string {
 		}
 	} else {
 		s.WriteString("\n")
-		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Cancel\n"))
 	}
 
 	return s.String()
@@ -991,8 +973,8 @@ func (m createModel) computePreviewPrice() float64 {
 			vcpus = vcpuOpts[m.cursor]
 		}
 	case stepDiskSize:
-		if v, err := fmt.Sscanf(m.diskInput.Value(), "%d", &diskSizeGB); v != 1 || err != nil {
-			diskSizeGB = 100
+		if len(m.diskOptions) > 0 && m.cursor < len(m.diskOptions) {
+			diskSizeGB = m.diskOptions[m.cursor]
 		}
 	}
 

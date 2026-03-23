@@ -123,6 +123,16 @@ func (s *SpecStore) StorageRange(gpuType string, numGPUs int, mode string) (int,
 	return spec.StorageGB.Min, spec.StorageGB.Max
 }
 
+// StorageOptions returns valid disk size options in 100GB increments for a configuration.
+func (s *SpecStore) StorageOptions(gpuType string, numGPUs int, mode string) []int {
+	minGB, maxGB := s.StorageRange(gpuType, numGPUs, mode)
+	var options []int
+	for i := minGB; i <= maxGB; i += 100 {
+		options = append(options, i)
+	}
+	return options
+}
+
 // NormalizeGPUType maps user-friendly GPU names to canonical names,
 // validated against available specs for the given mode.
 // Returns the canonical name and whether it was found.
