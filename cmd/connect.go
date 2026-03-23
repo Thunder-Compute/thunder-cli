@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
-	"runtime"
 	"strconv"
 	"time"
 
@@ -15,6 +13,7 @@ import (
 	termx "github.com/charmbracelet/x/term"
 	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
@@ -29,12 +28,12 @@ var (
 
 // mocks for testing
 type connectOptions struct {
-	client       api.ConnectClient
-	skipTTYCheck bool
-	skipTUI      bool
-	sshConnector func(ctx context.Context, ip, keyFile string, port, maxWait int) (sshClient, error)
-	execCommand  func(name string, args ...string) *exec.Cmd
-	configLoader func() (*Config, error)
+	client        api.ConnectClient
+	skipTTYCheck  bool
+	skipTUI       bool
+	sshConnector  func(ctx context.Context, ip, keyFile string, port, maxWait int) (sshClient, error)
+	sessionRunner func(ctx context.Context, cfg utils.SessionConfig) error
+	configLoader  func() (*Config, error)
 }
 
 type sshClient interface {
@@ -48,11 +47,11 @@ func resolveConnectClient(opts *connectOptions, token, baseURL string) api.Conne
 	return api.NewClient(token, baseURL)
 }
 
-func resolveExecCommand(opts *connectOptions) func(name string, args ...string) *exec.Cmd {
-	if opts != nil && opts.execCommand != nil {
-		return opts.execCommand
+func resolveSessionRunner(opts *connectOptions) func(ctx context.Context, cfg utils.SessionConfig) error {
+	if opts != nil && opts.sessionRunner != nil {
+		return opts.sessionRunner
 	}
-	return exec.Command
+	return utils.RunInteractiveSession
 }
 
 func resolveConfigLoader(opts *connectOptions) func() (*Config, error) {
@@ -70,8 +69,8 @@ func defaultConnectOptions(token, baseURL string) *connectOptions {
 		sshConnector: func(ctx context.Context, ip, keyFile string, port, maxWait int) (sshClient, error) {
 			return utils.RobustSSHConnectCtx(ctx, ip, keyFile, port, maxWait)
 		},
-		execCommand:  exec.Command,
-		configLoader: LoadConfig,
+		sessionRunner: utils.RunInteractiveSession,
+		configLoader:  LoadConfig,
 	}
 }
 
@@ -254,13 +253,6 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	phase1Start := time.Now()
 	tui.SendPhaseUpdate(p, 0, tui.PhaseInProgress, "Fetching instances...", 0)
-
-	if runtime.GOOS == "windows" {
-		if err := checkWindowsOpenSSH(); err != nil {
-			shutdownTUI()
-			return err
-		}
-	}
 
 	if checkCancelled() {
 		return nil
@@ -694,20 +686,6 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		return nil
 	}
 
-	if sshClient != nil {
-		sshClient.Close()
-	}
-
-	sshArgs := []string{
-		"-q",
-		"-o", "StrictHostKeyChecking=accept-new",
-		"-o", "IdentitiesOnly=yes",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-i", keyFile,
-		"-p", fmt.Sprintf("%d", port),
-		"-t",
-	}
-
 	allPorts := make(map[int]bool)
 	for _, p := range tunnelPorts {
 		allPorts[p] = true
@@ -715,22 +693,29 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	for _, p := range templatePorts {
 		allPorts[p] = true
 	}
-
-	for port := range allPorts {
-		sshArgs = append(sshArgs, "-L", fmt.Sprintf("%d:localhost:%d", port, port))
+	var portList []int
+	for p := range allPorts {
+		portList = append(portList, p)
 	}
 
-	sshArgs = append(sshArgs, fmt.Sprintf("ubuntu@%s", instance.GetIP()))
+	sessionCfg := utils.SessionConfig{
+		Client: sshClient,
+		Ports:  portList,
+		Stdin:  os.Stdin,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
 
-	execCmd := resolveExecCommand(opts)
-	sshCmd := execCmd("ssh", sshArgs...)
-	sshCmd.Stdin = os.Stdin
-	sshCmd.Stdout = os.Stdout
-	sshCmd.Stderr = os.Stderr
+	runner := resolveSessionRunner(opts)
+	err = runner(ctx, sessionCfg)
 
-	err = sshCmd.Run()
+	if sshClient != nil {
+		sshClient.Close()
+	}
+
+	// Remote shell exit codes are not connect errors.
 	if err != nil {
-		var exitErr *exec.ExitError
+		var exitErr *ssh.ExitError
 		if !errors.As(err, &exitErr) {
 			return fmt.Errorf("SSH session failed: %w", err)
 		}
@@ -742,51 +727,4 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	}
 
 	return nil
-}
-
-func checkWindowsOpenSSH() error {
-	if _, err := exec.LookPath("ssh"); err == nil {
-		return nil
-	}
-
-	fmt.Println("OpenSSH client not found. Attempting to install...")
-
-	// Try auto-install via PowerShell (requires admin privileges)
-	installCmd := exec.Command("powershell", "-Command",
-		"Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0")
-	installOutput, installErr := installCmd.CombinedOutput()
-
-	if installErr == nil {
-		if _, err := exec.LookPath("ssh"); err == nil {
-			fmt.Println("OpenSSH client installed successfully!")
-			return nil
-		}
-		// ssh still not in PATH after install - likely needs terminal restart
-		fmt.Println("OpenSSH installation completed. Please restart your terminal and try again.")
-		return fmt.Errorf("OpenSSH installed but not yet available. Please restart your terminal")
-	}
-
-	errDetails := ""
-	if len(installOutput) > 0 {
-		errDetails = string(installOutput)
-	}
-
-	return fmt.Errorf(`OpenSSH client not found and automatic installation failed.
-
-To install OpenSSH manually, choose one of these options:
-
-Option 1: Run PowerShell as Administrator and execute:
-  Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
-
-Option 2: Install via Windows Settings:
-  1. Open Settings > Apps > Optional Features
-  2. Click "Add a feature"
-  3. Search for "OpenSSH Client" and install it
-
-Option 3: Install via winget:
-  winget install Microsoft.OpenSSH.Client
-
-After installation, restart your terminal and try again.
-
-%s`, errDetails)
 }

@@ -3,15 +3,12 @@ package cmd
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 
@@ -19,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
 func ptr(s string) *string { return &s }
@@ -162,17 +160,10 @@ func saveTestKey(t *testing.T, tmpDir, uuid string) string {
 	return keyFile
 }
 
-// mockExecCommand creates a mock exec.Command that captures arguments
-func mockExecCommand(capturedArgs *[]string, exitCode int) func(string, ...string) *exec.Cmd {
-	return func(name string, args ...string) *exec.Cmd {
-		*capturedArgs = append([]string{name}, args...)
-
-		// Create a command that exits with the specified code
-		if exitCode == 0 {
-			return exec.Command("true")
-		}
-		// Use a shell command to exit with specific code
-		return exec.Command("sh", "-c", fmt.Sprintf("exit %d", exitCode))
+// mockSessionRunner creates a mock session runner for testing
+func mockSessionRunner(err error) func(context.Context, utils.SessionConfig) error {
+	return func(ctx context.Context, cfg utils.SessionConfig) error {
+		return err
 	}
 }
 
@@ -376,62 +367,7 @@ func TestRunConnect_ListInstancesError(t *testing.T) {
 	_ = tmpDir
 }
 
-func TestBuildSSHArgs_BaseFlags(t *testing.T) {
-	// Test that the base SSH arguments are correctly constructed
-	// This tests the argument building logic without running the full connect flow
-
-	keyFile := "/path/to/key"
-	port := 2222
-	ip := "192.168.1.100"
-
-	// Simulate the argument building from runConnect
-	sshArgs := []string{
-		"-q",
-		"-o", "StrictHostKeyChecking=accept-new",
-		"-o", "IdentitiesOnly=yes",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-i", keyFile,
-		"-p", fmt.Sprintf("%d", port),
-		"-t",
-	}
-
-	sshArgs = append(sshArgs, fmt.Sprintf("ubuntu@%s", ip))
-
-	// Verify base flags
-	assert.Contains(t, sshArgs, "-q")
-	assert.Contains(t, sshArgs, "-t")
-	assert.Contains(t, sshArgs, keyFile)
-	assert.Contains(t, sshArgs, fmt.Sprintf("%d", port))
-	assert.Contains(t, sshArgs, fmt.Sprintf("ubuntu@%s", ip))
-}
-
-func TestBuildSSHArgs_PortForwarding(t *testing.T) {
-	// Test port forwarding argument construction
-	tunnelPorts := []int{8080, 3000}
-	templatePorts := []int{8888} // jupyter
-
-	// Merge ports like runConnect does
-	allPorts := make(map[int]bool)
-	for _, p := range tunnelPorts {
-		allPorts[p] = true
-	}
-	for _, p := range templatePorts {
-		allPorts[p] = true
-	}
-
-	var sshArgs []string
-	for port := range allPorts {
-		sshArgs = append(sshArgs, "-L", fmt.Sprintf("%d:localhost:%d", port, port))
-	}
-
-	// Verify all ports are present
-	argsStr := strings.Join(sshArgs, " ")
-	assert.Contains(t, argsStr, "8080:localhost:8080")
-	assert.Contains(t, argsStr, "3000:localhost:3000")
-	assert.Contains(t, argsStr, "8888:localhost:8888")
-}
-
-func TestBuildSSHArgs_PortForwardingNoDuplicates(t *testing.T) {
+func TestPortDeduplication(t *testing.T) {
 	// Test that duplicate ports are not included twice
 	tunnelPorts := []int{8080, 8888}   // User specifies 8888
 	templatePorts := []int{8888, 6006} // Template also has 8888
@@ -451,41 +387,16 @@ func TestBuildSSHArgs_PortForwardingNoDuplicates(t *testing.T) {
 	assert.True(t, allPorts[6006])
 }
 
-func TestSSHExitCodeHandling(t *testing.T) {
-	// Interactive SSH sessions return the exit code of the last command the
-	// user ran inside the shell. All exec.ExitError codes should be treated
-	// as non-errors — only non-ExitError failures (e.g. binary not found)
-	// should surface.
-	tests := []struct {
-		name     string
-		exitCode int
-	}{
-		{name: "exit code 0 - success", exitCode: 0},
-		{name: "exit code 1 - last command failed", exitCode: 1},
-		{name: "exit code 2 - last command failed", exitCode: 2},
-		{name: "exit code 127 - command not found", exitCode: 127},
-		{name: "exit code 130 - Ctrl+C", exitCode: 130},
-		{name: "exit code 255 - connection closed", exitCode: 255},
-	}
+func TestMockSessionRunner(t *testing.T) {
+	// Test that mock session runner returns the configured error
+	runner := mockSessionRunner(nil)
+	err := runner(context.Background(), utils.SessionConfig{})
+	assert.NoError(t, err)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// All exit codes from an interactive session are non-errors
-			var err error
-			if tt.exitCode != 0 {
-				err = &exec.ExitError{}
-			}
-			isExitErr := false
-			if err != nil {
-				var exitErr *exec.ExitError
-				isExitErr = errors.As(err, &exitErr)
-			}
-			// ExitError should never be treated as a connect failure
-			if err != nil {
-				assert.True(t, isExitErr, "expected exit code %d to be an ExitError (non-failure)", tt.exitCode)
-			}
-		})
-	}
+	expectedErr := fmt.Errorf("connection lost")
+	runner = mockSessionRunner(expectedErr)
+	err = runner(context.Background(), utils.SessionConfig{})
+	assert.Equal(t, expectedErr, err)
 }
 
 func TestMockAPIClient_ListInstances(t *testing.T) {
@@ -553,34 +464,6 @@ func TestCreateTestInstance(t *testing.T) {
 	assert.Equal(t, "jupyter", instance.Template)
 	assert.Equal(t, "prototyping", instance.Mode)
 	assert.Equal(t, 2222, instance.Port)
-}
-
-func TestMockExecCommand(t *testing.T) {
-	var capturedArgs []string
-
-	mockCmd := mockExecCommand(&capturedArgs, 0)
-	cmd := mockCmd("ssh", "-q", "-i", "/path/to/key", "ubuntu@192.168.1.100")
-
-	// The mock returns a real command that will exit with the specified code
-	err := cmd.Run()
-	assert.NoError(t, err)
-
-	// Verify arguments were captured
-	assert.Equal(t, "ssh", capturedArgs[0])
-	assert.Contains(t, capturedArgs, "-q")
-	assert.Contains(t, capturedArgs, "-i")
-	assert.Contains(t, capturedArgs, "/path/to/key")
-	assert.Contains(t, capturedArgs, "ubuntu@192.168.1.100")
-}
-
-func TestMockExecCommand_NonZeroExit(t *testing.T) {
-	var capturedArgs []string
-
-	mockCmd := mockExecCommand(&capturedArgs, 1)
-	cmd := mockCmd("ssh", "test")
-
-	err := cmd.Run()
-	assert.Error(t, err)
 }
 
 func TestSetupTestEnvironment(t *testing.T) {
@@ -777,7 +660,7 @@ func TestConnectOptions_Defaults(t *testing.T) {
 	assert.False(t, opts.skipTTYCheck)
 	assert.False(t, opts.skipTUI)
 	assert.NotNil(t, opts.sshConnector)
-	assert.NotNil(t, opts.execCommand)
+	assert.NotNil(t, opts.sessionRunner)
 	assert.NotNil(t, opts.configLoader)
 }
 
