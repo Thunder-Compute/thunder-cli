@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParsePathWithOS(t *testing.T) {
@@ -88,6 +89,188 @@ func TestParsePathWithOS(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parsePathWithOS(tt.path, tt.goos)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParsePathWithOS_AdditionalCases(t *testing.T) {
+	tests := []struct {
+		name       string
+		path       string
+		goos       string
+		wantRemote bool
+		wantID     string
+		wantPath   string
+	}{
+		{
+			name:       "dots in identifier prevent remote detection",
+			path:       "my.host:/path",
+			goos:       "linux",
+			wantRemote: false,
+			wantPath:   "my.host:/path",
+		},
+		{
+			name:       "slash in identifier prevents remote detection",
+			path:       "path/to:/something",
+			goos:       "linux",
+			wantRemote: false,
+			wantPath:   "path/to:/something",
+		},
+		{
+			name:       "tilde path is local",
+			path:       "~/documents/file.txt",
+			goos:       "linux",
+			wantRemote: false,
+			wantPath:   "~/documents/file.txt",
+		},
+		{
+			name:       "remote with empty path",
+			path:       "inst123:",
+			goos:       "linux",
+			wantRemote: true,
+			wantID:     "inst123",
+			wantPath:   "",
+		},
+		{
+			name:       "instance ID at max length (20 chars)",
+			path:       "12345678901234567890:/data",
+			goos:       "linux",
+			wantRemote: true,
+			wantID:     "12345678901234567890",
+			wantPath:   "/data",
+		},
+		{
+			name:       "instance ID too long (21 chars) not remote",
+			path:       "123456789012345678901:/data",
+			goos:       "linux",
+			wantRemote: false,
+			wantPath:   "123456789012345678901:/data",
+		},
+		{
+			name:       "lowercase windows drive on windows",
+			path:       "d:\\data\\file.txt",
+			goos:       "windows",
+			wantRemote: false,
+			wantPath:   "d:\\data\\file.txt",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parsePathWithOS(tt.path, tt.goos)
+			assert.Equal(t, tt.path, got.Original)
+			assert.Equal(t, tt.wantRemote, got.IsRemote, "IsRemote")
+			assert.Equal(t, tt.wantID, got.InstanceID, "InstanceID")
+			assert.Equal(t, tt.wantPath, got.Path, "Path")
+		})
+	}
+}
+
+func TestIsValidInstanceID(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"inst123", true},
+		{"abc", true},
+		{"a", true},
+		{"0", true},
+		{"inst-123", true},
+		{"inst_123", true},
+		{"12345678901234567890", true},  // exactly 20 chars
+		{"123456789012345678901", false}, // 21 chars - too long
+		{"", false},
+		{"has/slash", false},
+		{"has\\backslash", false},
+		{"has.dot", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			assert.Equal(t, tt.want, isValidInstanceID(tt.input))
+		})
+	}
+}
+
+func TestDetermineTransferDirection(t *testing.T) {
+	local := func(path string) PathInfo {
+		return PathInfo{Original: path, Path: path, IsRemote: false}
+	}
+	remote := func(id, path string) PathInfo {
+		return PathInfo{Original: id + ":" + path, InstanceID: id, Path: path, IsRemote: true}
+	}
+
+	tests := []struct {
+		name          string
+		sources       []PathInfo
+		dest          PathInfo
+		wantDir       string
+		wantID        string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:    "upload: single local to remote",
+			sources: []PathInfo{local("file.txt")},
+			dest:    remote("inst1", "/home/user/"),
+			wantDir: "upload",
+			wantID:  "inst1",
+		},
+		{
+			name:    "upload: multiple local to remote",
+			sources: []PathInfo{local("a.txt"), local("b.txt")},
+			dest:    remote("inst1", "/home/user/"),
+			wantDir: "upload",
+			wantID:  "inst1",
+		},
+		{
+			name:    "download: single remote to local",
+			sources: []PathInfo{remote("inst1", "/data/file.txt")},
+			dest:    local("./"),
+			wantDir: "download",
+			wantID:  "inst1",
+		},
+		{
+			name:    "download: multiple remote same instance",
+			sources: []PathInfo{remote("inst1", "/a.txt"), remote("inst1", "/b.txt")},
+			dest:    local("./"),
+			wantDir: "download",
+			wantID:  "inst1",
+		},
+		{
+			name:          "error: remote to remote",
+			sources:       []PathInfo{remote("inst1", "/a.txt")},
+			dest:          remote("inst2", "/b/"),
+			expectError:   true,
+			errorContains: "cannot transfer from remote to remote",
+		},
+		{
+			name:          "error: multiple different instances",
+			sources:       []PathInfo{remote("inst1", "/a.txt"), remote("inst2", "/b.txt")},
+			dest:          local("./"),
+			expectError:   true,
+			errorContains: "cannot transfer between multiple instances",
+		},
+		{
+			name:          "error: no remote path at all",
+			sources:       []PathInfo{local("a.txt")},
+			dest:          local("./"),
+			expectError:   true,
+			errorContains: "no remote path specified",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir, id, err := determineTransferDirection(tt.sources, tt.dest)
+			if tt.expectError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorContains)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantDir, dir)
+				assert.Equal(t, tt.wantID, id)
+			}
 		})
 	}
 }

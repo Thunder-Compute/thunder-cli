@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -132,6 +133,10 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 	))
 	finalModel, err := p.Run()
 	if err != nil {
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "ports_forward_tui")
+			sentry.CaptureException(err)
+		})
 		return fmt.Errorf("error during port update: %w", err)
 	}
 
@@ -143,6 +148,10 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 	}
 
 	if result.Err() != nil {
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "ports_forward")
+			sentry.CaptureException(result.Err())
+		})
 		return fmt.Errorf("failed to update ports: %w", result.Err())
 	}
 

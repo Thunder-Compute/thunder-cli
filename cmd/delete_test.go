@@ -282,3 +282,96 @@ func TestSSHConfigCleanupWithoutIP(t *testing.T) {
 // func TestSSHConfigCleanupHomeDirError(t *testing.T) {
 // 	t.Skip("Skipping home directory error test - difficult to mock os.UserHomeDir")
 // }
+
+func TestFilterSSHHostBlock(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		hostName string
+		check    func(t *testing.T, result string)
+	}{
+		{
+			name:     "empty content",
+			content:  "",
+			hostName: "tnr-inst1",
+			check: func(t *testing.T, result string) {
+				assert.Equal(t, "", result)
+			},
+		},
+		{
+			name: "removes target block, preserves others",
+			content: "Host tnr-inst1\n  HostName 1.2.3.4\n  User root\n\nHost tnr-inst2\n  HostName 5.6.7.8\n  User root\n",
+			hostName: "tnr-inst1",
+			check: func(t *testing.T, result string) {
+				assert.NotContains(t, result, "tnr-inst1")
+				assert.NotContains(t, result, "1.2.3.4")
+				assert.Contains(t, result, "Host tnr-inst2")
+				assert.Contains(t, result, "5.6.7.8")
+			},
+		},
+		{
+			name: "removes last block",
+			content: "Host tnr-inst1\n  HostName 1.1.1.1\n\nHost tnr-inst2\n  HostName 2.2.2.2\n",
+			hostName: "tnr-inst2",
+			check: func(t *testing.T, result string) {
+				assert.Contains(t, result, "Host tnr-inst1")
+				assert.Contains(t, result, "1.1.1.1")
+				assert.NotContains(t, result, "tnr-inst2")
+				assert.NotContains(t, result, "2.2.2.2")
+			},
+		},
+		{
+			name: "no match leaves content unchanged",
+			content: "Host tnr-inst1\n  HostName 1.2.3.4\n",
+			hostName: "tnr-inst999",
+			check: func(t *testing.T, result string) {
+				assert.Contains(t, result, "Host tnr-inst1")
+				assert.Contains(t, result, "1.2.3.4")
+			},
+		},
+		{
+			name: "removes middle block",
+			content: "Host tnr-a\n  HostName 1.1.1.1\n\nHost tnr-b\n  HostName 2.2.2.2\n\nHost tnr-c\n  HostName 3.3.3.3\n",
+			hostName: "tnr-b",
+			check: func(t *testing.T, result string) {
+				assert.Contains(t, result, "Host tnr-a")
+				assert.NotContains(t, result, "tnr-b")
+				assert.Contains(t, result, "Host tnr-c")
+			},
+		},
+		{
+			name: "partial name match does not remove",
+			content: "Host tnr-inst10\n  HostName 1.2.3.4\n",
+			hostName: "tnr-inst1",
+			check: func(t *testing.T, result string) {
+				assert.Contains(t, result, "Host tnr-inst10")
+			},
+		},
+		{
+			name: "removes block with many config lines",
+			content: "Host tnr-inst1\n  HostName 1.2.3.4\n  User root\n  Port 2222\n  IdentityFile ~/.ssh/key\n  StrictHostKeyChecking no\n",
+			hostName: "tnr-inst1",
+			check: func(t *testing.T, result string) {
+				assert.NotContains(t, result, "tnr-inst1")
+				assert.NotContains(t, result, "1.2.3.4")
+				assert.NotContains(t, result, "IdentityFile")
+			},
+		},
+		{
+			name: "handles tab-indented config",
+			content: "Host tnr-inst1\n\tHostName 1.2.3.4\n\tUser root\n",
+			hostName: "tnr-inst1",
+			check: func(t *testing.T, result string) {
+				assert.NotContains(t, result, "tnr-inst1")
+				assert.NotContains(t, result, "1.2.3.4")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterSSHHostBlock(tt.content, tt.hostName)
+			tt.check(t, result)
+		})
+	}
+}
