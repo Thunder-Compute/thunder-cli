@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -226,6 +227,10 @@ func runModify(cmd *cobra.Command, args []string) error {
 	))
 	finalModel, err := p.Run()
 	if err != nil {
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "modify_tui")
+			sentry.CaptureException(err)
+		})
 		return fmt.Errorf("error during modification: %w", err)
 	}
 
@@ -237,6 +242,10 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	if result.Err() != nil {
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "modify_instance")
+			sentry.CaptureException(result.Err())
+		})
 		return fmt.Errorf("failed to modify instance: %w", result.Err())
 	}
 
@@ -313,23 +322,29 @@ func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api
 }
 
 func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instance, specs *utils.SpecStore) (api.InstanceModifyRequest, error) {
+	presets := buildModifyPresets(cmd)
+	return validateAndBuildModifyRequest(presets, currentInstance, specs)
+}
+
+// validateAndBuildModifyRequest validates modify presets against the current instance
+// and spec store, returning a ready-to-send API request or an error.
+func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *api.Instance, specs *utils.SpecStore) (api.InstanceModifyRequest, error) {
 	req := api.InstanceModifyRequest{}
 	hasChanges := false
 
 	// Mode validation
-	if cmd.Flags().Changed("mode") {
-		mode, _ := cmd.Flags().GetString("mode")
-		mode = strings.ToLower(mode)
+	if presets.Mode != nil {
+		mode := strings.ToLower(*presets.Mode)
 		if mode != "prototyping" && mode != "production" {
 			return req, fmt.Errorf("mode must be 'prototyping' or 'production'")
 		}
 
 		// If switching modes, validate dependent fields
 		if mode != currentInstance.Mode {
-			if mode == "production" && !cmd.Flags().Changed("num-gpus") {
+			if mode == "production" && presets.NumGPUs == nil {
 				return req, fmt.Errorf("switching to production requires --num-gpus flag (1, 2, or 4)")
 			}
-			if mode == "prototyping" && !cmd.Flags().Changed("vcpus") {
+			if mode == "prototyping" && presets.VCPUs == nil {
 				return req, fmt.Errorf("switching to prototyping requires --vcpus flag (options vary by GPU type)")
 			}
 		}
@@ -345,9 +360,8 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 	}
 
 	// GPU type validation
-	if cmd.Flags().Changed("gpu") {
-		gpuType, _ := cmd.Flags().GetString("gpu")
-		gpuType = strings.ToLower(gpuType)
+	if presets.GPUType != nil {
+		gpuType := strings.ToLower(*presets.GPUType)
 
 		normalizedGPU, ok := specs.NormalizeGPUType(gpuType, effectiveMode)
 		if !ok {
@@ -360,8 +374,8 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 	}
 
 	// VCPUs validation (prototyping only)
-	if cmd.Flags().Changed("vcpus") {
-		vcpus, _ := cmd.Flags().GetInt("vcpus")
+	if presets.VCPUs != nil {
+		vcpus := *presets.VCPUs
 
 		// Check mode compatibility
 		if effectiveMode == "production" {
@@ -392,8 +406,8 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 	}
 
 	// NumGPUs validation
-	if cmd.Flags().Changed("num-gpus") {
-		numGPUs, _ := cmd.Flags().GetInt("num-gpus")
+	if presets.NumGPUs != nil {
+		numGPUs := *presets.NumGPUs
 
 		effectiveGPU := currentInstance.GPUType
 		if req.GPUType != nil {
@@ -409,8 +423,8 @@ func buildModifyRequestFromFlags(cmd *cobra.Command, currentInstance *api.Instan
 	}
 
 	// Disk size validation
-	if cmd.Flags().Changed("disk-size-gb") {
-		diskSize, _ := cmd.Flags().GetInt("disk-size-gb")
+	if presets.DiskSizeGB != nil {
+		diskSize := *presets.DiskSizeGB
 		if diskSize < currentInstance.Storage {
 			return req, fmt.Errorf("disk size cannot be smaller than current size (%d GB)", currentInstance.Storage)
 		}
