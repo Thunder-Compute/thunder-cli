@@ -6,7 +6,6 @@ import (
 	"os"
 	"sort"
 
-	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -117,10 +116,6 @@ func runSnapshotDelete(args []string) error {
 	// Run deletion with progress
 	successMsg, err := tui.RunSnapshotDeleteProgress(client, snapshotID, selectedSnapshot.Name)
 	if err != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "snapshot_delete")
-			sentry.CaptureException(err)
-		})
 		return fmt.Errorf("failed to delete snapshot: %w", err)
 	}
 

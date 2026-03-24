@@ -7,7 +7,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -145,10 +144,6 @@ func runSnapshotCreate(cmd *cobra.Command) error {
 	program := tea.NewProgram(progressModel)
 	finalModel, runErr := program.Run()
 	if runErr != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "snapshot_create_tui")
-			sentry.CaptureException(runErr)
-		})
 		return fmt.Errorf("failed to render progress: %w", runErr)
 	}
 
@@ -160,10 +155,6 @@ func runSnapshotCreate(cmd *cobra.Command) error {
 	}
 
 	if result.Err() != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "snapshot_create")
-			sentry.CaptureException(result.Err())
-		})
 		return fmt.Errorf("failed to create snapshot: %w", result.Err())
 	}
 

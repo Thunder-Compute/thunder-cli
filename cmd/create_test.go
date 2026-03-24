@@ -121,19 +121,14 @@ func TestValidateCreateConfig(t *testing.T) {
 			errorContains: "production mode supports GPU types:",
 		},
 		{
-			name: "production with invalid num-gpus",
+			name: "production without num-gpus",
 			config: &tui.CreateConfig{
-				Mode:       "production",
-				GPUType:    "a100",
-				NumGPUs:    3,
-				Template:   "base",
-				DiskSizeGB: 100,
-			},
-			templates: []api.TemplateEntry{
-				tmplEntry("base", "Base ML Environment"),
+				Mode:    "production",
+				GPUType: "a100",
+				NumGPUs: 0,
 			},
 			expectError:   true,
-			errorContains: "GPU count 3 is not valid",
+			errorContains: "GPU count",
 		},
 		{
 			name: "invalid num-gpus for production",
@@ -176,17 +171,15 @@ func TestValidateCreateConfig(t *testing.T) {
 			errorContains: "disk size must be between 100 and 300 GB",
 		},
 		{
-			name: "empty template defaults to base",
+			name: "missing template",
 			config: &tui.CreateConfig{
 				Mode:       "prototyping",
 				GPUType:    "a6000",
 				VCPUs:      8,
 				DiskSizeGB: 100,
 			},
-			templates: []api.TemplateEntry{
-				tmplEntry("base", "Base ML Environment"),
-			},
-			expectError: false,
+			expectError:   true,
+			errorContains: "template is required",
 		},
 		{
 			name: "template not found",
@@ -388,8 +381,7 @@ func TestCreateConfigTemplateByDisplayName(t *testing.T) {
 }
 
 // TestCreateConfigDiskSizeBoundaries verifies that disk size validation
-// correctly enforces the storage range from the GPU spec.
-// The a6000 prototyping spec has StorageGB: {Min: 100, Max: 300}.
+// correctly enforces the 100-1000 GB range for instance creation.
 func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -403,7 +395,7 @@ func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 		},
 		{
 			name:        "maximum valid disk size",
-			diskSizeGB:  300,
+			diskSizeGB:  1000,
 			expectError: false,
 		},
 		{
@@ -413,7 +405,7 @@ func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 		},
 		{
 			name:        "disk size too large",
-			diskSizeGB:  301,
+			diskSizeGB:  1001,
 			expectError: true,
 		},
 	}
@@ -436,7 +428,7 @@ func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "disk size must be between 100 and 300 GB")
+				assert.Contains(t, err.Error(), "disk size must be between 100 and 1000 GB")
 			} else {
 				assert.NoError(t, err)
 			}
