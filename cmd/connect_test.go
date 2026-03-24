@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
@@ -452,37 +451,47 @@ func TestBuildSSHArgs_PortForwardingNoDuplicates(t *testing.T) {
 }
 
 func TestSSHExitCodeHandling(t *testing.T) {
-	// Interactive SSH sessions return the exit code of the last command the
-	// user ran inside the shell. All exec.ExitError codes should be treated
-	// as non-errors — only non-ExitError failures (e.g. binary not found)
-	// should surface.
 	tests := []struct {
-		name     string
-		exitCode int
+		name        string
+		exitCode    int
+		expectError bool
 	}{
-		{name: "exit code 0 - success", exitCode: 0},
-		{name: "exit code 1 - last command failed", exitCode: 1},
-		{name: "exit code 2 - last command failed", exitCode: 2},
-		{name: "exit code 127 - command not found", exitCode: 127},
-		{name: "exit code 130 - Ctrl+C", exitCode: 130},
-		{name: "exit code 255 - connection closed", exitCode: 255},
+		{
+			name:        "exit code 0 - success",
+			exitCode:    0,
+			expectError: false,
+		},
+		{
+			name:        "exit code 130 - Ctrl+C",
+			exitCode:    130,
+			expectError: false,
+		},
+		{
+			name:        "exit code 255 - connection closed",
+			exitCode:    255,
+			expectError: false,
+		},
+		{
+			name:        "exit code 1 - error",
+			exitCode:    1,
+			expectError: true,
+		},
+		{
+			name:        "exit code 2 - error",
+			exitCode:    2,
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// All exit codes from an interactive session are non-errors
-			var err error
-			if tt.exitCode != 0 {
-				err = &exec.ExitError{}
-			}
-			isExitErr := false
-			if err != nil {
-				var exitErr *exec.ExitError
-				isExitErr = errors.As(err, &exitErr)
-			}
-			// ExitError should never be treated as a connect failure
-			if err != nil {
-				assert.True(t, isExitErr, "expected exit code %d to be an ExitError (non-failure)", tt.exitCode)
+			// Simulate the exit code handling logic from runConnect
+			shouldError := tt.exitCode != 0 && tt.exitCode != 130 && tt.exitCode != 255
+
+			if tt.expectError {
+				assert.True(t, shouldError, "expected exit code %d to produce an error", tt.exitCode)
+			} else {
+				assert.False(t, shouldError, "expected exit code %d to not produce an error", tt.exitCode)
 			}
 		})
 	}

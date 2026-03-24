@@ -10,7 +10,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -279,10 +278,6 @@ func runCreate(cmd *cobra.Command) error {
 	program := tea.NewProgram(progressModel)
 	finalModel, runErr := program.Run()
 	if runErr != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "create_tui")
-			sentry.CaptureException(runErr)
-		})
 		return fmt.Errorf("failed to render progress: %w", runErr)
 	}
 
@@ -294,10 +289,6 @@ func runCreate(cmd *cobra.Command) error {
 	}
 
 	if result.Err() != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "create_instance")
-			sentry.CaptureException(result.Err())
-		})
 		return fmt.Errorf("failed to create instance: %w", result.Err())
 	}
 
@@ -355,7 +346,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	}
 
 	if config.Template == "" {
-		config.Template = "base"
+		return fmt.Errorf("template is required (use --template flag)")
 	}
 
 	// Check if template is actually a snapshot

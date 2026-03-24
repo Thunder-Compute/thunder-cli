@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,8 +34,17 @@ var rootCmd = &cobra.Command{
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	_, err := rootCmd.ExecuteC()
+	cmd, err := rootCmd.ExecuteC()
 	if err != nil {
+		if !errors.Is(err, tui.ErrCancelled) {
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("command", cmd.Name())
+				scope.SetTag("version", version.BuildVersion)
+				scope.SetFingerprint([]string{cmd.Name(), err.Error()})
+				sentry.CaptureException(err)
+			})
+			sentry.Flush(2 * time.Second)
+		}
 		PrintError(err)
 		os.Exit(1)
 	}
