@@ -34,7 +34,20 @@ func (c *Client) do(ctx context.Context, req *http.Request) (*http.Response, err
 	if ctx != nil {
 		req = req.WithContext(ctx)
 	}
-	return c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 500 {
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("api_method", req.Method)
+			scope.SetTag("api_path", req.URL.Path)
+			scope.SetTag("status_code", fmt.Sprintf("%d", resp.StatusCode))
+			scope.SetLevel(sentry.LevelError)
+			sentry.CaptureMessage(fmt.Sprintf("API server error: %s %s returned %d", req.Method, req.URL.Path, resp.StatusCode))
+		})
+	}
+	return resp, nil
 }
 
 func (c *Client) setHeaders(req *http.Request) {
@@ -59,39 +72,18 @@ func (c *Client) ValidateToken(ctx context.Context) (*ValidateTokenResult, error
 
 	resp, err := c.do(ctx, req)
 	if err != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("api_method", "ValidateToken")
-			scope.SetTag("api_url", c.baseURL)
-			scope.SetLevel(sentry.LevelError)
-			sentry.CaptureException(err)
-		})
 		return nil, fmt.Errorf("failed to validate token: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 401 {
-		err := fmt.Errorf("authentication failed: invalid token")
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("api_method", "ValidateToken")
-			scope.SetTag("status_code", "401")
-			scope.SetLevel(sentry.LevelWarning)
-			sentry.CaptureException(err)
-		})
-		return nil, err
+		return nil, fmt.Errorf("authentication failed: invalid token")
 	}
 
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != 200 {
-		err := fmt.Errorf("token validation failed with status %d: %s", resp.StatusCode, string(body))
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("api_method", "ValidateToken")
-			scope.SetTag("status_code", fmt.Sprintf("%d", resp.StatusCode))
-			scope.SetExtra("response_body", string(body))
-			scope.SetLevel(getLogLevelForStatus(resp.StatusCode))
-			sentry.CaptureException(err)
-		})
-		return nil, err
+		return nil, fmt.Errorf("token validation failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var result ValidateTokenResult
@@ -115,37 +107,17 @@ func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, 
 
 	resp, err := c.do(ctx, req)
 	if err != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("api_method", "ListInstances")
-			scope.SetTag("api_url", c.baseURL)
-			scope.SetLevel(sentry.LevelError)
-			sentry.CaptureException(err)
-		})
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 401 {
-		err := fmt.Errorf("authentication failed: invalid token")
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("api_method", "ListInstances")
-			scope.SetTag("status_code", "401")
-			scope.SetLevel(sentry.LevelWarning)
-			sentry.CaptureException(err)
-		})
-		return nil, err
+		return nil, fmt.Errorf("authentication failed: invalid token")
 	}
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		err := fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("api_method", "ListInstances")
-			scope.SetTag("status_code", fmt.Sprintf("%d", resp.StatusCode))
-			scope.SetLevel(getLogLevelForStatus(resp.StatusCode))
-			sentry.CaptureException(err)
-		})
-		return nil, err
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -221,7 +193,7 @@ func (c *Client) ListInstances() ([]Instance, error) {
 
 	c.setHeaders(req)
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(nil, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -268,7 +240,7 @@ func (c *Client) ListTemplates() ([]TemplateEntry, error) {
 
 	c.setHeaders(req)
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(nil, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -314,7 +286,7 @@ func (c *Client) CreateInstance(req CreateInstanceRequest) (*CreateInstanceRespo
 
 	c.setHeaders(httpReq)
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.do(nil, httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -351,7 +323,7 @@ func (c *Client) DeleteInstance(instanceID string) (*DeleteInstanceResponse, err
 
 	c.setHeaders(httpReq)
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.do(nil, httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -391,7 +363,7 @@ func (c *Client) ModifyInstance(instanceID string, req InstanceModifyRequest) (*
 
 	c.setHeaders(httpReq)
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.do(nil, httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -444,7 +416,7 @@ func (c *Client) CreateSnapshot(req CreateSnapshotRequest) (*CreateSnapshotRespo
 
 	c.setHeaders(httpReq)
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.do(nil, httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -480,7 +452,7 @@ func (c *Client) ListSnapshots() (ListSnapshotsResponse, error) {
 
 	c.setHeaders(req)
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(nil, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -519,7 +491,7 @@ func (c *Client) DeleteSnapshot(snapshotID string) error {
 
 	c.setHeaders(httpReq)
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.do(nil, httpReq)
 	if err != nil {
 		return fmt.Errorf("failed to make request: %w", err)
 	}
@@ -546,7 +518,7 @@ func (c *Client) ListSSHKeys() (SSHKeyListResponse, error) {
 
 	c.setHeaders(req)
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(nil, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -593,7 +565,7 @@ func (c *Client) AddSSHKeyToOrg(name, publicKey string) (*SSHKeyAddResponse, err
 
 	c.setHeaders(httpReq)
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.do(nil, httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -631,7 +603,7 @@ func (c *Client) DeleteSSHKey(keyID string) error {
 
 	c.setHeaders(httpReq)
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.do(nil, httpReq)
 	if err != nil {
 		return fmt.Errorf("failed to make request: %w", err)
 	}
@@ -668,7 +640,7 @@ func (c *Client) AddSSHKeyToInstanceWithPublicKey(instanceID, publicKey string) 
 
 	c.setHeaders(httpReq)
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.do(nil, httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -705,7 +677,7 @@ func (c *Client) FetchPricing() (map[string]float64, error) {
 
 	c.setHeaders(req)
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(nil, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -739,7 +711,7 @@ func (c *Client) GetSpecs() (map[string]GpuSpecConfig, error) {
 
 	c.setHeaders(req)
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(nil, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
@@ -762,16 +734,4 @@ func (c *Client) GetSpecs() (map[string]GpuSpecConfig, error) {
 	}
 
 	return result.Specs, nil
-}
-
-// getLogLevelForStatus determines the appropriate Sentry level for HTTP status codes
-func getLogLevelForStatus(statusCode int) sentry.Level {
-	switch {
-	case statusCode >= 500:
-		return sentry.LevelError
-	case statusCode >= 400:
-		return sentry.LevelWarning
-	default:
-		return sentry.LevelInfo
-	}
 }

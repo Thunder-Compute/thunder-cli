@@ -374,6 +374,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 				Level: sentry.LevelError,
 			})
 			shutdownTUI()
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "connect_ssh_key_add")
+				sentry.CaptureException(err)
+			})
 			return fmt.Errorf("failed to add SSH key: %w", err)
 		}
 
@@ -388,6 +392,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 					Level: sentry.LevelError,
 				})
 				shutdownTUI()
+				sentry.WithScope(func(scope *sentry.Scope) {
+					scope.SetTag("operation", "connect_ssh_key_save")
+					sentry.CaptureException(err)
+				})
 				return fmt.Errorf("failed to save private key: %w", err)
 			}
 		}
@@ -433,6 +441,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			Level: sentry.LevelError,
 		})
 		shutdownTUI()
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "connect_ssh_port_wait")
+			sentry.CaptureException(err)
+		})
 		return fmt.Errorf("SSH service not available: %w", err)
 	}
 
@@ -529,6 +541,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 				Level: sentry.LevelError,
 			})
 			shutdownTUI()
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "connect_ssh_key_regen")
+				sentry.CaptureException(keyErr)
+			})
 			return fmt.Errorf("failed to generate new SSH key: %w", keyErr)
 		}
 
@@ -543,6 +559,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 					Level: sentry.LevelError,
 				})
 				shutdownTUI()
+				sentry.WithScope(func(scope *sentry.Scope) {
+					scope.SetTag("operation", "connect_ssh_key_save_regen")
+					sentry.CaptureException(saveErr)
+				})
 				return fmt.Errorf("failed to save new private key: %w", saveErr)
 			}
 		}
@@ -584,6 +604,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 				Level: sentry.LevelError,
 			})
 			shutdownTUI()
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "connect_ssh_after_regen")
+				sentry.CaptureException(err)
+			})
 			return fmt.Errorf("failed to establish SSH connection after key regeneration: %w", err)
 		}
 	} else if err != nil {
@@ -598,6 +622,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			Level: sentry.LevelError,
 		})
 		shutdownTUI()
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "connect_ssh")
+			sentry.CaptureException(err)
+		})
 		return fmt.Errorf("failed to establish SSH connection: %w", err)
 	}
 
@@ -640,6 +668,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			Level: sentry.LevelError,
 		})
 		shutdownTUI()
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "connect_token_setup")
+			sentry.CaptureException(err)
+		})
 		return fmt.Errorf("failed to set up token: %w", err)
 	}
 
@@ -729,14 +761,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	sshCmd.Stderr = os.Stderr
 
 	err = sshCmd.Run()
-	// Handle SSH exit codes (130 = Ctrl+C, 255 = connection closed)
 	if err != nil {
 		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			exitCode := exitErr.ExitCode()
-			if exitCode != 0 && exitCode != 130 && exitCode != 255 {
-				return fmt.Errorf("SSH session failed with exit code %d", exitCode)
-			}
+		if !errors.As(err, &exitErr) {
+			return fmt.Errorf("SSH session failed: %w", err)
 		}
 	}
 
