@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -92,6 +92,10 @@ func runDelete(args []string) error {
 
 	successMsg, err := tui.RunDeleteProgress(client, instanceID)
 	if err != nil {
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "delete_instance")
+			sentry.CaptureException(err)
+		})
 		return fmt.Errorf("failed to delete instance: %w\n\nPossible reasons:\n• Instance may already be deleted\n• Server error occurred\n\nTry running 'tnr status' to check the instance state", err)
 	}
 
@@ -133,48 +137,37 @@ func removeSSHHostEntry(configPath, instanceID string) error {
 		return nil
 	}
 
-	file, err := os.Open(configPath)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
 
-	var lines []string
-	scanner := bufio.NewScanner(file)
 	hostName := fmt.Sprintf("tnr-%s", instanceID)
-	inTargetHost := false
-	skipUntilNextHost := false
+	result := filterSSHHostBlock(string(data), hostName)
+	return os.WriteFile(configPath, []byte(result), 0o600)
+}
 
-	for scanner.Scan() {
-		line := scanner.Text()
-		trimmedLine := strings.TrimSpace(line)
+// filterSSHHostBlock removes a Host block (header + indented body) from SSH config content.
+// Returns the filtered content with a trailing newline.
+func filterSSHHostBlock(content, hostName string) string {
+	var out []string
+	skipping := false
 
-		if strings.HasPrefix(trimmedLine, "Host ") {
-			if trimmedLine == fmt.Sprintf("Host %s", hostName) {
-				inTargetHost = true
-				skipUntilNextHost = true
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmed, "Host ") {
+			if trimmed == fmt.Sprintf("Host %s", hostName) {
+				skipping = true
 				continue
-			} else {
-				inTargetHost = false
-				skipUntilNextHost = false
 			}
+			skipping = false
 		}
 
-		if skipUntilNextHost && inTargetHost {
-			if strings.HasPrefix(trimmedLine, "Host ") {
-				skipUntilNextHost = false
-				inTargetHost = false
-				lines = append(lines, line)
-			}
-			continue
+		if !skipping {
+			out = append(out, line)
 		}
-
-		lines = append(lines, line)
 	}
 
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
-	return os.WriteFile(configPath, []byte(strings.Join(lines, "\n")+"\n"), 0o600)
+	return strings.Join(out, "\n")
 }

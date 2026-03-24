@@ -361,13 +361,25 @@ func runInteractiveLogin() error {
 
 	finalModel, err := p.Run()
 	if err != nil {
+		if fm, ok := finalModel.(tui.LoginModel); ok {
+			model = fm
+		}
+		if model.State() == tui.LoginStateCancelled {
+			PrintWarningSimple("User cancelled authentication")
+			return nil
+		}
 		return fmt.Errorf("TUI error: %w", err)
 	}
 
-	m := finalModel.(tui.LoginModel)
+	// Update model from the returned final state. The original model variable
+	// is a value copy that bubbletea never mutates — the real final state is
+	// only available from the p.Run() return value.
+	if fm, ok := finalModel.(tui.LoginModel); ok {
+		model = fm
+	}
 
-	if m.State() == tui.LoginStateSuccess {
-		token := m.Token()
+	if model.State() == tui.LoginStateSuccess {
+		token := model.Token()
 		client := api.NewClient(token, getAPIURL())
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -387,12 +399,12 @@ func runInteractiveLogin() error {
 		return nil
 	}
 
-	if m.State() == tui.LoginStateCancelled {
+	if model.State() == tui.LoginStateCancelled {
 		PrintWarningSimple("User cancelled authentication")
 		return nil
 	}
-	if m.State() == tui.LoginStateError {
-		return m.Error()
+	if model.State() == tui.LoginStateError {
+		return model.Error()
 	}
 
 	return fmt.Errorf("authentication failed")
