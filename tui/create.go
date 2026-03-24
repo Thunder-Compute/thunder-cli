@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -347,20 +348,22 @@ type createPricingMsg struct {
 
 func sortTemplates(templates []api.TemplateEntry) []api.TemplateEntry {
 	sorted := make([]api.TemplateEntry, 0, len(templates))
+	rest := make([]api.TemplateEntry, 0, len(templates))
 
 	for _, t := range templates {
 		if strings.EqualFold(t.Key, "base") {
 			sorted = append(sorted, t)
 			break
+		} else {
+			rest = append(rest, t)
 		}
 	}
 
-	for _, t := range templates {
-		if !strings.EqualFold(t.Key, "base") {
-			sorted = append(sorted, t)
-		}
-	}
+	sort.Slice(rest, func(i, j int) bool {
+		return strings.ToLower(rest[i].Key) < strings.ToLower(rest[j].Key)
+	})
 
+	sorted = append(sorted, rest...)
 	return sorted
 }
 
