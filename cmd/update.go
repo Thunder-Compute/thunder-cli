@@ -104,12 +104,8 @@ func handleExplicitOptionalUpdate(parentCtx context.Context, res updatepolicy.Re
 	binPath, _ := getCurrentBinaryPath()
 	if binPath != "" {
 		shouldReexec, err := autoupdate.TryFinalizeStagedUpdateImmediately(parentCtx, binPath)
-		if err != nil {
-			fmt.Println(tui.RenderUpdateStaged())
-			return nil
-		}
-		if shouldReexec {
-			fmt.Println(tui.RenderUpdateRerun())
+		if err != nil || shouldReexec {
+			fmt.Println(tui.RenderUpdateSuccess())
 			return nil
 		}
 	}

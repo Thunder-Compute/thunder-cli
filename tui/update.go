@@ -57,12 +57,12 @@ func RenderUpdateAvailable(currentVer, latestVer string) string {
 func RenderUpdating(currentVer, latestVer string) string {
 	InitCommonStyles(os.Stdout)
 	styles := newUpdateStyles()
-	return fmt.Sprintf("%s %s %s %s%s",
-		PrimaryStyle().Render("Updating tnr from"),
+	return fmt.Sprintf("%s %s%s %s%s",
+		PrimaryStyle().Render("Currently on version"),
 		styles.version.Render(currentVer),
-		styles.arrow.Render("to"),
+		PrimaryStyle().Render(", latest version"),
 		styles.version.Render(latestVer),
-		PrimaryStyle().Render("..."))
+		PrimaryStyle().Render(", installing update..."))
 }
 
 func RenderPMInstructions(pm, currentVer, latestVer string) string {
@@ -98,18 +98,7 @@ func RenderPMInstructions(pm, currentVer, latestVer string) string {
 
 func RenderUpdateSuccess() string {
 	InitCommonStyles(os.Stdout)
-	return SuccessStyle().Render("✓ Update completed successfully!")
-}
-
-// RenderUpdateStaged returns a message for staged Windows updates
-func RenderUpdateStaged() string {
-	InitCommonStyles(os.Stdout)
-	return SuccessStyle().Render("✓ Update staged successfully. Please re-run your command to complete the update.")
-}
-
-func RenderUpdateRerun() string {
-	InitCommonStyles(os.Stdout)
-	return SuccessStyle().Render("✓ Update completed successfully!")
+	return SuccessStyle().Render("✓ Update successful!")
 }
 
 func RenderUpdateFailed(err error, releaseURL string) string {
