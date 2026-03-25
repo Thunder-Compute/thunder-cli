@@ -144,7 +144,12 @@ func runCreate(cmd *cobra.Command) error {
 
 	var createConfig *tui.CreateConfig
 
+	interactive := tui.IsInteractive() && !JSONOutput
+
 	if presets.IsEmpty() {
+		if !interactive {
+			return fmt.Errorf("all flags required in non-interactive mode (--mode, --gpu, --template, --disk-size-gb, and --num-gpus or --vcpus)")
+		}
 		// No flags set — full interactive TUI
 		createConfig, err = tui.RunCreateInteractive(client, specs)
 		if err != nil {
@@ -219,6 +224,9 @@ func runCreate(cmd *cobra.Command) error {
 			}
 		}
 	} else {
+		if !interactive {
+			return fmt.Errorf("all flags required in non-interactive mode (--mode, --gpu, --template, --disk-size-gb, and --num-gpus or --vcpus)")
+		}
 		// Partial flags — hybrid TUI
 		createConfig, err = tui.RunCreateHybrid(client, specs, presets)
 		if err != nil {
@@ -271,25 +279,40 @@ func runCreate(cmd *cobra.Command) error {
 	}
 
 	var resp *api.CreateInstanceResponse
-	progressModel := tui.NewProgressModel("Creating instance...",
-		createInstanceCmd(client, req, &resp),
-		renderCreateSuccess(&resp),
-	)
-	program := tea.NewProgram(progressModel)
-	finalModel, runErr := program.Run()
-	if runErr != nil {
-		return fmt.Errorf("failed to render progress: %w", runErr)
-	}
 
-	result := finalModel.(tui.ProgressModel)
+	if !interactive {
+		// Non-interactive: direct API call without Bubble Tea
+		fmt.Fprintln(os.Stderr, "Creating instance...")
+		resp, err = client.CreateInstance(req)
+		if err != nil {
+			return fmt.Errorf("failed to create instance: %w", err)
+		}
+		if JSONOutput {
+			printJSON(resp)
+		} else {
+			fmt.Printf("Instance created: ID=%d UUID=%s\n", resp.Identifier, resp.UUID)
+		}
+	} else {
+		progressModel := tui.NewProgressModel("Creating instance...",
+			createInstanceCmd(client, req, &resp),
+			renderCreateSuccess(&resp),
+		)
+		program := tea.NewProgram(progressModel)
+		finalModel, runErr := program.Run()
+		if runErr != nil {
+			return fmt.Errorf("failed to render progress: %w", runErr)
+		}
 
-	if result.Cancelled() {
-		PrintWarningSimple("User cancelled creation process")
-		return nil
-	}
+		result := finalModel.(tui.ProgressModel)
 
-	if result.Err() != nil {
-		return fmt.Errorf("failed to create instance: %w", result.Err())
+		if result.Cancelled() {
+			PrintWarningSimple("User cancelled creation process")
+			return nil
+		}
+
+		if result.Err() != nil {
+			return fmt.Errorf("failed to create instance: %w", result.Err())
+		}
 	}
 
 	// Symlink user's private key so `tnr connect` finds it automatically

@@ -36,10 +36,15 @@ func runSnapshotDelete(args []string) error {
 		return err
 	}
 
+	interactive := tui.IsInteractive() && !JSONOutput
+
 	var snapshotID string
 	var selectedSnapshot *api.Snapshot
 
 	if len(args) == 0 {
+		if !interactive {
+			return fmt.Errorf("snapshot name or ID required in non-interactive mode")
+		}
 		// Interactive mode: fetch snapshots and let user select
 		var snapshots []api.Snapshot
 		if err := tui.RunWithBusySpinner("Fetching snapshots...", os.Stdout, func() error {
@@ -96,21 +101,37 @@ func runSnapshotDelete(args []string) error {
 
 		snapshotID = selectedSnapshot.ID
 
-		// Always confirm before deletion
-		fmt.Println()
-		fmt.Printf("About to delete snapshot: %s\n", selectedSnapshot.Name)
-		fmt.Printf("Status: %s\n", selectedSnapshot.Status)
-		fmt.Printf("Disk Size: %d GB\n", selectedSnapshot.MinimumDiskSizeGB)
-		fmt.Println()
-		fmt.Print("Are you sure you want to delete this snapshot? (yes/no): ")
+		// Confirm deletion (skip with --yes)
+		if !YesFlag {
+			fmt.Println()
+			fmt.Printf("About to delete snapshot: %s\n", selectedSnapshot.Name)
+			fmt.Printf("Status: %s\n", selectedSnapshot.Status)
+			fmt.Printf("Disk Size: %d GB\n", selectedSnapshot.MinimumDiskSizeGB)
+			fmt.Println()
+			fmt.Print("Are you sure you want to delete this snapshot? (yes/no): ")
 
-		var confirmation string
-		fmt.Scanln(&confirmation)
+			var confirmation string
+			fmt.Scanln(&confirmation)
 
-		if confirmation != "yes" && confirmation != "y" {
-			PrintWarningSimple("Deletion cancelled")
-			return nil
+			if confirmation != "yes" && confirmation != "y" {
+				PrintWarningSimple("Deletion cancelled")
+				return nil
+			}
 		}
+	}
+
+	if !interactive {
+		// Non-interactive: direct API call
+		fmt.Fprintln(os.Stderr, "Deleting snapshot...")
+		if deleteErr := client.DeleteSnapshot(snapshotID); deleteErr != nil {
+			return fmt.Errorf("failed to delete snapshot: %w", deleteErr)
+		}
+		if JSONOutput {
+			printJSON(map[string]string{"snapshot": selectedSnapshot.Name, "status": "deleted"})
+		} else {
+			fmt.Printf("Deleted snapshot '%s'\n", selectedSnapshot.Name)
+		}
+		return nil
 	}
 
 	// Run deletion with progress
