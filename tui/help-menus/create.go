@@ -29,13 +29,13 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Prototyping"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr create --mode prototyping --gpu {a6000|a100|h100} --vcpus {4|8|...} --template {base|comfy-ui|ollama} --disk-size-gb {100-400}"))
+	output.WriteString(DescStyle.Render("tnr create --mode prototyping --gpu {a6000|a100|h100} --vcpus {4|8|...} --template {base|comfy-ui|ollama|cuda12-8|cuda12-9|unsloth} --disk-size-gb {100-400}"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("Production"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr create --mode production --num-gpus {1|2|4|8} --template {base|comfy-ui|ollama} --disk-size-gb {100-1000}"))
+	output.WriteString(DescStyle.Render("tnr create --mode production --num-gpus {1|2|4|8} --template {base|comfy-ui|ollama|cuda12-8|cuda12-9|unsloth} --disk-size-gb {100-1000}"))
 	output.WriteString("\n\n")
 
 	// Examples Section
@@ -110,7 +110,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--template"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("base, comfy-ui, ollama"))
+	output.WriteString(DescStyle.Render("base, comfy-ui, ollama, cuda12-8, cuda12-9, unsloth"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
