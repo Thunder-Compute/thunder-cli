@@ -139,7 +139,7 @@ func TestBuildAuthURL(t *testing.T) {
 
 	url := buildAuthURL(state, returnURI)
 
-	assert.Contains(t, url, "https://console.thundercompute.com/login/vscode")
+	assert.Contains(t, url, "https://console.thundercompute.com/login/app")
 	assert.Contains(t, url, "state=test_state_123")
 	assert.Contains(t, url, "return_uri=http%3A%2F%2F127.0.0.1%3A8080%2Fcallback")
 }
