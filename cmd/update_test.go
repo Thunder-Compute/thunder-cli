@@ -255,7 +255,7 @@ func TestTUIRenderPMInstructions(t *testing.T) {
 // TestTUIRenderUpdateSuccess verifies that the TUI renders success message correctly.
 func TestTUIRenderUpdateSuccess(t *testing.T) {
 	result := tui.RenderUpdateSuccess()
-	assert.Contains(t, result, "update successful")
+	assert.Contains(t, result, "Update successful!")
 }
 
 
