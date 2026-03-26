@@ -20,6 +20,18 @@ type Client struct {
 	httpClient *http.Client
 }
 
+// apiError extracts a human-readable message from an API error response body.
+// Falls back to the raw body if the JSON cannot be parsed.
+func apiError(statusCode int, body []byte) error {
+	var resp struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(body, &resp); err == nil && resp.Message != "" {
+		return fmt.Errorf("%s", resp.Message)
+	}
+	return fmt.Errorf("API request failed with status %d: %s", statusCode, string(body))
+}
+
 func NewClient(token, baseURL string) *Client {
 	return &Client{
 		baseURL: baseURL,
@@ -302,7 +314,7 @@ func (c *Client) CreateInstance(req CreateInstanceRequest) (*CreateInstanceRespo
 	}
 
 	if resp.StatusCode != 200 && resp.StatusCode != 201 {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		return nil, apiError(resp.StatusCode, body)
 	}
 
 	var createResp CreateInstanceResponse
@@ -380,7 +392,7 @@ func (c *Client) ModifyInstance(instanceID string, req InstanceModifyRequest) (*
 	case 404:
 		return nil, fmt.Errorf("instance not found")
 	case 400:
-		return nil, fmt.Errorf("invalid request: %s", string(body))
+		return nil, apiError(resp.StatusCode, body)
 	case 409:
 		return nil, fmt.Errorf("instance cannot be modified (may not be in RUNNING state)")
 	case 200, 201, 202:
