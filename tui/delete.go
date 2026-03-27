@@ -78,7 +78,7 @@ func (m deleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "q", "Q", "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
 
@@ -203,7 +203,7 @@ func (m deleteModel) View() string {
 		}
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc/Q: Quit\n"))
 
 	case deleteStepConfirm:
 		warning := "WARNING: This action is IRREVERSIBLE!\n\n" +
@@ -241,7 +241,7 @@ func (m deleteModel) View() string {
 		}
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Quit\n"))
 	}
 
 	return s.String()

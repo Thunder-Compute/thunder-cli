@@ -134,20 +134,13 @@ func runCreate(cmd *cobra.Command) error {
 		return err
 	}
 
-	// Fetch GPU specs from API
-	specsMap, specsErr := client.GetSpecs()
-	if specsErr != nil {
-		return fmt.Errorf("failed to fetch GPU specs: %w", specsErr)
-	}
-	specs := utils.NewSpecStore(specsMap)
-
 	presets := buildCreatePresets(cmd)
 
 	var createConfig *tui.CreateConfig
 
 	if presets.IsEmpty() {
-		// No flags set — full interactive TUI
-		createConfig, err = tui.RunCreateInteractive(client, specs)
+		// No flags set — full interactive TUI (specs loaded async)
+		createConfig, err = tui.RunCreateInteractive(client, nil)
 		if err != nil {
 			if errors.Is(err, tui.ErrCancelled) {
 				PrintWarningSimple("User cancelled creation process")
@@ -159,7 +152,8 @@ func runCreate(cmd *cobra.Command) error {
 		// All flags explicitly provided → non-interactive (skip confirmation)
 		var templates []api.TemplateEntry
 		var snapshots []api.Snapshot
-		if fetchErr := tui.RunWithBusySpinner("Fetching templates and snapshots...", os.Stdout, func() error {
+		var specs *utils.SpecStore
+		if fetchErr := tui.RunWithBusySpinner("Fetching configuration...", os.Stdout, func() error {
 			var e error
 			templates, e = client.ListTemplates()
 			if e != nil {
@@ -173,9 +167,14 @@ func runCreate(cmd *cobra.Command) error {
 				}
 			}
 			snapshots = readySnapshots
+			specsMap, e := client.GetSpecs()
+			if e != nil {
+				return fmt.Errorf("failed to fetch GPU specs: %w", e)
+			}
+			specs = utils.NewSpecStore(specsMap)
 			return nil
 		}); fetchErr != nil {
-			return fmt.Errorf("failed to fetch templates: %w", fetchErr)
+			return fmt.Errorf("failed to fetch configuration: %w", fetchErr)
 		}
 
 		if len(templates) == 0 {
@@ -220,8 +219,8 @@ func runCreate(cmd *cobra.Command) error {
 			}
 		}
 	} else {
-		// Partial flags — hybrid TUI
-		createConfig, err = tui.RunCreateHybrid(client, specs, presets)
+		// Partial flags — hybrid TUI (specs loaded async)
+		createConfig, err = tui.RunCreateHybrid(client, nil, presets)
 		if err != nil {
 			if errors.Is(err, tui.ErrCancelled) {
 				PrintWarningSimple("User cancelled creation process")
