@@ -315,11 +315,7 @@ func (m modifyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 
-		case "q":
-			if m.step == modifyStepConfirmation {
-				// Q at confirmation should select cancel option
-				break
-			}
+		case "q", "Q":
 			m.cancelled = true
 			m.quitting = true
 			return m, tea.Quit
@@ -621,11 +617,11 @@ func (m modifyModel) View() string {
 	s.WriteString("\n")
 	switch m.step {
 	case modifyStepConfirmation:
-		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Q: Cancel"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Quit"))
 	case modifyStepDiskSize:
-		s.WriteString(m.styles.Help.Render("Type disk size  Enter: Continue  ESC: Back  Q: Quit"))
+		s.WriteString(m.styles.Help.Render("Type disk size  Enter: Continue  Esc: Back  Q: Quit"))
 	default:
-		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  ESC: Back  Q: Quit"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Quit"))
 	}
 
 	return s.String()
@@ -979,7 +975,7 @@ func (m modifyInstanceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q", "esc":
+		case "ctrl+c", "q", "Q", "esc":
 			m.cancelled = true
 			m.quitting = true
 			return m, tea.Quit
@@ -1054,7 +1050,7 @@ func (m modifyInstanceSelectorModel) View() string {
 	}
 
 	s.WriteString("\n")
-	s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
+	s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc/Q: Quit\n"))
 
 	return s.String()
 }
