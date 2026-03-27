@@ -81,6 +81,7 @@ release:
   disable: false
   draft: false
   prerelease: auto
+  mode: append
   extra_files:
     - glob: "dist/*.msi"
 

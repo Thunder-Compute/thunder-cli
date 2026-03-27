@@ -98,6 +98,7 @@ release:
   disable: false
   draft: false
   prerelease: auto
+  mode: append
 
 # Changelog generation settings
 
