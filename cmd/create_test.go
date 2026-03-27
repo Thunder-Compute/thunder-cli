@@ -176,7 +176,7 @@ func TestValidateCreateConfig(t *testing.T) {
 			errorContains: "disk size must be between 100 and 300 GB",
 		},
 		{
-			name: "empty template defaults to base",
+			name: "empty template is required error",
 			config: &tui.CreateConfig{
 				Mode:       "prototyping",
 				GPUType:    "a6000",
@@ -186,7 +186,8 @@ func TestValidateCreateConfig(t *testing.T) {
 			templates: []api.TemplateEntry{
 				tmplEntry("base", "Base ML Environment"),
 			},
-			expectError: false,
+			expectError:   true,
+			errorContains: "template is required",
 		},
 		{
 			name: "template not found",

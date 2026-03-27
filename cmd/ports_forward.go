@@ -125,8 +125,25 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 		RemovePorts: remove,
 	}
 
-	// Make API call with progress spinner
+	interactive := tui.IsInteractive() && !JSONOutput
+
+	// Make API call
 	var portsResp *api.InstanceModifyResponse
+
+	if !interactive {
+		fmt.Fprintln(os.Stderr, "Updating ports...")
+		portsResp, err = client.ModifyInstance(selectedInstance.ID, req)
+		if err != nil {
+			return fmt.Errorf("failed to update ports: %w", err)
+		}
+		if JSONOutput {
+			printJSON(portsResp)
+		} else {
+			fmt.Printf("Ports updated for instance %s\n", selectedInstance.ID)
+		}
+		return nil
+	}
+
 	p := tea.NewProgram(tui.NewProgressModel("Updating ports...",
 		portsForwardApiCall(client, selectedInstance.ID, req, &portsResp),
 		renderPortsForwardSuccess(&portsResp),

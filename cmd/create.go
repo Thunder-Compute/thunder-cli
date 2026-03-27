@@ -10,7 +10,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -134,13 +133,25 @@ func runCreate(cmd *cobra.Command) error {
 		return err
 	}
 
+	// Fetch GPU specs from API
+	specsMap, specsErr := client.GetSpecs()
+	if specsErr != nil {
+		return fmt.Errorf("failed to fetch GPU specs: %w", specsErr)
+	}
+	specs := utils.NewSpecStore(specsMap)
+
 	presets := buildCreatePresets(cmd)
 
 	var createConfig *tui.CreateConfig
 
+	interactive := tui.IsInteractive() && !JSONOutput
+
 	if presets.IsEmpty() {
-		// No flags set — full interactive TUI (specs loaded async)
-		createConfig, err = tui.RunCreateInteractive(client, nil)
+		if !interactive {
+			return fmt.Errorf("all flags required in non-interactive mode (--mode, --gpu, --template, --disk-size-gb, and --num-gpus or --vcpus)")
+		}
+		// No flags set — full interactive TUI
+		createConfig, err = tui.RunCreateInteractive(client, specs)
 		if err != nil {
 			if errors.Is(err, tui.ErrCancelled) {
 				PrintWarningSimple("User cancelled creation process")
@@ -152,8 +163,7 @@ func runCreate(cmd *cobra.Command) error {
 		// All flags explicitly provided → non-interactive (skip confirmation)
 		var templates []api.TemplateEntry
 		var snapshots []api.Snapshot
-		var specs *utils.SpecStore
-		if fetchErr := tui.RunWithBusySpinner("Fetching configuration...", os.Stdout, func() error {
+		if fetchErr := tui.RunWithBusySpinner("Fetching templates and snapshots...", os.Stdout, func() error {
 			var e error
 			templates, e = client.ListTemplates()
 			if e != nil {
@@ -167,14 +177,9 @@ func runCreate(cmd *cobra.Command) error {
 				}
 			}
 			snapshots = readySnapshots
-			specsMap, e := client.GetSpecs()
-			if e != nil {
-				return fmt.Errorf("failed to fetch GPU specs: %w", e)
-			}
-			specs = utils.NewSpecStore(specsMap)
 			return nil
 		}); fetchErr != nil {
-			return fmt.Errorf("failed to fetch configuration: %w", fetchErr)
+			return fmt.Errorf("failed to fetch templates: %w", fetchErr)
 		}
 
 		if len(templates) == 0 {
@@ -219,8 +224,11 @@ func runCreate(cmd *cobra.Command) error {
 			}
 		}
 	} else {
-		// Partial flags — hybrid TUI (specs loaded async)
-		createConfig, err = tui.RunCreateHybrid(client, nil, presets)
+		if !interactive {
+			return fmt.Errorf("all flags required in non-interactive mode (--mode, --gpu, --template, --disk-size-gb, and --num-gpus or --vcpus)")
+		}
+		// Partial flags — hybrid TUI
+		createConfig, err = tui.RunCreateHybrid(client, specs, presets)
 		if err != nil {
 			if errors.Is(err, tui.ErrCancelled) {
 				PrintWarningSimple("User cancelled creation process")
@@ -271,33 +279,40 @@ func runCreate(cmd *cobra.Command) error {
 	}
 
 	var resp *api.CreateInstanceResponse
-	progressModel := tui.NewProgressModel("Creating instance...",
-		createInstanceCmd(client, req, &resp),
-		renderCreateSuccess(&resp),
-	)
-	program := tea.NewProgram(progressModel)
-	finalModel, runErr := program.Run()
-	if runErr != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "create_tui")
-			sentry.CaptureException(runErr)
-		})
-		return fmt.Errorf("failed to render progress: %w", runErr)
-	}
 
-	result := finalModel.(tui.ProgressModel)
+	if !interactive {
+		// Non-interactive: direct API call without Bubble Tea
+		fmt.Fprintln(os.Stderr, "Creating instance...")
+		resp, err = client.CreateInstance(req)
+		if err != nil {
+			return fmt.Errorf("failed to create instance: %w", err)
+		}
+		if JSONOutput {
+			printJSON(resp)
+		} else {
+			fmt.Printf("Instance created: ID=%d UUID=%s\n", resp.Identifier, resp.UUID)
+		}
+	} else {
+		progressModel := tui.NewProgressModel("Creating instance...",
+			createInstanceCmd(client, req, &resp),
+			renderCreateSuccess(&resp),
+		)
+		program := tea.NewProgram(progressModel)
+		finalModel, runErr := program.Run()
+		if runErr != nil {
+			return fmt.Errorf("failed to render progress: %w", runErr)
+		}
 
-	if result.Cancelled() {
-		PrintWarningSimple("User cancelled creation process")
-		return nil
-	}
+		result := finalModel.(tui.ProgressModel)
 
-	if result.Err() != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "create_instance")
-			sentry.CaptureException(result.Err())
-		})
-		return fmt.Errorf("failed to create instance: %w", result.Err())
+		if result.Cancelled() {
+			PrintWarningSimple("User cancelled creation process")
+			return nil
+		}
+
+		if result.Err() != nil {
+			return fmt.Errorf("failed to create instance: %w", result.Err())
+		}
 	}
 
 	// Symlink user's private key so `tnr connect` finds it automatically
@@ -354,7 +369,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	}
 
 	if config.Template == "" {
-		config.Template = "base"
+		return fmt.Errorf("template is required (use --template flag)")
 	}
 
 	// Check if template is actually a snapshot

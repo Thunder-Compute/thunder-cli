@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"io"
 	"os"
 
@@ -72,7 +73,12 @@ func (m BusyModel) View() string {
 }
 
 // RunWithBusySpinner shows a spinner while fn executes, then dismisses it.
+// In non-interactive mode (no TTY), it skips the TUI spinner and runs fn synchronously.
 func RunWithBusySpinner(message string, out io.Writer, fn func() error) error {
+	if !IsInteractive() {
+		fmt.Fprintf(os.Stderr, "%s\n", message)
+		return fn()
+	}
 	busy := NewBusyModel(message)
 	bp := tea.NewProgram(busy, tea.WithOutput(out))
 	done := make(chan struct{})

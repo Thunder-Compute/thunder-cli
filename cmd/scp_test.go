@@ -276,13 +276,118 @@ func TestDetermineTransferDirection(t *testing.T) {
 }
 
 func TestDetermineTransferDirection_WindowsNumericID(t *testing.T) {
-	// Simulates the exact user scenario: tnr scp ./cloud-comfyui.sh 0:/home/ubuntu/
-	// on Windows. The destination should be recognized as remote.
 	source := parsePathWithOS(`.\cloud-comfyui.sh`, "windows")
 	dest := parsePathWithOS("0:/home/ubuntu/", "windows")
 
 	direction, instanceID, err := determineTransferDirection([]PathInfo{source}, dest)
-	assert.NoError(t, err, "should not error - destination is a valid remote path")
+	assert.NoError(t, err)
 	assert.Equal(t, "upload", direction)
 	assert.Equal(t, "0", instanceID)
+}
+
+func TestDetermineTransferDirection(t *testing.T) {
+	local := func(path string) PathInfo { return PathInfo{Original: path, Path: path} }
+	remote := func(id, path string) PathInfo {
+		return PathInfo{Original: id + ":" + path, InstanceID: id, Path: path, IsRemote: true}
+	}
+
+	tests := []struct {
+		name          string
+		sources       []PathInfo
+		dest          PathInfo
+		wantDir       string
+		wantInstance  string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:         "upload: local source, remote dest",
+			sources:      []PathInfo{local("./file.txt")},
+			dest:         remote("inst1", "/home/ubuntu/"),
+			wantDir:      "upload",
+			wantInstance: "inst1",
+		},
+		{
+			name:         "download: remote source, local dest",
+			sources:      []PathInfo{remote("inst1", "/data/file.csv")},
+			dest:         local("./downloads/"),
+			wantDir:      "download",
+			wantInstance: "inst1",
+		},
+		{
+			name:         "multiple local sources upload",
+			sources:      []PathInfo{local("a.txt"), local("b.txt")},
+			dest:         remote("inst1", "/home/ubuntu/"),
+			wantDir:      "upload",
+			wantInstance: "inst1",
+		},
+		{
+			name:         "multiple remote sources same instance download",
+			sources:      []PathInfo{remote("inst1", "/a.txt"), remote("inst1", "/b.txt")},
+			dest:         local("./"),
+			wantDir:      "download",
+			wantInstance: "inst1",
+		},
+		{
+			name:          "remote to remote rejected",
+			sources:       []PathInfo{remote("inst1", "/a.txt")},
+			dest:          remote("inst2", "/b.txt"),
+			expectError:   true,
+			errorContains: "cannot transfer from remote to remote",
+		},
+		{
+			name:          "multiple different remote instances rejected",
+			sources:       []PathInfo{remote("inst1", "/a.txt"), remote("inst2", "/b.txt")},
+			dest:          local("./"),
+			expectError:   true,
+			errorContains: "cannot transfer between multiple instances",
+		},
+		{
+			name:          "no remote path at all rejected",
+			sources:       []PathInfo{local("a.txt")},
+			dest:          local("b.txt"),
+			expectError:   true,
+			errorContains: "no remote path specified",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir, instID, err := determineTransferDirection(tt.sources, tt.dest)
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.wantDir, dir)
+				assert.Equal(t, tt.wantInstance, instID)
+			}
+		})
+	}
+}
+
+func TestIsValidInstanceID(t *testing.T) {
+	tests := []struct {
+		input string
+		valid bool
+	}{
+		{"0", true},
+		{"myinstance", true},
+		{"MAVERICK", true},
+		{"inst-123", true},
+		{"", false},                      // empty
+		{"a/b", false},                   // slash
+		{`a\b`, false},                   // backslash
+		{"file.txt", false},              // dot
+		{"123456789012345678901", false},  // >20 chars
+		{"12345678901234567890", true},    // exactly 20 chars
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			assert.Equal(t, tt.valid, isValidInstanceID(tt.input))
+		})
+	}
 }
