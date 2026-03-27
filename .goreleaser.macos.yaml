@@ -96,7 +96,7 @@ builds:
               --issuer "$MACOS_NOTARY_ISSUER_ID" \
               --wait \
               --timeout 20m; then
-              
+
               # Staple the notarization ticket to the package
               xcrun stapler staple "$PKG_SIGNED" || true
             else
@@ -171,6 +171,7 @@ release:
   disable: false
   draft: false
   prerelease: auto
+  mode: append
   extra_files:
     - glob: "dist/*.pkg"
 
