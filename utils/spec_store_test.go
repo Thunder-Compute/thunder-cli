@@ -7,14 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func generateRange(min, max, step int) []int {
-	var r []int
-	for i := min; i <= max; i += step {
-		r = append(r, i)
-	}
-	return r
-}
-
 func testSpecStore() *SpecStore {
 	return NewSpecStore(map[string]api.GpuSpecConfig{
 		"a6000_x1_prototyping":  {DisplayName: "RTX A6000", VramGB: 48, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 300}},
@@ -176,29 +168,6 @@ func TestStorageRange(t *testing.T) {
 	}
 }
 
-func TestStorageOptions(t *testing.T) {
-	s := testSpecStore()
-
-	tests := []struct {
-		name     string
-		gpuType  string
-		numGPUs  int
-		mode     string
-		expected []int
-	}{
-		{"a6000 gives 21 options", "a6000", 1, "prototyping", generateRange(100, 300, 10)},
-		{"a100xl x1 gives 41 options", "a100xl", 1, "prototyping", generateRange(100, 500, 10)},
-		{"a100xl x2 gives 91 options", "a100xl", 2, "prototyping", generateRange(100, 1000, 10)},
-		{"unknown falls back to 100-1000", "unknown", 1, "prototyping", generateRange(100, 1000, 10)},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := s.StorageOptions(tt.gpuType, tt.numGPUs, tt.mode)
-			assert.Equal(t, tt.expected, got)
-		})
-	}
-}
 
 func TestNormalizeGPUType(t *testing.T) {
 	s := testSpecStore()
