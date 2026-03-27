@@ -83,7 +83,7 @@ func (m portsForwardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 
-		case "q":
+		case "q", "Q":
 			if m.step != portsForwardStepEditPorts && m.step != portsForwardStepApplying {
 				m.cancelled = true
 				m.quitting = true
@@ -108,7 +108,7 @@ func (m portsForwardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 
-		case "up":
+		case "up", "k":
 			if m.step == portsForwardStepSelectInstance {
 				if m.cursor > 0 {
 					m.cursor--
@@ -119,7 +119,7 @@ func (m portsForwardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-		case "down":
+		case "down", "j":
 			if m.step == portsForwardStepSelectInstance {
 				if m.cursor < len(m.instances)-1 {
 					m.cursor++
@@ -325,7 +325,7 @@ func (m portsForwardModel) renderSelectInstanceStep() string {
 	}
 
 	s.WriteString("\n")
-	s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Q: Quit"))
+	s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc/Q: Quit"))
 
 	return s.String()
 }
@@ -348,7 +348,7 @@ func (m portsForwardModel) renderEditPortsStep() string {
 		s.WriteString("\n\n")
 	}
 
-	s.WriteString(m.styles.Help.Render("Enter: Continue  ESC: Back  Ctrl+C: Quit"))
+	s.WriteString(m.styles.Help.Render("Enter: Continue  Esc: Back  Ctrl+C: Quit"))
 
 	return s.String()
 }
@@ -394,7 +394,7 @@ func (m portsForwardModel) renderConfirmationStep() string {
 	}
 
 	s.WriteString("\n")
-	s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  ESC: Back"))
+	s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Quit"))
 
 	return s.String()
 }

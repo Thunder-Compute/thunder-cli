@@ -105,7 +105,7 @@ func (m LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch m.state {
 		case LoginStateWaiting:
 			switch msg.String() {
-			case "esc", "q", "ctrl+c":
+			case "esc", "q", "Q", "ctrl+c":
 				m.state = LoginStateCancelled
 				m.quitting = true
 				return m, tea.Quit

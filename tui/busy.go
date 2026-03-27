@@ -51,7 +51,8 @@ func (m BusyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Quitting = true
 		return m, tea.Quit
 	case tea.KeyMsg:
-		if msg.String() == "q" || msg.String() == "ctrl+c" {
+		switch msg.String() {
+		case "q", "Q", "esc", "ctrl+c":
 			m.Quitting = true
 			return m, tea.Quit
 		}
@@ -67,7 +68,7 @@ func (m BusyModel) View() string {
 	if m.Quitting {
 		return ""
 	}
-	return m.spin.View() + " " + m.styles.text.Render(m.text) + "\n" + m.styles.help.Render("Press 'Q' to cancel\n")
+	return m.spin.View() + " " + m.styles.text.Render(m.text) + "\n" + m.styles.help.Render("Esc/Q: Quit\n")
 }
 
 // RunWithBusySpinner shows a spinner while fn executes, then dismisses it.
