@@ -7,6 +7,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func generateRange(min, max, step int) []int {
+	var r []int
+	for i := min; i <= max; i += step {
+		r = append(r, i)
+	}
+	return r
+}
+
 func testSpecStore() *SpecStore {
 	return NewSpecStore(map[string]api.GpuSpecConfig{
 		"a6000_x1_prototyping":  {DisplayName: "RTX A6000", VramGB: 48, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 300}},
@@ -178,10 +186,10 @@ func TestStorageOptions(t *testing.T) {
 		mode     string
 		expected []int
 	}{
-		{"a6000 gives 3 options", "a6000", 1, "prototyping", []int{100, 200, 300}},
-		{"a100xl x1 gives 5 options", "a100xl", 1, "prototyping", []int{100, 200, 300, 400, 500}},
-		{"a100xl x2 gives 10 options", "a100xl", 2, "prototyping", []int{100, 200, 300, 400, 500, 600, 700, 800, 900, 1000}},
-		{"unknown falls back to 100-1000", "unknown", 1, "prototyping", []int{100, 200, 300, 400, 500, 600, 700, 800, 900, 1000}},
+		{"a6000 gives 21 options", "a6000", 1, "prototyping", generateRange(100, 300, 10)},
+		{"a100xl x1 gives 41 options", "a100xl", 1, "prototyping", generateRange(100, 500, 10)},
+		{"a100xl x2 gives 91 options", "a100xl", 2, "prototyping", generateRange(100, 1000, 10)},
+		{"unknown falls back to 100-1000", "unknown", 1, "prototyping", generateRange(100, 1000, 10)},
 	}
 
 	for _, tt := range tests {
