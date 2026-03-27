@@ -18,6 +18,12 @@ import (
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 )
 
+// Global flags for non-interactive / automation mode.
+var (
+	JSONOutput bool
+	YesFlag    bool
+)
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:           "tnr",
@@ -111,6 +117,9 @@ func init() {
 	// will be global for your application.
 
 	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.thunder-cli-draft.yaml)")
+
+	rootCmd.PersistentFlags().BoolVar(&JSONOutput, "json", false, "Output in JSON format (non-interactive)")
+	rootCmd.PersistentFlags().BoolVarP(&YesFlag, "yes", "y", false, "Skip confirmation prompts")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.

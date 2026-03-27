@@ -137,7 +137,28 @@ func runSnapshotCreate(cmd *cobra.Command) error {
 		Name:       name,
 	}
 
+	interactive := tui.IsInteractive() && !JSONOutput
+
 	var snapshotResp *api.CreateSnapshotResponse
+
+	if !interactive {
+		fmt.Fprintln(os.Stderr, "Creating snapshot...")
+		snapshotResp, err = client.CreateSnapshot(req)
+		if err != nil {
+			return fmt.Errorf("failed to create snapshot: %w", err)
+		}
+		if JSONOutput {
+			printJSON(snapshotResp)
+		} else {
+			msg := "Snapshot created"
+			if snapshotResp != nil && snapshotResp.Message != "" {
+				msg = snapshotResp.Message
+			}
+			fmt.Println(msg)
+		}
+		return nil
+	}
+
 	progressModel := tui.NewProgressModel("Creating snapshot...",
 		createSnapshotCmd(client, req, &snapshotResp),
 		renderSnapshotCreateSuccess(&snapshotResp),

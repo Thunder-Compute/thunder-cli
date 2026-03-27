@@ -72,10 +72,15 @@ func runModify(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	interactive := tui.IsInteractive() && !JSONOutput
+
 	var selectedInstance *api.Instance
 
 	// Determine which instance to modify
 	if len(args) == 0 {
+		if !interactive {
+			return fmt.Errorf("instance ID required in non-interactive mode")
+		}
 		// No argument - show interactive selector
 		selectedInstance, err = tui.RunModifyInstanceSelector(client, instances)
 		if err != nil {
@@ -117,6 +122,9 @@ func runModify(cmd *cobra.Command, args []string) error {
 	var modifyReq api.InstanceModifyRequest
 
 	if modifyPresets.IsEmpty() {
+		if !interactive {
+			return fmt.Errorf("modification flags required in non-interactive mode (--mode, --gpu, --num-gpus, --vcpus, --disk-size-gb)")
+		}
 		// No flags set — full interactive mode
 		modifyConfig, err = tui.RunModifyInteractive(client, selectedInstance, specs)
 		if err != nil {
@@ -219,8 +227,23 @@ func runModify(cmd *cobra.Command, args []string) error {
 		fmt.Printf("\nEstimated cost: %s\n", utils.FormatPrice(price))
 	}
 
-	// Make API call with progress spinner
+	// Make API call
 	var modifyResp *api.InstanceModifyResponse
+
+	if !interactive {
+		fmt.Fprintln(os.Stderr, "Modifying instance...")
+		modifyResp, err = client.ModifyInstance(selectedInstance.ID, modifyReq)
+		if err != nil {
+			return fmt.Errorf("failed to modify instance: %w", err)
+		}
+		if JSONOutput {
+			printJSON(modifyResp)
+		} else {
+			fmt.Printf("Modified instance %s\n", selectedInstance.ID)
+		}
+		return nil
+	}
+
 	p := tea.NewProgram(tui.NewProgressModel("Modifying instance...",
 		modifyInstanceCmd(client, selectedInstance.ID, modifyReq, &modifyResp),
 		renderModifySuccess(selectedInstance.ID, &modifyResp),

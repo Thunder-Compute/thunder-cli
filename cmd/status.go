@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	termx "github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -38,11 +37,11 @@ func RunStatus() error {
 		return err
 	}
 	monitoring := !noWait
+	interactive := tui.IsInteractive() && !JSONOutput
 
-	if monitoring {
-		if !termx.IsTerminal(os.Stdout.Fd()) {
-			return fmt.Errorf("error running status TUI: not a TTY")
-		}
+	// Auto-disable monitoring in non-interactive mode
+	if monitoring && !interactive {
+		monitoring = false
 	}
 
 	var instances []api.Instance
@@ -52,6 +51,16 @@ func RunStatus() error {
 		return e
 	}); err != nil {
 		return fmt.Errorf("failed to fetch instances: %w", err)
+	}
+
+	if JSONOutput {
+		printJSON(instances)
+		return nil
+	}
+
+	if !interactive {
+		renderPlainStatusTable(instances)
+		return nil
 	}
 
 	return tui.RunStatus(client, monitoring, instances)

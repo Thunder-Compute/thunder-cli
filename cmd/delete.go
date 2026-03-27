@@ -40,10 +40,15 @@ func runDelete(args []string) error {
 		return err
 	}
 
+	interactive := tui.IsInteractive() && !JSONOutput
+
 	var instanceID string
 	var selectedInstance *api.Instance
 
 	if len(args) == 0 {
+		if !interactive {
+			return fmt.Errorf("instance ID required in non-interactive mode")
+		}
 		var instances []api.Instance
 		if err := tui.RunWithBusySpinner("Fetching instances...", os.Stdout, func() error {
 			var e error
@@ -88,6 +93,28 @@ func runDelete(args []string) error {
 
 	if selectedInstance.Status == "DELETING" {
 		return fmt.Errorf("instance '%s' is already being deleted", instanceID)
+	}
+
+	if !interactive {
+		if !YesFlag {
+			return fmt.Errorf("use --yes to confirm deletion in non-interactive mode")
+		}
+		// Non-interactive: direct API call
+		fmt.Fprintln(os.Stderr, "Deleting instance...")
+		resp, deleteErr := client.DeleteInstance(instanceID)
+		if deleteErr != nil {
+			return fmt.Errorf("failed to delete instance: %w", deleteErr)
+		}
+		if JSONOutput {
+			printJSON(resp)
+		} else {
+			fmt.Printf("Deleted instance %s\n", instanceID)
+		}
+
+		if err := cleanupSSHConfig(instanceID, selectedInstance.GetIP()); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to clean up SSH configuration: %v\n", err)
+		}
+		return nil
 	}
 
 	successMsg, err := tui.RunDeleteProgress(client, instanceID)
