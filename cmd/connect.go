@@ -116,16 +116,31 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	configLoader := resolveConfigLoader(opts)
 	config, err := configLoader()
 	if err != nil {
-		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
+		err = fmt.Errorf("not authenticated. Please run 'tnr login' first")
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "connect_config_load")
+			sentry.CaptureException(err)
+		})
+		return err
 	}
 
 	if config.Token == "" {
-		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
+		err = fmt.Errorf("no authentication token found. Please run 'tnr login'")
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "connect_no_token")
+			sentry.CaptureException(err)
+		})
+		return err
 	}
 
 	skipTTYCheck := opts != nil && opts.skipTTYCheck
 	if !skipTTYCheck && !termx.IsTerminal(os.Stdout.Fd()) {
-		return fmt.Errorf("error running connect TUI: not a TTY")
+		err = fmt.Errorf("error running connect TUI: not a TTY")
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "connect_not_tty")
+			sentry.CaptureException(err)
+		})
+		return err
 	}
 
 	client := resolveConnectClient(opts, config.Token, config.APIURL)
@@ -142,7 +157,12 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		instances, e = client.ListInstances()
 		return e
 	}); err != nil {
-		return fmt.Errorf("failed to list instances: %w", err)
+		err = fmt.Errorf("failed to list instances: %w", err)
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "connect_list_instances")
+			sentry.CaptureException(err)
+		})
+		return err
 	}
 	if len(instances) == 0 {
 		PrintWarningSimple("No instances found. Create an instance first using 'tnr create'")
@@ -160,21 +180,41 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 				PrintWarningSimple("No running instances found.")
 				return nil
 			}
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "connect_tui_select")
+				sentry.CaptureException(err)
+			})
 			return err
 		}
 	} else {
 		foundInstance := findInstance(instances, instanceID)
 
 		if foundInstance == nil {
-			return fmt.Errorf("instance '%s' not found", instanceID)
+			err = fmt.Errorf("instance '%s' not found", instanceID)
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "connect_instance_not_found")
+				sentry.CaptureException(err)
+			})
+			return err
 		}
 
 		if foundInstance.Status != "RUNNING" {
-			return fmt.Errorf("instance '%s' is not running (status: %s)", instanceID, foundInstance.Status)
+			err = fmt.Errorf("instance '%s' is not running (status: %s)", instanceID, foundInstance.Status)
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "connect_instance_not_running")
+				scope.SetTag("instance_status", foundInstance.Status)
+				sentry.CaptureException(err)
+			})
+			return err
 		}
 
 		if foundInstance.GetIP() == "" {
-			return fmt.Errorf("instance '%s' has no IP address", instanceID)
+			err = fmt.Errorf("instance '%s' has no IP address", instanceID)
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "connect_instance_no_ip")
+				sentry.CaptureException(err)
+			})
+			return err
 		}
 
 		instanceID = foundInstance.ID
@@ -198,7 +238,12 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	for _, portStr := range tunnelPortsStr {
 		port, err := strconv.Atoi(portStr)
 		if err != nil {
-			return fmt.Errorf("invalid port: %s", portStr)
+			err = fmt.Errorf("invalid port: %s", portStr)
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "connect_invalid_port")
+				sentry.CaptureException(err)
+			})
+			return err
 		}
 		tunnelPorts = append(tunnelPorts, port)
 	}
@@ -277,7 +322,12 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	}
 	if err != nil {
 		shutdownTUI()
-		return fmt.Errorf("failed to list instances: %w", err)
+		err = fmt.Errorf("failed to list instances: %w", err)
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "connect_list_instances_revalidate")
+			sentry.CaptureException(err)
+		})
+		return err
 	}
 
 	instance := findInstance(instances, instanceID)
@@ -285,18 +335,31 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	if instance == nil {
 		err := fmt.Errorf("instance %s not found", instanceID)
 		shutdownTUI()
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "connect_instance_not_found_revalidate")
+			sentry.CaptureException(err)
+		})
 		return err
 	}
 
 	if instance.Status != "RUNNING" {
 		err := fmt.Errorf("instance %s is not running (status: %s)", instanceID, instance.Status)
 		shutdownTUI()
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "connect_instance_not_running_revalidate")
+			scope.SetTag("instance_status", instance.Status)
+			sentry.CaptureException(err)
+		})
 		return err
 	}
 
 	if instance.GetIP() == "" {
 		err := fmt.Errorf("instance %s has no IP address", instanceID)
 		shutdownTUI()
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("operation", "connect_instance_no_ip_revalidate")
+			sentry.CaptureException(err)
+		})
 		return err
 	}
 
@@ -676,7 +739,17 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	// Update SSH config for easy reconnection via `ssh tnr-{instance_id}`
 	templatePorts := utils.GetTemplateOpenPorts(instance.Template)
-	_ = utils.UpdateSSHConfig(instanceID, instance.GetIP(), port, instance.UUID, tunnelPorts, templatePorts)
+	if sshConfigErr := utils.UpdateSSHConfig(instanceID, instance.GetIP(), port, instance.UUID, tunnelPorts, templatePorts); sshConfigErr != nil {
+		sentry.AddBreadcrumb(&sentry.Breadcrumb{
+			Category: "connect",
+			Message:  "SSH config update failed",
+			Data: map[string]interface{}{
+				"error":       sshConfigErr.Error(),
+				"instance_id": instanceID,
+			},
+			Level: sentry.LevelWarning,
+		})
+	}
 
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{
 		Category: "connect",
@@ -702,6 +775,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 				return nil
 			}
 			shutdownTUI()
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "connect_tui_error")
+				sentry.CaptureException(err)
+			})
 			return fmt.Errorf("TUI error: %w", err)
 		}
 	default:
@@ -710,6 +787,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 				return nil
 			}
 			shutdownTUI()
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "connect_tui_error")
+				sentry.CaptureException(err)
+			})
 			return fmt.Errorf("TUI error: %w", err)
 		}
 	}
@@ -749,7 +830,12 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	if err != nil {
 		var exitErr *ssh.ExitError
 		if !errors.As(err, &exitErr) {
-			return fmt.Errorf("SSH session failed: %w", err)
+			err = fmt.Errorf("SSH session failed: %w", err)
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "connect_ssh_session")
+				sentry.CaptureException(err)
+			})
+			return err
 		}
 	}
 
