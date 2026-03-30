@@ -190,6 +190,12 @@ func (m statusModel) View() string {
 		b.WriteString(restoringSection)
 	}
 
+	// Render recent events section
+	eventsSection := m.renderEventsSection()
+	if eventsSection != "" {
+		b.WriteString(eventsSection)
+	}
+
 	if m.quitting {
 		timestamp := m.lastUpdate.Format("15:04:05")
 		b.WriteString(m.styles.timestamp.Render(fmt.Sprintf("Last updated: %s", timestamp)))
@@ -465,6 +471,50 @@ func (m *statusModel) renderRestoringSection() string {
 		)
 		b.WriteString(m.styles.timestamp.Render(message))
 		b.WriteString("\n\n")
+	}
+
+	return b.String()
+}
+
+func (m *statusModel) renderEventsSection() string {
+	// Collect instances with recent events
+	type instanceEvent struct {
+		id        string
+		name      string
+		reason    string
+		message   string
+		timestamp time.Time
+	}
+
+	var events []instanceEvent
+	for _, instance := range m.instances {
+		if instance.LastRestart != nil {
+			events = append(events, instanceEvent{
+				id:        instance.ID,
+				name:      instance.Name,
+				reason:    instance.LastRestart.Reason,
+				message:   instance.LastRestart.Message,
+				timestamp: instance.LastRestart.Timestamp,
+			})
+		}
+	}
+
+	if len(events) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(WarningStyle().Bold(true).Render("Recent Events:"))
+	b.WriteString("\n\n")
+
+	for _, ev := range events {
+		ts := ev.timestamp.Local().Format("2006-01-02_15:04:05.0000")
+		b.WriteString(fmt.Sprintf("  %s\n", SubtleTextStyle().Render(ev.name)))
+		b.WriteString(fmt.Sprintf("  %s\n",
+			WarningStyle().Render(fmt.Sprintf("[%s]: %s — %s", ts, ev.reason, ev.message)),
+		))
+		b.WriteString("\n")
 	}
 
 	return b.String()

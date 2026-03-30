@@ -38,6 +38,20 @@ func renderPlainStatusTable(instances []api.Instance) {
 		)
 	}
 	w.Flush()
+
+	// Print recent events if any
+	var hasEvents bool
+	for _, inst := range instances {
+		if inst.LastRestart != nil {
+			if !hasEvents {
+				fmt.Fprintln(os.Stdout, "\nRecent Events:")
+				hasEvents = true
+			}
+			ts := inst.LastRestart.Timestamp.Local().Format("2006-01-02_15:04:05.0000")
+			fmt.Fprintf(os.Stdout, "  %s\n    [%s]: %s — %s\n",
+				inst.Name, ts, inst.LastRestart.Reason, inst.LastRestart.Message)
+		}
+	}
 }
 
 // renderPlainSnapshotTable prints a plain-text tab-aligned table of snapshots to stdout.
