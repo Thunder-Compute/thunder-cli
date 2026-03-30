@@ -27,9 +27,7 @@ var deleteCmd = &cobra.Command{
 }
 
 func init() {
-	deleteCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderDeleteHelp(cmd)
-	})
+	deleteCmd.SetHelpFunc(wrapHelp(helpmenus.RenderDeleteHelp))
 
 	rootCmd.AddCommand(deleteCmd)
 }

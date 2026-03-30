@@ -26,9 +26,7 @@ var updateCmd = &cobra.Command{
 }
 
 func init() {
-	updateCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderUpdateHelp(cmd)
-	})
+	updateCmd.SetHelpFunc(wrapHelp(helpmenus.RenderUpdateHelp))
 
 	rootCmd.AddCommand(updateCmd)
 }

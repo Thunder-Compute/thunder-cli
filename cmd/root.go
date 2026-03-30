@@ -63,9 +63,7 @@ func init() {
 		return nil
 	}
 
-	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderRootHelp(cmd)
-	})
+	rootCmd.SetHelpFunc(wrapHelp(helpmenus.RenderRootHelp))
 
 	completionCmd := &cobra.Command{
 		Use:   "completion [shell]",
@@ -75,9 +73,7 @@ func init() {
 		},
 	}
 
-	completionCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderCompletionHelp(cmd)
-	})
+	completionCmd.SetHelpFunc(wrapHelp(helpmenus.RenderCompletionHelp))
 
 	completionCmd.AddCommand(&cobra.Command{
 		Use:   "bash",

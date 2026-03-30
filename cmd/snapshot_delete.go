@@ -24,9 +24,7 @@ var snapshotDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	snapshotDeleteCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSnapshotDeleteHelp(cmd)
-	})
+	snapshotDeleteCmd.SetHelpFunc(wrapHelp(helpmenus.RenderSnapshotDeleteHelp))
 
 	snapshotCmd.AddCommand(snapshotDeleteCmd)
 }
@@ -104,6 +102,9 @@ func runSnapshotDelete(args []string) error {
 
 		// Confirm deletion (skip with --yes)
 		if !YesFlag {
+			if !interactive {
+				return fmt.Errorf("use --yes to confirm deletion in non-interactive mode")
+			}
 			fmt.Println()
 			fmt.Printf("About to delete snapshot: %s\n", selectedSnapshot.Name)
 			fmt.Printf("Status: %s\n", selectedSnapshot.Status)

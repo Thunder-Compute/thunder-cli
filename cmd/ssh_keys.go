@@ -30,23 +30,17 @@ var sshKeysCmd = &cobra.Command{
 }
 
 func init() {
-	sshKeysCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSSHKeysHelp(cmd)
-	})
+	sshKeysCmd.SetHelpFunc(wrapHelp(helpmenus.RenderSSHKeysHelp))
 	rootCmd.AddCommand(sshKeysCmd)
 
 	// ── list ────────────────────────────────────────────────────────────
 
-	sshKeysListCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSSHKeysListHelp(cmd)
-	})
+	sshKeysListCmd.SetHelpFunc(wrapHelp(helpmenus.RenderSSHKeysListHelp))
 	sshKeysCmd.AddCommand(sshKeysListCmd)
 
 	// ── add ─────────────────────────────────────────────────────────────
 
-	sshKeysAddCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSSHKeysAddHelp(cmd)
-	})
+	sshKeysAddCmd.SetHelpFunc(wrapHelp(helpmenus.RenderSSHKeysAddHelp))
 	sshKeysAddCmd.Flags().StringVar(&sshKeyAddName, "name", "", "Name for the SSH key")
 	sshKeysAddCmd.Flags().StringVar(&sshKeyAddKeyFile, "key-file", "", "Path to SSH public key file")
 	sshKeysAddCmd.Flags().StringVar(&sshKeyAddKey, "key", "", "SSH public key string")
@@ -54,9 +48,7 @@ func init() {
 
 	// ── delete ──────────────────────────────────────────────────────────
 
-	sshKeysDeleteCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSSHKeysDeleteHelp(cmd)
-	})
+	sshKeysDeleteCmd.SetHelpFunc(wrapHelp(helpmenus.RenderSSHKeysDeleteHelp))
 	sshKeysCmd.AddCommand(sshKeysDeleteCmd)
 }
 
@@ -350,6 +342,9 @@ func runSSHKeysDelete(args []string) error {
 
 		// Confirm deletion (skip with --yes)
 		if !YesFlag {
+			if !interactive {
+				return fmt.Errorf("use --yes to confirm deletion in non-interactive mode")
+			}
 			fmt.Println()
 			fmt.Printf("About to delete SSH key: %s\n", selectedKey.Name)
 			fmt.Printf("Fingerprint: %s\n", selectedKey.Fingerprint)

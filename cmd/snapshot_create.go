@@ -30,9 +30,7 @@ var snapshotCreateCmd = &cobra.Command{
 }
 
 func init() {
-	snapshotCreateCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSnapshotCreateHelp(cmd)
-	})
+	snapshotCreateCmd.SetHelpFunc(wrapHelp(helpmenus.RenderSnapshotCreateHelp))
 
 	snapshotCmd.AddCommand(snapshotCreateCmd)
 
