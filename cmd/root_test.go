@@ -3,6 +3,7 @@ package cmd
 import (
 	"testing"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
 	"github.com/Thunder-Compute/thunder-cli/internal/updatepolicy"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -159,9 +160,9 @@ func TestDisplayVersion(t *testing.T) {
 // These are already tested in update_test.go but we add a few edge cases.
 
 func TestIsPMManaged_EdgeCases(t *testing.T) {
-	assert.False(t, isPMManaged("/usr/local/bin/tnr"))
-	assert.False(t, isPMManaged("/home/user/bin/tnr"))
-	assert.True(t, isPMManaged("/opt/homebrew/bin/tnr"))
+	assert.False(t, autoupdate.IsPMManaged("/usr/local/bin/tnr"))
+	assert.False(t, autoupdate.IsPMManaged("/home/user/bin/tnr"))
+	assert.True(t, autoupdate.IsPMManaged("/opt/homebrew/bin/tnr"))
 }
 
 func TestDetectPackageManager_EdgeCases(t *testing.T) {
