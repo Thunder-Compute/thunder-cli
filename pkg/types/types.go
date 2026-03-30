@@ -68,7 +68,16 @@ type InstanceListItem struct {
 	ProvisioningTime time.Time `json:"provisioningTime,omitempty"`
 	RestoringTime    time.Time `json:"restoringTime,omitempty"`
 	SnapshotSize     int64     `json:"snapshotSize,omitempty"`
-	SSHPublicKeys    []string  `json:"sshPublicKeys,omitempty"`
+	SSHPublicKeys    []string         `json:"sshPublicKeys,omitempty"`
+	LastRestart      *InstanceRestart `json:"lastRestart,omitempty"`
+}
+
+// InstanceRestart represents the most recent container restart event.
+type InstanceRestart struct {
+	Reason    string    `json:"reason"`
+	Timestamp time.Time `json:"timestamp"`
+	Message   string    `json:"message"`
+	ExitCode  int32     `json:"exitCode"`
 }
 
 // GetIP returns the IP address or empty string if nil.
