@@ -144,23 +144,6 @@ sboms:
   - id: sbom
     artifacts: archive
 
-# GCS upload configuration
-# Uploads archives and .pkg installers to Google Cloud Storage for distribution
-# extra_files needed here because .pkg files are created by custom hook
-blobs:
-  - provider: gs
-    bucket: "{{ .Env.GCP_BUCKET }}"
-    directory: "tnr/releases/{{ .Version }}/macos"
-    cache_control:
-      - public
-      - max-age=31536000
-      - immutable
-    ids:
-      - archive
-      - checksum
-    extra_files:
-      - glob: "dist/*.pkg"
-
 # GitHub release configuration
 
 # extra_files needed here to include .pkg installers in GitHub releases

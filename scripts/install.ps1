@@ -1,34 +1,41 @@
 $ErrorActionPreference = 'Stop'
 
-# Install tnr by reading latest.json from Google Cloud Storage and installing to %LOCALAPPDATA%\tnr\bin
+# Install tnr by fetching the latest release from GitHub and installing to %LOCALAPPDATA%\tnr\bin
 
-$channel = $env:TNR_UPDATE_CHANNEL
-if (-not $channel) { $channel = 'stable' }
 $version = $env:TNR_VERSION
 $latestUrl = $env:TNR_LATEST_URL
-
-if (-not $latestUrl) {
-  if ($env:TNR_DOWNLOAD_BASE) {
-    $latestUrl = "$($env:TNR_DOWNLOAD_BASE)/tnr/releases/latest.json"
-  } else {
-    # Default to Google Cloud Storage
-    $latestUrl = "https://storage.googleapis.com/thunder-cli/tnr/releases/latest.json"
-  }
-}
+$githubApi = "https://api.github.com/repos/Thunder-Compute/thunder-cli/releases/latest"
 
 $installDir = Join-Path $env:LOCALAPPDATA 'tnr/bin'
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
-Write-Host "Fetching manifest: $latestUrl"
-$manifest = Invoke-RestMethod -UseBasicParsing -Uri $latestUrl
-if (-not $version) { $version = $manifest.version }
-
 $arch = $env:PROCESSOR_ARCHITECTURE
 if ($arch -eq 'ARM64') { $arch = 'arm64' } else { $arch = 'amd64' }
 
-$assetKey = "windows/$arch"
-$url = $manifest.assets.$($assetKey)
-$checksums = $manifest.assets.checksums
+if ($latestUrl) {
+  # Custom manifest path (for enterprise mirrors)
+  Write-Host "Fetching manifest: $latestUrl"
+  $manifest = Invoke-RestMethod -UseBasicParsing -Uri $latestUrl
+  if (-not $version) { $version = $manifest.version }
+
+  $assetKey = "windows/$arch"
+  $url = $manifest.assets.$($assetKey)
+  $checksums = $manifest.assets.checksums
+} elseif ($version) {
+  # Version explicitly specified - construct URLs directly
+  $version = $version -replace '^v', ''
+  $tag = "v$version"
+  $url = "https://github.com/Thunder-Compute/thunder-cli/releases/download/$tag/tnr_${version}_windows_${arch}.zip"
+  $checksums = "https://github.com/Thunder-Compute/thunder-cli/releases/download/$tag/checksums-windows.txt"
+} else {
+  # Default: fetch latest release from GitHub Releases API
+  Write-Host "Fetching latest release from GitHub..."
+  $release = Invoke-RestMethod -UseBasicParsing -Uri $githubApi -Headers @{ Accept = "application/vnd.github+json" }
+  $tag = $release.tag_name
+  $version = $tag -replace '^v', ''
+  $url = "https://github.com/Thunder-Compute/thunder-cli/releases/download/$tag/tnr_${version}_windows_${arch}.zip"
+  $checksums = "https://github.com/Thunder-Compute/thunder-cli/releases/download/$tag/checksums-windows.txt"
+}
 
 $tmp = New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetTempPath() + [System.Guid]::NewGuid().ToString())
 $zip = Join-Path $tmp 'tnr.zip'
@@ -55,5 +62,3 @@ if ($path -notlike "*${installDir}*") {
 }
 
 Write-Host "Installed tnr $version to $installDir"
-
-
