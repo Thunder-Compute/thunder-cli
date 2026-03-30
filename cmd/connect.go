@@ -86,9 +86,7 @@ var connectCmd = &cobra.Command{
 }
 
 func init() {
-	connectCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderConnectHelp(cmd)
-	})
+	connectCmd.SetHelpFunc(wrapHelp(helpmenus.RenderConnectHelp))
 
 	rootCmd.AddCommand(connectCmd)
 	connectCmd.Flags().StringSliceVarP(&tunnelPorts, "tunnel", "t", []string{}, "Port forwarding (can specify multiple times: -t 8080 -t 3000)")

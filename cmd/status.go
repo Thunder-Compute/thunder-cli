@@ -23,9 +23,7 @@ var statusCmd = &cobra.Command{
 }
 
 func init() {
-	statusCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderStatusHelp(cmd)
-	})
+	statusCmd.SetHelpFunc(wrapHelp(helpmenus.RenderStatusHelp))
 
 	rootCmd.AddCommand(statusCmd)
 	statusCmd.Flags().BoolVar(&noWait, "no-wait", false, "Display status once and exit without monitoring")

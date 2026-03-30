@@ -22,9 +22,7 @@ var snapshotListCmd = &cobra.Command{
 var snapshotNoWait bool
 
 func init() {
-	snapshotListCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSnapshotListHelp(cmd)
-	})
+	snapshotListCmd.SetHelpFunc(wrapHelp(helpmenus.RenderSnapshotListHelp))
 
 	snapshotCmd.AddCommand(snapshotListCmd)
 	snapshotListCmd.Flags().BoolVar(&snapshotNoWait, "no-wait", false, "Display snapshots once and exit without monitoring")

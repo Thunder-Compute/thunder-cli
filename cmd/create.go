@@ -39,9 +39,7 @@ var createCmd = &cobra.Command{
 }
 
 func init() {
-	createCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderCreateHelp(cmd)
-	})
+	createCmd.SetHelpFunc(wrapHelp(helpmenus.RenderCreateHelp))
 
 	rootCmd.AddCommand(createCmd)
 

@@ -37,9 +37,7 @@ func init() {
 	modifyCmd.Flags().Int("vcpus", 0, "CPU cores (prototyping only): options vary by GPU type and count")
 	modifyCmd.Flags().Int("disk-size-gb", 0, "Disk size in GB (cannot shrink, max depends on config)")
 
-	modifyCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderModifyHelp(cmd)
-	})
+	modifyCmd.SetHelpFunc(wrapHelp(helpmenus.RenderModifyHelp))
 
 	rootCmd.AddCommand(modifyCmd)
 }
