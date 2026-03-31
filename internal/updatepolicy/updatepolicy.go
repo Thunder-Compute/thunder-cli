@@ -34,14 +34,14 @@ const (
 
 	cacheTTL = 24 * time.Hour
 
-	defaultLatestPath = "/tnr/releases/latest.json"
-
 	minVersionEnvKey = "TNR_MIN_VERSION_URL"
+
 )
 
-var defaultBases = []string{
-	"https://storage.googleapis.com/thunder-cli",
-}
+var githubReleasesLatestURL = "https://api.github.com/repos/Thunder-Compute/thunder-cli/releases/latest"
+
+// setGitHubReleasesURL overrides the GitHub API URL (for testing).
+func setGitHubReleasesURL(url string) { githubReleasesLatestURL = url }
 
 // Result captures the outcome of the update policy evaluation.
 type Result struct {
@@ -84,13 +84,6 @@ func Check(ctx context.Context, currentVersion string, force bool) (Result, erro
 
 	platform := detectPlatform()
 	assetURL, checksumURL := manifest.AssetFor(platform)
-
-	if assetURL == "" {
-		assetURL = defaultAssetURL(manifest, platform)
-	}
-	if checksumURL == "" {
-		checksumURL = defaultChecksumURL(manifest, platform, assetURL)
-	}
 
 	// GitHub fallback for asset/checksum when manifest did not include them
 	if assetURL == "" || checksumURL == "" {
@@ -191,25 +184,27 @@ func fetchLatestManifest(ctx context.Context, force bool) (manifest, error) {
 		}
 	}
 
-	urls := resolveLatestURLs()
-	var lastErr error
-	for _, u := range urls {
-		if u == "" {
-			continue
-		}
-		debugf("manifest: trying %s", u)
+	// Try custom manifest URL override first (for enterprise mirrors).
+	if u := strings.TrimSpace(os.Getenv("TNR_LATEST_URL")); u != "" {
+		debugf("manifest: trying custom URL %s", u)
 		man, err := fetchManifestFromURL(ctx, u)
 		if err == nil {
 			_ = writeManifestCache(man)
 			debugf("manifest: using %s (version=%s)", u, man.Version)
 			return man, nil
 		}
-		lastErr = err
+		debugf("manifest: custom URL failed: %v", err)
 	}
-	if lastErr == nil {
-		lastErr = errors.New("no manifest URL candidates")
+
+	// Default: fetch from GitHub Releases API.
+	debugf("manifest: trying GitHub Releases API")
+	man, err := fetchLatestFromGitHub(ctx)
+	if err != nil {
+		return manifest{}, err
 	}
-	return manifest{}, lastErr
+	_ = writeManifestCache(man)
+	debugf("manifest: using GitHub (version=%s)", man.Version)
+	return man, nil
 }
 
 func fetchManifestFromURL(ctx context.Context, manifestURL string) (manifest, error) {
@@ -232,6 +227,100 @@ func fetchManifestFromURL(ctx context.Context, manifestURL string) (manifest, er
 		return manifest{}, errors.New("manifest missing version")
 	}
 	return man, nil
+}
+
+// fetchLatestFromGitHub calls the GitHub Releases API and converts the response
+// into the internal manifest format used for caching and version resolution.
+func fetchLatestFromGitHub(ctx context.Context) (manifest, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubReleasesLatestURL, nil)
+	if err != nil {
+		return manifest{}, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := httpClient().Do(req)
+	if err != nil {
+		return manifest{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return manifest{}, fmt.Errorf("github api: http %d (%s)", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var release struct {
+		TagName string `json:"tag_name"`
+		Assets  []struct {
+			Name               string `json:"name"`
+			BrowserDownloadURL string `json:"browser_download_url"`
+		} `json:"assets"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return manifest{}, fmt.Errorf("decode github release: %w", err)
+	}
+	if release.TagName == "" {
+		return manifest{}, errors.New("github release missing tag_name")
+	}
+
+	assets := make(map[string]string)
+	for _, a := range release.Assets {
+		key := classifyAsset(a.Name)
+		if key != "" {
+			assets[key] = a.BrowserDownloadURL
+		}
+	}
+
+	return manifest{
+		Version: release.TagName,
+		Channel: "stable",
+		Assets:  assets,
+	}, nil
+}
+
+// classifyAsset maps a release asset filename to a manifest key.
+// Returns "" for unrecognized assets (installers, SBOMs, etc.).
+func classifyAsset(name string) string {
+	lower := strings.ToLower(name)
+
+	if strings.Contains(lower, "checksums") {
+		// Prefer the combined checksums file; OS-specific ones are resolved
+		// via githubAssetAndChecksum as fallback candidates.
+		if !strings.Contains(lower, "-macos") && !strings.Contains(lower, "-linux") && !strings.Contains(lower, "-windows") {
+			return "checksums"
+		}
+		return ""
+	}
+
+	// Only match primary archive formats (tar.gz / zip), skip installers (.pkg, .msi, .deb, .rpm).
+	isArchive := strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz") || strings.HasSuffix(lower, ".zip")
+	if !isArchive {
+		return ""
+	}
+
+	var osKey string
+	switch {
+	case strings.Contains(lower, "darwin"):
+		osKey = "macos"
+	case strings.Contains(lower, "linux"):
+		osKey = "linux"
+	case strings.Contains(lower, "windows"):
+		osKey = "windows"
+	default:
+		return ""
+	}
+
+	var archKey string
+	switch {
+	case strings.Contains(lower, "arm64") || strings.Contains(lower, "aarch64"):
+		archKey = "arm64"
+	case strings.Contains(lower, "amd64") || strings.Contains(lower, "x86_64"):
+		archKey = "amd64"
+	default:
+		return ""
+	}
+
+	return fmt.Sprintf("%s/%s", osKey, archKey)
 }
 
 type minVersionPayload struct {
@@ -436,36 +525,8 @@ func deriveReleaseRoot(assetURL string) string {
 	if err != nil {
 		return ""
 	}
-	dir := path.Dir(u.Path) // .../<version>/<os>
-	dir = path.Dir(dir)     // .../<version>
-	u.Path = dir
+	u.Path = path.Dir(u.Path) // .../{tag}
 	return strings.TrimSuffix(u.String(), "/")
-}
-
-func defaultAssetURL(man manifest, p platform) string {
-	if p.OS == "" || p.Arch == "" {
-		return ""
-	}
-	base := defaultManifestBase()
-	if base == "" {
-		return ""
-	}
-	fileOS := p.OS
-	if p.OS == "macos" {
-		fileOS = "darwin"
-	}
-	return fmt.Sprintf("%s/tnr/releases/latest/%s/tnr_%s_%s%s", base, p.OS, fileOS, p.Arch, p.Ext)
-}
-
-func defaultChecksumURL(man manifest, p platform, assetURL string) string {
-	if assetURL == "" {
-		return ""
-	}
-	releaseRoot := deriveReleaseRoot(assetURL)
-	if releaseRoot == "" {
-		return ""
-	}
-	return fmt.Sprintf("%s/checksums-%s.txt", releaseRoot, p.OS)
 }
 
 // githubAssetAndChecksum builds GitHub release URLs for the asset and OS-specific checksum file.
@@ -500,55 +561,11 @@ func githubAssetAndChecksum(version string, p platform) (assetURL, checksumURL s
 	return
 }
 
-func resolveLatestURLs() []string {
-	var urls []string
-	if v := os.Getenv("TNR_LATEST_URL"); v != "" {
-		urls = append(urls, strings.TrimSpace(v))
-	} else if base := os.Getenv("TNR_DOWNLOAD_BASE"); base != "" {
-		base = strings.TrimRight(strings.TrimSpace(base), "/")
-		urls = append(urls, base+defaultLatestPath)
-	}
-	for _, base := range defaultBases {
-		base = strings.TrimRight(base, "/")
-		urls = append(urls, base+defaultLatestPath)
-	}
-	return dedupe(urls)
-}
-
 func resolveMinVersionURL() string {
 	if v := strings.TrimSpace(os.Getenv(minVersionEnvKey)); v != "" {
 		return v
 	}
 	return ""
-}
-
-func defaultManifestBase() string {
-	if base := strings.TrimSpace(os.Getenv("TNR_DOWNLOAD_BASE")); base != "" {
-		return strings.TrimRight(base, "/")
-	}
-	// Return first non-empty default base (Google Cloud Storage)
-	for _, base := range defaultBases {
-		if base != "" {
-			return strings.TrimRight(base, "/")
-		}
-	}
-	return ""
-}
-
-func dedupe(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	var out []string
-	for _, v := range values {
-		if v == "" {
-			continue
-		}
-		if _, ok := seen[v]; ok {
-			continue
-		}
-		seen[v] = struct{}{}
-		out = append(out, v)
-	}
-	return out
 }
 
 // -------- Cache helpers --------

@@ -174,7 +174,7 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result, m
 	fmt.Fprintf(os.Stderr, "⚠ Update required: current %s, minimum %s.\n", displayCurrent, displayMin)
 
 	binPath, _ := getCurrentBinaryPath()
-	if binPath != "" && isPMManaged(binPath) {
+	if binPath != "" && autoupdate.IsPMManaged(binPath) {
 		pm := detectPackageManager(binPath)
 		switch pm {
 		case "homebrew":
@@ -235,7 +235,7 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result, m
 
 func handleOptionalUpdate(parentCtx context.Context, res updatepolicy.Result) {
 	binPath, _ := getCurrentBinaryPath()
-	if binPath != "" && isPMManaged(binPath) {
+	if binPath != "" && autoupdate.IsPMManaged(binPath) {
 		pm := detectPackageManager(binPath)
 		switch pm {
 		case "homebrew":
@@ -337,12 +337,6 @@ func getCurrentBinaryPath() (string, error) {
 	return filepath.EvalSymlinks(exe)
 }
 
-func isPMManaged(binPath string) bool {
-	return strings.Contains(binPath, "/opt/homebrew/") ||
-		strings.Contains(binPath, "/usr/local/Cellar/") ||
-		strings.Contains(binPath, "\\scoop\\apps\\") ||
-		strings.Contains(binPath, "WindowsApps")
-}
 
 func detectPackageManager(binPath string) string {
 	p := strings.ToLower(binPath)
