@@ -37,8 +37,7 @@ Install `tnr` using one of the supported methods below. You may also download in
 
 ### macOS
 
-- [Download for macOS (Apple Silicon)](https://storage.googleapis.com/thunder-cli/tnr/releases/latest/macos/tnr_darwin_arm64.pkg)
-- [Download for macOS (Intel)](https://storage.googleapis.com/thunder-cli/tnr/releases/latest/macos/tnr_darwin_amd64.pkg)
+Download the `.pkg` installer for your platform from the [Latest Release](https://github.com/Thunder-Compute/thunder-cli/releases/latest) page (`tnr_*_darwin_arm64.pkg` for Apple Silicon, `tnr_*_darwin_amd64.pkg` for Intel).
 
 **Homebrew:**
 
@@ -51,8 +50,7 @@ brew install tnr
 
 ### Linux
 
-- [Download for Linux (Intel/AMD)](https://storage.googleapis.com/thunder-cli/tnr/releases/latest/linux/tnr_linux_amd64.tar.gz)
-- [Download for Linux (ARM)](https://storage.googleapis.com/thunder-cli/tnr/releases/latest/linux/tnr_linux_arm64.tar.gz)
+Download `.tar.gz`, `.deb`, `.rpm`, or `.apk` packages from the [Latest Release](https://github.com/Thunder-Compute/thunder-cli/releases/latest) page.
 
 **Install script (recommended):**
 
@@ -64,10 +62,7 @@ curl -fsSL https://raw.githubusercontent.com/Thunder-Compute/thunder-cli/main/sc
 
 ### Windows
 
-**Direct download:**
-
-- [Download for Windows (Intel/AMD)](https://storage.googleapis.com/thunder-cli/tnr/releases/latest/windows/tnr_windows_amd64.msi)
-- [Download for Windows (ARM)](https://storage.googleapis.com/thunder-cli/tnr/releases/latest/windows/tnr_windows_arm64.msi)
+Download the `.msi` installer for your platform from the [Latest Release](https://github.com/Thunder-Compute/thunder-cli/releases/latest) page.
 
 **Scoop:**
 
