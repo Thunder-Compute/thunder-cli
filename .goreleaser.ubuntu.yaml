@@ -68,25 +68,6 @@ sboms:
   - id: sbom
     artifacts: archive
 
-# GCS upload configuration
-# Uploads archives and Linux packages to Google Cloud Storage for distribution
-# extra_files needed here because NFPM packages aren't automatically included in blobs
-blobs:
-  - provider: gs
-    bucket: "{{ .Env.GCP_BUCKET }}"
-    directory: "tnr/releases/{{ .Version }}/linux"
-    cache_control:
-      - public
-      - max-age=31536000
-      - immutable
-    ids:
-      - archive
-      - checksum
-    extra_files:
-      - glob: "dist/*.deb"
-      - glob: "dist/*.rpm"
-      - glob: "dist/*.apk"
-
 # GitHub release configuration
 
 # NOTE: Do NOT add extra_files here for .deb/.rpm/.apk - they're auto-included from nfpms
