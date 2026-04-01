@@ -57,7 +57,7 @@ func runUpdateCommand() error {
 	}
 
 	binPath, _ := getCurrentBinaryPath()
-	if binPath != "" && isPMManaged(binPath) {
+	if binPath != "" && autoupdate.IsPMManaged(binPath) {
 		return handlePMUpdate(policyResult, binPath)
 	}
 

@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
 	"github.com/Thunder-Compute/thunder-cli/internal/updatepolicy"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	"github.com/stretchr/testify/assert"
@@ -150,7 +151,7 @@ func TestIsPMManaged(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isPMManaged(tt.binPath)
+			result := autoupdate.IsPMManaged(tt.binPath)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

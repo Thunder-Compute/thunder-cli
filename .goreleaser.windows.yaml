@@ -54,23 +54,6 @@ sboms:
   - id: sbom
     artifacts: archive
 
-# GCS upload configuration
-# Uploads archives and MSI installers to Google Cloud Storage for distribution
-# extra_files needed here because MSI files aren't automatically included in blobs
-blobs:
-  - provider: gs
-    bucket: "{{ .Env.GCP_BUCKET }}"
-    directory: "tnr/releases/{{ .Version }}/windows"
-    cache_control:
-      - public
-      - max-age=31536000
-      - immutable
-    ids:
-      - archive
-      - checksum
-    extra_files:
-      - glob: "dist/*.msi"
-
 # GitHub release configuration
 
 # extra_files needed here to include MSI installers in GitHub releases
@@ -97,7 +80,7 @@ changelog:
 # scoops:
 #   - name: tnr
 #     ids: [archive]
-#     url_template: "https://storage.googleapis.com/thunder-cli/tnr/releases/{{ .Version }}/windows/{{ .ArtifactName }}"
+#     url_template: "https://github.com/Thunder-Compute/thunder-cli/releases/download/v{{ .Version }}/{{ .ArtifactName }}"
 #     homepage: "https://github.com/Thunder-Compute/thunder-cli"
 #     description: "Thunder Compute CLI"
 #     license: MIT
