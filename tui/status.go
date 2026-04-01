@@ -50,6 +50,7 @@ type statusModel struct {
 	instances    []api.Instance
 	client       *api.Client
 	monitoring   bool
+	verbose      bool
 	lastUpdate   time.Time
 	quitting     bool
 	spinner      spinner.Model
@@ -70,12 +71,13 @@ type instancesMsg struct {
 
 type quitNow struct{}
 
-func newStatusModel(client *api.Client, monitoring bool, instances []api.Instance) statusModel {
+func newStatusModel(client *api.Client, monitoring bool, instances []api.Instance, verbose bool) statusModel {
 	s := NewPrimarySpinner()
 
 	return statusModel{
 		client:       client,
 		monitoring:   monitoring,
+		verbose:      verbose,
 		instances:    instances,
 		lastUpdate:   time.Now(),
 		spinner:      s,
@@ -488,15 +490,19 @@ func (m *statusModel) renderEventsSection() string {
 
 	var events []instanceEvent
 	for _, instance := range m.instances {
-		if instance.LastRestart != nil {
-			events = append(events, instanceEvent{
-				id:        instance.ID,
-				name:      instance.Name,
-				reason:    instance.LastRestart.Reason,
-				message:   instance.LastRestart.Message,
-				timestamp: instance.LastRestart.Timestamp,
-			})
+		if instance.LastRestart == nil {
+			continue
 		}
+		if !m.verbose && time.Since(instance.LastRestart.Timestamp) > time.Hour {
+			continue
+		}
+		events = append(events, instanceEvent{
+			id:        instance.ID,
+			name:      instance.Name,
+			reason:    instance.LastRestart.Reason,
+			message:   instance.LastRestart.Message,
+			timestamp: instance.LastRestart.Timestamp,
+		})
 	}
 
 	if len(events) == 0 {
@@ -505,14 +511,14 @@ func (m *statusModel) renderEventsSection() string {
 
 	var b strings.Builder
 	b.WriteString("\n")
-	b.WriteString(WarningStyle().Bold(true).Render("Recent Events:"))
+	b.WriteString(SubtleTextStyle().Bold(true).Render("Recent Events:"))
 	b.WriteString("\n\n")
 
 	for _, ev := range events {
 		ts := ev.timestamp.Local().Format("2006-01-02_15:04:05.0000")
 		b.WriteString(fmt.Sprintf("  %s\n", SubtleTextStyle().Render(ev.name)))
 		b.WriteString(fmt.Sprintf("  %s\n",
-			WarningStyle().Render(fmt.Sprintf("[%s]: %s — %s", ts, ev.reason, ev.message)),
+			SubtleTextStyle().Render(fmt.Sprintf("[%s]: %s — %s", ts, ev.reason, ev.message)),
 		))
 		b.WriteString("\n")
 	}
@@ -530,13 +536,13 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
-func RunStatus(client *api.Client, monitoring bool, instances []api.Instance) error {
+func RunStatus(client *api.Client, monitoring bool, instances []api.Instance, verbose bool) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
 	InitCommonStyles(os.Stdout)
 
-	m := newStatusModel(client, monitoring, instances)
+	m := newStatusModel(client, monitoring, instances, verbose)
 	p := tea.NewProgram(
 		m,
 		tea.WithContext(ctx),
