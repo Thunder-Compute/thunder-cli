@@ -26,9 +26,7 @@ var updateCmd = &cobra.Command{
 }
 
 func init() {
-	updateCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderUpdateHelp(cmd)
-	})
+	updateCmd.SetHelpFunc(wrapHelp(helpmenus.RenderUpdateHelp))
 
 	rootCmd.AddCommand(updateCmd)
 }
@@ -59,7 +57,7 @@ func runUpdateCommand() error {
 	}
 
 	binPath, _ := getCurrentBinaryPath()
-	if binPath != "" && isPMManaged(binPath) {
+	if binPath != "" && autoupdate.IsPMManaged(binPath) {
 		return handlePMUpdate(policyResult, binPath)
 	}
 
@@ -104,12 +102,8 @@ func handleExplicitOptionalUpdate(parentCtx context.Context, res updatepolicy.Re
 	binPath, _ := getCurrentBinaryPath()
 	if binPath != "" {
 		shouldReexec, err := autoupdate.TryFinalizeStagedUpdateImmediately(parentCtx, binPath)
-		if err != nil {
-			fmt.Println(tui.RenderUpdateStaged())
-			return nil
-		}
-		if shouldReexec {
-			fmt.Println(tui.RenderUpdateRerun())
+		if err != nil || shouldReexec {
+			fmt.Println(tui.RenderUpdateSuccess())
 			return nil
 		}
 	}

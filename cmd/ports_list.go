@@ -31,9 +31,7 @@ var portsListCmd = &cobra.Command{
 }
 
 func init() {
-	portsListCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderPortsListHelp(cmd)
-	})
+	portsListCmd.SetHelpFunc(wrapHelp(helpmenus.RenderPortsListHelp))
 	portsCmd.AddCommand(portsListCmd)
 }
 
@@ -54,7 +52,31 @@ func runPortsList() error {
 	}
 
 	if len(instances) == 0 {
+		if JSONOutput {
+			printJSON([]any{})
+			return nil
+		}
 		PrintWarningSimple("No instances found. Use 'tnr create' to create a Thunder Compute instance.")
+		return nil
+	}
+
+	if JSONOutput {
+		type portEntry struct {
+			ID        string `json:"id"`
+			UUID      string `json:"uuid"`
+			Status    string `json:"status"`
+			HTTPPorts []int  `json:"http_ports"`
+		}
+		var entries []portEntry
+		for _, inst := range instances {
+			entries = append(entries, portEntry{
+				ID:        inst.ID,
+				UUID:      inst.UUID,
+				Status:    inst.Status,
+				HTTPPorts: inst.HTTPPorts,
+			})
+		}
+		printJSON(entries)
 		return nil
 	}
 

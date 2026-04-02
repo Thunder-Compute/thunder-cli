@@ -30,9 +30,7 @@ var scpCmd = &cobra.Command{
 }
 
 func init() {
-	scpCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSCPHelp(cmd)
-	})
+	scpCmd.SetHelpFunc(wrapHelp(helpmenus.RenderSCPHelp))
 	rootCmd.AddCommand(scpCmd)
 }
 
@@ -161,6 +159,11 @@ func runSCP(sources []string, destination string) error {
 
 		err := utils.Transfer(ctx, keyFile, target.GetIP(), target.Port, localPath, remotePath, direction == "upload")
 		if err != nil {
+			if ctx.Err() != nil {
+				// User pressed Ctrl+C — not an error.
+				fmt.Println("\nTransfer cancelled")
+				return nil
+			}
 			sentry.WithScope(func(scope *sentry.Scope) {
 				scope.SetTag("operation", "scp_transfer")
 				sentry.CaptureException(err)

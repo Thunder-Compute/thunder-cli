@@ -209,9 +209,9 @@ func (m connectModel) View() string {
 
 	b.WriteString("\n")
 	if m.done || m.cancelled {
-		b.WriteString(m.styles.help.Render("Press 'Q' to close"))
+		b.WriteString(m.styles.help.Render("Esc/Q: Quit"))
 	} else {
-		b.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Cancel\n"))
+		b.WriteString(m.styles.help.Render("↑/↓: Navigate  Enter: Select  Esc/Q: Quit\n"))
 	}
 
 	return b.String()

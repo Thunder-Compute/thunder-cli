@@ -153,6 +153,87 @@ func TestOptionalUpdateCacheHelpers(t *testing.T) {
 	}
 }
 
+func TestClassifyAsset(t *testing.T) {
+	tests := []struct {
+		name     string
+		expected string
+	}{
+		{"tnr_2.0.48_darwin_arm64.tar.gz", "macos/arm64"},
+		{"tnr_2.0.48_darwin_amd64.tar.gz", "macos/amd64"},
+		{"tnr_2.0.48_linux_amd64.tar.gz", "linux/amd64"},
+		{"tnr_2.0.48_linux_arm64.tar.gz", "linux/arm64"},
+		{"tnr_2.0.48_windows_amd64.zip", "windows/amd64"},
+		{"tnr_2.0.48_windows_arm64.zip", "windows/arm64"},
+		{"checksums.txt", "checksums"},
+		// OS-specific checksums are not mapped (resolved via githubAssetAndChecksum)
+		{"checksums-macos.txt", ""},
+		{"checksums-linux.txt", ""},
+		{"checksums-windows.txt", ""},
+		// Installers are not mapped
+		{"tnr_2.0.48_darwin_arm64.pkg", ""},
+		{"tnr-2.0.48-amd64.msi", ""},
+		{"tnr_2.0.48_linux_amd64.deb", ""},
+		{"tnr_2.0.48_linux_amd64.rpm", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := classifyAsset(tt.name)
+			if got != tt.expected {
+				t.Errorf("classifyAsset(%q) = %q, want %q", tt.name, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFetchLatestFromGitHub(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{
+			"tag_name": "v2.0.48",
+			"assets": [
+				{"name": "tnr_2.0.48_darwin_arm64.tar.gz", "browser_download_url": "https://example.com/tnr_2.0.48_darwin_arm64.tar.gz"},
+				{"name": "tnr_2.0.48_linux_amd64.tar.gz", "browser_download_url": "https://example.com/tnr_2.0.48_linux_amd64.tar.gz"},
+				{"name": "tnr_2.0.48_windows_amd64.zip", "browser_download_url": "https://example.com/tnr_2.0.48_windows_amd64.zip"},
+				{"name": "checksums.txt", "browser_download_url": "https://example.com/checksums.txt"},
+				{"name": "tnr_2.0.48_darwin_arm64.pkg", "browser_download_url": "https://example.com/tnr_2.0.48_darwin_arm64.pkg"}
+			]
+		}`)
+	}))
+	defer srv.Close()
+
+	// Override the GitHub API URL for testing.
+	origURL := githubReleasesLatestURL
+	defer func() { setGitHubReleasesURL(origURL) }()
+	setGitHubReleasesURL(srv.URL)
+
+	man, err := fetchLatestFromGitHub(context.Background())
+	if err != nil {
+		t.Fatalf("fetchLatestFromGitHub: %v", err)
+	}
+	if man.Version != "v2.0.48" {
+		t.Errorf("version = %q, want %q", man.Version, "v2.0.48")
+	}
+	if man.Channel != "stable" {
+		t.Errorf("channel = %q, want %q", man.Channel, "stable")
+	}
+	if got := man.Assets["macos/arm64"]; got != "https://example.com/tnr_2.0.48_darwin_arm64.tar.gz" {
+		t.Errorf("macos/arm64 = %q", got)
+	}
+	if got := man.Assets["linux/amd64"]; got != "https://example.com/tnr_2.0.48_linux_amd64.tar.gz" {
+		t.Errorf("linux/amd64 = %q", got)
+	}
+	if got := man.Assets["checksums"]; got != "https://example.com/checksums.txt" {
+		t.Errorf("checksums = %q", got)
+	}
+	// Installer (.pkg) should NOT be in assets
+	if _, ok := man.Assets["macos/arm64/pkg"]; ok {
+		t.Error("pkg installer should not be classified")
+	}
+}
+
 // Ensures tests run with consistent platform data when executed on different OS/arch.
 func init() {
 	// Ensure the helper functions behave deterministically during tests.

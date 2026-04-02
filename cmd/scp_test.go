@@ -276,13 +276,12 @@ func TestDetermineTransferDirection(t *testing.T) {
 }
 
 func TestDetermineTransferDirection_WindowsNumericID(t *testing.T) {
-	// Simulates the exact user scenario: tnr scp ./cloud-comfyui.sh 0:/home/ubuntu/
-	// on Windows. The destination should be recognized as remote.
 	source := parsePathWithOS(`.\cloud-comfyui.sh`, "windows")
 	dest := parsePathWithOS("0:/home/ubuntu/", "windows")
 
 	direction, instanceID, err := determineTransferDirection([]PathInfo{source}, dest)
-	assert.NoError(t, err, "should not error - destination is a valid remote path")
+	assert.NoError(t, err)
 	assert.Equal(t, "upload", direction)
 	assert.Equal(t, "0", instanceID)
 }
+

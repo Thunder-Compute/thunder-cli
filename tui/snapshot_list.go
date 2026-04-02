@@ -95,7 +95,7 @@ func (m snapshotListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "Q", "ctrl+c":
+		case "q", "Q", "esc", "ctrl+c":
 			m.cancelled = true
 			m.quitting = true
 			m.monitoring = false

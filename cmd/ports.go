@@ -19,8 +19,6 @@ var portsCmd = &cobra.Command{
 }
 
 func init() {
-	portsCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderPortsHelp(cmd)
-	})
+	portsCmd.SetHelpFunc(wrapHelp(helpmenus.RenderPortsHelp))
 	rootCmd.AddCommand(portsCmd)
 }

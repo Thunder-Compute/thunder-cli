@@ -156,7 +156,7 @@ func (m snapshotCreateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "q", "Q", "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
 
@@ -308,7 +308,7 @@ func (m snapshotCreateModel) View() string {
 			s.WriteString(errorStyleTUI.Render(fmt.Sprintf("✗ Error: %v", m.validationErr)))
 			s.WriteString("\n")
 		}
-		s.WriteString(m.styles.Help.Render("Press Enter to continue\n"))
+		s.WriteString(m.styles.Help.Render("Enter: Continue  Esc: Back  Ctrl+C: Quit\n"))
 
 	case snapshotCreateStepConfirm:
 		s.WriteString("Review your snapshot configuration:\n")

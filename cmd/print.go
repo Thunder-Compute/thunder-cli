@@ -8,9 +8,14 @@ import (
 )
 
 func PrintError(err error) {
-	if err != nil {
-		fmt.Fprintln(os.Stderr, tui.RenderError(err))
+	if err == nil {
+		return
 	}
+	if JSONOutput {
+		printJSON(map[string]string{"error": err.Error()})
+		return
+	}
+	fmt.Fprintln(os.Stderr, tui.RenderError(err))
 }
 
 func FormatError(err error) string {
