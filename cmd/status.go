@@ -12,6 +12,7 @@ import (
 )
 
 var noWait bool
+var verboseStatus bool
 
 // statusCmd represents the status command
 var statusCmd = &cobra.Command{
@@ -27,6 +28,7 @@ func init() {
 
 	rootCmd.AddCommand(statusCmd)
 	statusCmd.Flags().BoolVar(&noWait, "no-wait", false, "Display status once and exit without monitoring")
+	statusCmd.Flags().BoolVarP(&verboseStatus, "verbose", "v", false, "Show all events regardless of age")
 }
 
 func RunStatus() error {
@@ -57,9 +59,9 @@ func RunStatus() error {
 	}
 
 	if !interactive {
-		renderPlainStatusTable(instances)
+		renderPlainStatusTable(instances, verboseStatus)
 		return nil
 	}
 
-	return tui.RunStatus(client, monitoring, instances)
+	return tui.RunStatus(client, monitoring, instances, verboseStatus)
 }
