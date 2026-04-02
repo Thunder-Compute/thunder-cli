@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	authURL     = "https://console.thundercompute.com/login/vscode"
+	authURL     = "https://console.thundercompute.com/login/app"
 	callbackURL = "http://127.0.0.1"
 )
 
@@ -241,9 +241,7 @@ var loginCmd = &cobra.Command{
 }
 
 func init() {
-	loginCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderLoginHelp(cmd)
-	})
+	loginCmd.SetHelpFunc(wrapHelp(helpmenus.RenderLoginHelp))
 
 	rootCmd.AddCommand(loginCmd)
 	loginCmd.Flags().StringVar(&loginToken, "token", "", "Authenticate directly with a token instead of opening browser")
@@ -611,9 +609,7 @@ var logoutCmd = &cobra.Command{
 }
 
 func init() {
-	logoutCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderLogoutHelp(cmd)
-	})
+	logoutCmd.SetHelpFunc(wrapHelp(helpmenus.RenderLogoutHelp))
 
 	rootCmd.AddCommand(logoutCmd)
 }

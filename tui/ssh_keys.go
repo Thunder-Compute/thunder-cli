@@ -88,21 +88,43 @@ func (m sshKeyAddModel) Init() tea.Cmd {
 func (m sshKeyAddModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// During text input steps, let the input handle most keys
+		if m.step == sshKeyAddStepName || m.step == sshKeyAddStepPasteKey {
+			switch msg.String() {
+			case "ctrl+c":
+				m.quitting = true
+				return m, tea.Quit
+			case "esc":
+				if m.step == sshKeyAddStepName {
+					m.step = sshKeyAddStepSelect
+					m.cursor = 0
+					m.nameInput.Blur()
+				} else {
+					m.step = sshKeyAddStepName
+					m.keyInput.Blur()
+					m.nameInput.Focus()
+				}
+				return m, nil
+			case "enter":
+				return m.handleEnter()
+			default:
+				var cmd tea.Cmd
+				if m.step == sshKeyAddStepName {
+					m.nameInput, cmd = m.nameInput.Update(msg)
+				} else {
+					m.keyInput, cmd = m.keyInput.Update(msg)
+				}
+				return m, cmd
+			}
+		}
+
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "q", "Q", "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
 
 		case "esc":
 			switch m.step {
-			case sshKeyAddStepName:
-				m.step = sshKeyAddStepSelect
-				m.cursor = 0
-				m.nameInput.Blur()
-			case sshKeyAddStepPasteKey:
-				m.step = sshKeyAddStepName
-				m.keyInput.Blur()
-				m.nameInput.Focus()
 			case sshKeyAddStepConfirm:
 				if m.pasteManual {
 					m.step = sshKeyAddStepPasteKey
@@ -137,18 +159,6 @@ func (m sshKeyAddModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor < 1 {
 					m.cursor++
 				}
-			}
-
-		default:
-			if m.step == sshKeyAddStepName {
-				var cmd tea.Cmd
-				m.nameInput, cmd = m.nameInput.Update(msg)
-				return m, cmd
-			}
-			if m.step == sshKeyAddStepPasteKey {
-				var cmd tea.Cmd
-				m.keyInput, cmd = m.keyInput.Update(msg)
-				return m, cmd
 			}
 		}
 	}
@@ -261,19 +271,19 @@ func (m sshKeyAddModel) View() string {
 		s.WriteString(fmt.Sprintf("%s%s\n", cursor, display))
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc/Q: Quit\n"))
 
 	case sshKeyAddStepName:
 		s.WriteString("Enter a name for this key:\n\n")
 		s.WriteString(m.nameInput.View())
 		s.WriteString("\n\n")
-		s.WriteString(m.styles.Help.Render("Enter: Continue  Esc: Back  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("Enter: Continue  Esc: Back  Ctrl+C: Quit\n"))
 
 	case sshKeyAddStepPasteKey:
 		s.WriteString("Paste your SSH public key:\n\n")
 		s.WriteString(m.keyInput.View())
 		s.WriteString("\n\n")
-		s.WriteString(m.styles.Help.Render("Enter: Continue  Esc: Back  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("Enter: Continue  Esc: Back  Ctrl+C: Quit\n"))
 
 	case sshKeyAddStepConfirm:
 		s.WriteString("Review your SSH key:\n")
@@ -305,7 +315,7 @@ func (m sshKeyAddModel) View() string {
 		}
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Quit\n"))
 	}
 
 	return s.String()
@@ -396,7 +406,7 @@ func (m sshKeyDeleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "q", "Q", "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
 
@@ -502,7 +512,7 @@ func (m sshKeyDeleteModel) View() string {
 		}
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc/Q: Quit\n"))
 
 	case sshKeyDeleteStepConfirm:
 		s.WriteString("Are you sure you want to delete this SSH key?\n\n")
@@ -531,7 +541,7 @@ func (m sshKeyDeleteModel) View() string {
 		}
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Quit\n"))
 	}
 
 	return s.String()

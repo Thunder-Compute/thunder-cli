@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	termx "github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -23,9 +22,7 @@ var snapshotListCmd = &cobra.Command{
 var snapshotNoWait bool
 
 func init() {
-	snapshotListCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSnapshotListHelp(cmd)
-	})
+	snapshotListCmd.SetHelpFunc(wrapHelp(helpmenus.RenderSnapshotListHelp))
 
 	snapshotCmd.AddCommand(snapshotListCmd)
 	snapshotListCmd.Flags().BoolVar(&snapshotNoWait, "no-wait", false, "Display snapshots once and exit without monitoring")
@@ -37,11 +34,11 @@ func runSnapshotList() error {
 		return err
 	}
 	monitoring := !snapshotNoWait
+	interactive := tui.IsInteractive() && !JSONOutput
 
-	if monitoring {
-		if !termx.IsTerminal(os.Stdout.Fd()) {
-			return fmt.Errorf("error running snapshot list TUI: not a TTY")
-		}
+	// Auto-disable monitoring in non-interactive mode
+	if monitoring && !interactive {
+		monitoring = false
 	}
 
 	var snapshots []api.Snapshot
@@ -51,6 +48,16 @@ func runSnapshotList() error {
 		return e
 	}); err != nil {
 		return fmt.Errorf("failed to fetch snapshots: %w", err)
+	}
+
+	if JSONOutput {
+		printJSON(snapshots)
+		return nil
+	}
+
+	if !interactive {
+		renderPlainSnapshotTable(snapshots)
+		return nil
 	}
 
 	return tui.RunSnapshotList(client, monitoring, snapshots)

@@ -71,8 +71,6 @@ func NewConnectFlowModel(instanceID string) ConnectFlowModel {
 	s := NewPrimarySpinner()
 
 	phases := []Phase{
-		{Name: "Pre-connection setup", Status: PhasePending},
-		{Name: "Instance validation", Status: PhasePending},
 		{Name: "SSH key management", Status: PhasePending},
 		{Name: "Establishing SSH connection", Status: PhasePending},
 		{Name: "Setting up instance", Status: PhasePending},

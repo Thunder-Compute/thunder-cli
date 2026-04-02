@@ -30,23 +30,17 @@ var sshKeysCmd = &cobra.Command{
 }
 
 func init() {
-	sshKeysCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSSHKeysHelp(cmd)
-	})
+	sshKeysCmd.SetHelpFunc(wrapHelp(helpmenus.RenderSSHKeysHelp))
 	rootCmd.AddCommand(sshKeysCmd)
 
 	// ── list ────────────────────────────────────────────────────────────
 
-	sshKeysListCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSSHKeysListHelp(cmd)
-	})
+	sshKeysListCmd.SetHelpFunc(wrapHelp(helpmenus.RenderSSHKeysListHelp))
 	sshKeysCmd.AddCommand(sshKeysListCmd)
 
 	// ── add ─────────────────────────────────────────────────────────────
 
-	sshKeysAddCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSSHKeysAddHelp(cmd)
-	})
+	sshKeysAddCmd.SetHelpFunc(wrapHelp(helpmenus.RenderSSHKeysAddHelp))
 	sshKeysAddCmd.Flags().StringVar(&sshKeyAddName, "name", "", "Name for the SSH key")
 	sshKeysAddCmd.Flags().StringVar(&sshKeyAddKeyFile, "key-file", "", "Path to SSH public key file")
 	sshKeysAddCmd.Flags().StringVar(&sshKeyAddKey, "key", "", "SSH public key string")
@@ -54,9 +48,7 @@ func init() {
 
 	// ── delete ──────────────────────────────────────────────────────────
 
-	sshKeysDeleteCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSSHKeysDeleteHelp(cmd)
-	})
+	sshKeysDeleteCmd.SetHelpFunc(wrapHelp(helpmenus.RenderSSHKeysDeleteHelp))
 	sshKeysCmd.AddCommand(sshKeysDeleteCmd)
 }
 
@@ -87,6 +79,10 @@ func runSSHKeysList() error {
 	}
 
 	if len(keys) == 0 {
+		if JSONOutput {
+			printJSON([]any{})
+			return nil
+		}
 		fmt.Println(tui.WarningStyle().Render("⚠ No SSH keys found. Add one with 'tnr ssh-keys add'."))
 		return nil
 	}
@@ -94,6 +90,11 @@ func runSSHKeysList() error {
 	sort.Slice(keys, func(i, j int) bool {
 		return keys[i].CreatedAt < keys[j].CreatedAt
 	})
+
+	if JSONOutput {
+		printJSON(keys)
+		return nil
+	}
 
 	renderSSHKeysTable(keys)
 
@@ -180,6 +181,10 @@ func runSSHKeysAdd(cmd *cobra.Command) error {
 		return runSSHKeysAddNonInteractive(client, cmd)
 	}
 
+	if !tui.IsInteractive() {
+		return fmt.Errorf("--name flag required in non-interactive mode")
+	}
+
 	return runSSHKeysAddInteractive(client)
 }
 
@@ -217,6 +222,11 @@ func runSSHKeysAddNonInteractive(client *api.Client, cmd *cobra.Command) error {
 			sentry.CaptureException(err)
 		})
 		return fmt.Errorf("failed to add SSH key: %w", err)
+	}
+
+	if JSONOutput {
+		printJSON(resp.Key)
+		return nil
 	}
 
 	PrintSuccessSimple(fmt.Sprintf("SSH key '%s' added (fingerprint: %s)", resp.Key.Name, resp.Key.Fingerprint))
@@ -267,10 +277,15 @@ func runSSHKeysDelete(args []string) error {
 		return err
 	}
 
+	interactive := tui.IsInteractive() && !JSONOutput
+
 	var keyID string
 	var selectedKey *api.SSHKey
 
 	if len(args) == 0 {
+		if !interactive {
+			return fmt.Errorf("SSH key name or ID required in non-interactive mode")
+		}
 		// Interactive mode
 		var keys api.SSHKeyListResponse
 		if err := tui.RunWithBusySpinner("Fetching SSH keys...", os.Stdout, func() error {
@@ -325,20 +340,40 @@ func runSSHKeysDelete(args []string) error {
 
 		keyID = selectedKey.ID
 
-		fmt.Println()
-		fmt.Printf("About to delete SSH key: %s\n", selectedKey.Name)
-		fmt.Printf("Fingerprint: %s\n", selectedKey.Fingerprint)
-		fmt.Printf("Key Type: %s\n", selectedKey.KeyType)
-		fmt.Println()
-		fmt.Print("Are you sure you want to delete this key? (yes/no): ")
+		// Confirm deletion (skip with --yes)
+		if !YesFlag {
+			if !interactive {
+				return fmt.Errorf("use --yes to confirm deletion in non-interactive mode")
+			}
+			fmt.Println()
+			fmt.Printf("About to delete SSH key: %s\n", selectedKey.Name)
+			fmt.Printf("Fingerprint: %s\n", selectedKey.Fingerprint)
+			fmt.Printf("Key Type: %s\n", selectedKey.KeyType)
+			fmt.Println()
+			fmt.Print("Are you sure you want to delete this key? (yes/no): ")
 
-		var confirmation string
-		fmt.Scanln(&confirmation)
+			var confirmation string
+			fmt.Scanln(&confirmation)
 
-		if confirmation != "yes" && confirmation != "y" {
-			PrintWarningSimple("Deletion cancelled")
-			return nil
+			if confirmation != "yes" && confirmation != "y" {
+				PrintWarningSimple("Deletion cancelled")
+				return nil
+			}
 		}
+	}
+
+	if !interactive {
+		// Non-interactive: direct API call
+		fmt.Fprintln(os.Stderr, "Deleting SSH key...")
+		if deleteErr := client.DeleteSSHKey(keyID); deleteErr != nil {
+			return fmt.Errorf("failed to delete SSH key: %w", deleteErr)
+		}
+		if JSONOutput {
+			printJSON(map[string]string{"key": selectedKey.Name, "status": "deleted"})
+		} else {
+			fmt.Printf("Deleted SSH key '%s'\n", selectedKey.Name)
+		}
+		return nil
 	}
 
 	// Run deletion with progress

@@ -18,6 +18,12 @@ import (
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 )
 
+// Global flags for non-interactive / automation mode.
+var (
+	JSONOutput bool
+	YesFlag    bool
+)
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:           "tnr",
@@ -33,8 +39,16 @@ var rootCmd = &cobra.Command{
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	_, err := rootCmd.ExecuteC()
+	c, err := rootCmd.ExecuteC()
 	if err != nil {
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTag("source", "catch_all")
+			if c != nil {
+				scope.SetTag("command", c.Name())
+			}
+			sentry.CaptureException(err)
+		})
+		sentry.Flush(2 * time.Second)
 		PrintError(err)
 		os.Exit(1)
 	}
@@ -44,13 +58,12 @@ func init() {
 	tui.InitCommonStyles(os.Stdout)
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		tui.SetNonInteractive(JSONOutput)
 		checkIfUpdateNeeded(cmd)
 		return nil
 	}
 
-	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderRootHelp(cmd)
-	})
+	rootCmd.SetHelpFunc(wrapHelp(helpmenus.RenderRootHelp))
 
 	completionCmd := &cobra.Command{
 		Use:   "completion [shell]",
@@ -60,9 +73,7 @@ func init() {
 		},
 	}
 
-	completionCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderCompletionHelp(cmd)
-	})
+	completionCmd.SetHelpFunc(wrapHelp(helpmenus.RenderCompletionHelp))
 
 	completionCmd.AddCommand(&cobra.Command{
 		Use:   "bash",
@@ -103,6 +114,9 @@ func init() {
 	// will be global for your application.
 
 	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.thunder-cli-draft.yaml)")
+
+	rootCmd.PersistentFlags().BoolVar(&JSONOutput, "json", false, "Output in JSON format (non-interactive)")
+	rootCmd.PersistentFlags().BoolVarP(&YesFlag, "yes", "y", false, "Skip confirmation prompts")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
@@ -156,7 +170,7 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result, m
 	fmt.Fprintf(os.Stderr, "⚠ Update required: current %s, minimum %s.\n", displayCurrent, displayMin)
 
 	binPath, _ := getCurrentBinaryPath()
-	if binPath != "" && isPMManaged(binPath) {
+	if binPath != "" && autoupdate.IsPMManaged(binPath) {
 		pm := detectPackageManager(binPath)
 		switch pm {
 		case "homebrew":
@@ -217,7 +231,7 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result, m
 
 func handleOptionalUpdate(parentCtx context.Context, res updatepolicy.Result) {
 	binPath, _ := getCurrentBinaryPath()
-	if binPath != "" && isPMManaged(binPath) {
+	if binPath != "" && autoupdate.IsPMManaged(binPath) {
 		pm := detectPackageManager(binPath)
 		switch pm {
 		case "homebrew":
@@ -319,12 +333,6 @@ func getCurrentBinaryPath() (string, error) {
 	return filepath.EvalSymlinks(exe)
 }
 
-func isPMManaged(binPath string) bool {
-	return strings.Contains(binPath, "/opt/homebrew/") ||
-		strings.Contains(binPath, "/usr/local/Cellar/") ||
-		strings.Contains(binPath, "\\scoop\\apps\\") ||
-		strings.Contains(binPath, "WindowsApps")
-}
 
 func detectPackageManager(binPath string) string {
 	p := strings.ToLower(binPath)

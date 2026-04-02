@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -35,38 +34,6 @@ type Source struct {
 	ExpectedSize int64
 }
 
-func MaybeStartBackgroundUpdate(ctx context.Context, currentVersion string) {
-	if os.Getenv("TNR_NO_SELFUPDATE") == "1" {
-		return
-	}
-
-	_ = FinalizeWindowsSwap()
-
-	exe, _ := currentExecutable()
-	if isPMManaged(exe) {
-		return
-	}
-	if !dirWritable(filepath.Dir(exe)) && runtime.GOOS != "windows" {
-		return
-	}
-
-	latest, outdated, err := checkLatestVersion(ctx, currentVersion)
-	if err != nil || !outdated {
-		return
-	}
-
-	fmt.Printf("Updating tnr in background to %s…\n", latest)
-	source := Source{
-		ReleaseTag: latest,
-		Version:    strings.TrimPrefix(strings.TrimPrefix(latest, "v"), "V"),
-	}
-	go func() {
-		bgCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		_ = PerformUpdate(bgCtx, source)
-	}()
-}
-
 // PerformUpdate downloads, verifies and installs the target version.
 // When src.AssetURL is empty, the updater falls back to GitHub releases using src.ReleaseTag.
 func PerformUpdate(ctx context.Context, src Source) error {
@@ -75,7 +42,7 @@ func PerformUpdate(ctx context.Context, src Source) error {
 		return err
 	}
 
-	if isPMManaged(exe) {
+	if IsPMManaged(exe) {
 		return errors.New("managed by package manager")
 	}
 
@@ -142,35 +109,22 @@ func PerformUpdate(ctx context.Context, src Source) error {
 	return nil
 }
 
-func resolveSource(ctx context.Context, src Source) (downloadURL, assetName, checksumsURL, version, expectedChecksum string, err error) {
+func resolveSource(_ context.Context, src Source) (downloadURL, assetName, checksumsURL, version, expectedChecksum string, err error) {
 	expectedChecksum = strings.ToLower(strings.TrimSpace(src.Checksum))
 	checksumsURL = strings.TrimSpace(src.ChecksumURL)
 	version = strings.TrimSpace(src.Version)
 
-	if src.AssetURL != "" {
-		downloadURL = strings.TrimSpace(src.AssetURL)
-		assetName = strings.TrimSpace(src.AssetName)
-		if assetName == "" {
-			assetName = fileNameFromURL(downloadURL)
-		}
-		if version == "" {
-			version = deriveVersionFromName(assetName)
-		}
-		return
+	if src.AssetURL == "" {
+		return "", "", "", "", "", errors.New("no asset URL provided")
 	}
 
-	asset, ghChecksumsURL, ghVersion, err := resolveAssetForCurrentPlatform(ctx, src.ReleaseTag)
-	if err != nil {
-		return "", "", "", "", "", err
-	}
-
-	downloadURL = asset.BrowserDownloadURL
-	assetName = asset.Name
-	if checksumsURL == "" {
-		checksumsURL = ghChecksumsURL
+	downloadURL = strings.TrimSpace(src.AssetURL)
+	assetName = strings.TrimSpace(src.AssetName)
+	if assetName == "" {
+		assetName = fileNameFromURL(downloadURL)
 	}
 	if version == "" {
-		version = ghVersion
+		version = deriveVersionFromName(assetName)
 	}
 	return
 }
@@ -216,98 +170,10 @@ func deriveVersionFromName(name string) string {
 	return ""
 }
 
-type ghRelease struct {
-	TagName string    `json:"tag_name"`
-	Assets  []ghAsset `json:"assets"`
-}
-
-type ghAsset struct {
-	Name               string `json:"name"`
-	BrowserDownloadURL string `json:"browser_download_url"`
-}
-
-func resolveAssetForCurrentPlatform(ctx context.Context, tag string) (ghAsset, string, string, error) {
-	release, err := fetchRelease(ctx, tag)
-	if err != nil {
-		return ghAsset{}, "", "", err
-	}
-
-	osKey := runtime.GOOS
-	archKey := runtime.GOARCH
-	var checksumsURL string
-	for _, a := range release.Assets {
-		l := strings.ToLower(a.Name)
-		if strings.Contains(l, "checksums") && strings.Contains(l, osKey) {
-			checksumsURL = a.BrowserDownloadURL
-			break
-		}
-	}
-	if checksumsURL == "" {
-		for _, a := range release.Assets {
-			if strings.Contains(strings.ToLower(a.Name), "checksums") {
-				checksumsURL = a.BrowserDownloadURL
-				break
-			}
-		}
-	}
-
-	var candidate ghAsset
-	for _, a := range release.Assets {
-		name := strings.ToLower(a.Name)
-		if strings.Contains(name, osKey) && strings.Contains(name, archKey) {
-			if osKey == "windows" && strings.HasSuffix(name, ".zip") {
-				candidate = a
-				break
-			}
-			if (osKey == "linux" || osKey == "darwin") && (strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tgz")) {
-				candidate = a
-				break
-			}
-		}
-	}
-	if candidate.Name == "" {
-		return ghAsset{}, "", "", fmt.Errorf("no release asset for %s/%s", osKey, archKey)
-	}
-
-	return candidate, checksumsURL, release.TagName, nil
-}
-
-func fetchRelease(ctx context.Context, tag string) (ghRelease, error) {
-	url := "https://api.github.com/repos/Thunder-Compute/thunder-cli/releases/latest"
-	if strings.TrimSpace(tag) != "" {
-		url = "https://api.github.com/repos/Thunder-Compute/thunder-cli/releases/tags/" + tag
-	}
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return ghRelease{}, err
-	}
-	if token := strings.TrimSpace(os.Getenv("TNR_GITHUB_TOKEN")); token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	client := &http.Client{Timeout: 20 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return ghRelease{}, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return ghRelease{}, fmt.Errorf("github api status %d", resp.StatusCode)
-	}
-	var rel ghRelease
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return ghRelease{}, err
-	}
-	return rel, nil
-}
-
 func downloadFile(ctx context.Context, url, dest string) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
-	}
-	if token := strings.TrimSpace(os.Getenv("TNR_GITHUB_TOKEN")); token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -504,7 +370,9 @@ func dirWritable(dir string) bool {
 	return true
 }
 
-func isPMManaged(binPath string) bool {
+// IsPMManaged reports whether the binary at binPath appears to be managed
+// by a system package manager (Homebrew, Scoop, Winget).
+func IsPMManaged(binPath string) bool {
 	p := strings.ToLower(binPath)
 	return strings.Contains(p, "/opt/homebrew/") ||
 		strings.Contains(p, "/usr/local/cellar/") ||
@@ -589,64 +457,3 @@ func removeOldBackupWithRetry(oldPath string) error {
 	return lastErr
 }
 
-func checkLatestVersion(ctx context.Context, current string) (latest string, outdated bool, err error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/repos/Thunder-Compute/thunder-cli/releases/latest", nil)
-	if err != nil {
-		return "", false, err
-	}
-	if token := strings.TrimSpace(os.Getenv("TNR_GITHUB_TOKEN")); token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
-	if err != nil {
-		return "", false, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", false, fmt.Errorf("github api status %d", resp.StatusCode)
-	}
-	var payload struct {
-		TagName string `json:"tag_name"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return "", false, err
-	}
-	latest = strings.TrimSpace(payload.TagName)
-	if latest == "" || strings.EqualFold(strings.TrimSpace(current), "dev") || strings.TrimSpace(current) == "" {
-		return "", false, nil
-	}
-	cv := strings.TrimPrefix(strings.TrimPrefix(current, "v"), "V")
-	lv := strings.TrimPrefix(strings.TrimPrefix(latest, "v"), "V")
-	outdated = versionLess(cv, lv)
-	return latest, outdated, nil
-}
-
-func versionLess(a, b string) bool {
-	ap := parseParts(a)
-	bp := parseParts(b)
-	for i := 0; i < 3; i++ {
-		if ap[i] != bp[i] {
-			return ap[i] < bp[i]
-		}
-	}
-	return false
-}
-
-func parseParts(v string) [3]int {
-	var out [3]int
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return out
-	}
-	v = strings.TrimPrefix(v, "v")
-	v = strings.TrimPrefix(v, "V")
-	parts := strings.SplitN(v, "-", 2)[0]
-	segs := strings.Split(parts, ".")
-	for i := 0; i < len(segs) && i < 3; i++ {
-		var n int
-		_, _ = fmt.Sscanf(segs[i], "%d", &n) //nolint:errcheck // parse failure results in 0, which is acceptable
-		out[i] = n
-	}
-	return out
-}

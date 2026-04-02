@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	termx "github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -13,6 +12,7 @@ import (
 )
 
 var noWait bool
+var verboseStatus bool
 
 // statusCmd represents the status command
 var statusCmd = &cobra.Command{
@@ -24,12 +24,11 @@ var statusCmd = &cobra.Command{
 }
 
 func init() {
-	statusCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderStatusHelp(cmd)
-	})
+	statusCmd.SetHelpFunc(wrapHelp(helpmenus.RenderStatusHelp))
 
 	rootCmd.AddCommand(statusCmd)
 	statusCmd.Flags().BoolVar(&noWait, "no-wait", false, "Display status once and exit without monitoring")
+	statusCmd.Flags().BoolVarP(&verboseStatus, "verbose", "v", false, "Show all events regardless of age")
 }
 
 func RunStatus() error {
@@ -38,11 +37,11 @@ func RunStatus() error {
 		return err
 	}
 	monitoring := !noWait
+	interactive := tui.IsInteractive() && !JSONOutput
 
-	if monitoring {
-		if !termx.IsTerminal(os.Stdout.Fd()) {
-			return fmt.Errorf("error running status TUI: not a TTY")
-		}
+	// Auto-disable monitoring in non-interactive mode
+	if monitoring && !interactive {
+		monitoring = false
 	}
 
 	var instances []api.Instance
@@ -54,5 +53,15 @@ func RunStatus() error {
 		return fmt.Errorf("failed to fetch instances: %w", err)
 	}
 
-	return tui.RunStatus(client, monitoring, instances)
+	if JSONOutput {
+		printJSON(instances)
+		return nil
+	}
+
+	if !interactive {
+		renderPlainStatusTable(instances, verboseStatus)
+		return nil
+	}
+
+	return tui.RunStatus(client, monitoring, instances, verboseStatus)
 }

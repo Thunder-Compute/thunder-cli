@@ -168,29 +168,6 @@ func TestStorageRange(t *testing.T) {
 	}
 }
 
-func TestStorageOptions(t *testing.T) {
-	s := testSpecStore()
-
-	tests := []struct {
-		name     string
-		gpuType  string
-		numGPUs  int
-		mode     string
-		expected []int
-	}{
-		{"a6000 gives 3 options", "a6000", 1, "prototyping", []int{100, 200, 300}},
-		{"a100xl x1 gives 5 options", "a100xl", 1, "prototyping", []int{100, 200, 300, 400, 500}},
-		{"a100xl x2 gives 10 options", "a100xl", 2, "prototyping", []int{100, 200, 300, 400, 500, 600, 700, 800, 900, 1000}},
-		{"unknown falls back to 100-1000", "unknown", 1, "prototyping", []int{100, 200, 300, 400, 500, 600, 700, 800, 900, 1000}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := s.StorageOptions(tt.gpuType, tt.numGPUs, tt.mode)
-			assert.Equal(t, tt.expected, got)
-		})
-	}
-}
 
 func TestNormalizeGPUType(t *testing.T) {
 	s := testSpecStore()

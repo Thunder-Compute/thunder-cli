@@ -67,13 +67,15 @@ func TestInstanceFields(t *testing.T) {
 // 	t.Skip("Skipping status command validation test - Args function issues")
 // }
 
-// TestRunStatus verifies that the RunStatus function properly handles
-// authentication errors when no valid configuration is available.
+// TestRunStatus verifies that the RunStatus function handles
+// non-interactive mode correctly: it either succeeds (if authenticated)
+// or returns an auth error (if not). No TTY error should occur.
 func TestRunStatus(t *testing.T) {
 	err := RunStatus()
-	assert.Error(t, err)
-	errStr := err.Error()
-	isAuthError := strings.Contains(errStr, "not authenticated") || strings.Contains(errStr, "authentication")
-	isTTYError := strings.Contains(errStr, "TTY") || strings.Contains(errStr, "/dev/tty") || strings.Contains(errStr, "error running status TUI")
-	assert.True(t, isAuthError || isTTYError, "Expected auth or TTY error, got: %v", err)
+	if err != nil {
+		errStr := err.Error()
+		isAuthError := strings.Contains(errStr, "not authenticated") || strings.Contains(errStr, "authentication")
+		assert.True(t, isAuthError, "Expected auth error or nil, got: %v", err)
+	}
+	// nil is acceptable — means the status was fetched and printed in non-interactive mode
 }

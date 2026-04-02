@@ -19,8 +19,6 @@ var snapshotCmd = &cobra.Command{
 }
 
 func init() {
-	snapshotCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		helpmenus.RenderSnapshotHelp(cmd)
-	})
+	snapshotCmd.SetHelpFunc(wrapHelp(helpmenus.RenderSnapshotHelp))
 	rootCmd.AddCommand(snapshotCmd)
 }

@@ -64,7 +64,7 @@ func (m snapshotDeleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "q", "Q", "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
 
@@ -186,7 +186,7 @@ func (m snapshotDeleteModel) View() string {
 		}
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc/Q: Quit\n"))
 
 	case snapshotDeleteStepConfirm:
 		warning := "WARNING: This action is IRREVERSIBLE!\n\n" +
@@ -222,7 +222,7 @@ func (m snapshotDeleteModel) View() string {
 		}
 
 		s.WriteString("\n")
-		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Cancel\n"))
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Quit\n"))
 	}
 
 	return s.String()
