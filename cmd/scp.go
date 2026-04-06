@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -74,7 +75,7 @@ func isValidInstanceID(s string) bool {
 func runSCP(sources []string, destination string) error {
 	config, err := LoadConfig()
 	if err != nil || config.Token == "" {
-		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
+		return usageErr("not authenticated. Please run 'tnr login' first")
 	}
 
 	sourcePaths := make([]PathInfo, len(sources))
@@ -102,10 +103,10 @@ func runSCP(sources []string, destination string) error {
 		}
 	}
 	if target == nil {
-		return fmt.Errorf("instance '%s' not found", instanceID)
+		return usageErr("instance '%s' not found", instanceID)
 	}
 	if target.Status != "RUNNING" {
-		return fmt.Errorf("instance '%s' is not running (status: %s)", instanceID, target.Status)
+		return usageErr("instance '%s' is not running (status: %s)", instanceID, target.Status)
 	}
 
 	keyFile := utils.GetKeyFile(target.UUID)
@@ -159,8 +160,7 @@ func runSCP(sources []string, destination string) error {
 
 		err := utils.Transfer(ctx, keyFile, target.GetIP(), target.Port, localPath, remotePath, direction == "upload")
 		if err != nil {
-			if ctx.Err() != nil {
-				// User pressed Ctrl+C — not an error.
+			if errors.Is(err, utils.ErrTransferCancelled) {
 				fmt.Println("\nTransfer cancelled")
 				return nil
 			}
@@ -186,20 +186,20 @@ func determineTransferDirection(sources []PathInfo, dest PathInfo) (string, stri
 			if remoteInstanceID == "" {
 				remoteInstanceID = src.InstanceID
 			} else if remoteInstanceID != src.InstanceID {
-				return "", "", fmt.Errorf("cannot transfer between multiple instances")
+				return "", "", usageErr("cannot transfer between multiple instances")
 			}
 		}
 	}
 
 	if dest.IsRemote {
 		if remoteCount > 0 {
-			return "", "", fmt.Errorf("cannot transfer from remote to remote")
+			return "", "", usageErr("cannot transfer from remote to remote")
 		}
 		return "upload", dest.InstanceID, nil
 	}
 
 	if remoteCount == 0 {
-		return "", "", fmt.Errorf("no remote path specified (use instance_id:/path)")
+		return "", "", usageErr("no remote path specified (use instance_id:/path)")
 	}
 
 	return "download", remoteInstanceID, nil

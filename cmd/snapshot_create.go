@@ -98,10 +98,10 @@ func runSnapshotCreate(cmd *cobra.Command) error {
 	} else {
 		// Non-interactive mode: validate flags
 		if snapshotInstanceID == "" {
-			return fmt.Errorf("--instance-id is required")
+			return usageErr("--instance-id is required")
 		}
 		if snapshotName == "" {
-			return fmt.Errorf("--name is required")
+			return usageErr("--name is required")
 		}
 		instanceID = snapshotInstanceID
 		name = snapshotName
@@ -119,11 +119,11 @@ func runSnapshotCreate(cmd *cobra.Command) error {
 		foundInstance := findInstance(instances, instanceID)
 
 		if foundInstance == nil {
-			return fmt.Errorf("instance '%s' not found", instanceID)
+			return usageErr("instance '%s' not found", instanceID)
 		}
 
 		if foundInstance.Status != "RUNNING" {
-			return fmt.Errorf("instance must be in RUNNING state to create snapshot (current state: %s)", foundInstance.Status)
+			return usageErr("instance must be in RUNNING state to create snapshot (current state: %s)", foundInstance.Status)
 		}
 
 		// Use UUID for the API call

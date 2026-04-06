@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -41,21 +42,36 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	c, err := rootCmd.ExecuteC()
 	if err != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("source", "catch_all")
-			if c != nil {
-				scope.SetTag("command", c.Name())
-			}
-			sentry.CaptureException(err)
-		})
-		sentry.Flush(2 * time.Second)
+		if !isUserError(err) {
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("source", "catch_all")
+				if c != nil {
+					scope.SetTag("command", c.Name())
+				}
+				sentry.CaptureException(err)
+			})
+			sentry.Flush(2 * time.Second)
+		}
 		PrintError(err)
 		os.Exit(1)
 	}
 }
 
+func isUserError(err error) bool {
+	if errors.Is(err, ErrUsage) || errors.Is(err, tui.ErrCancelled) {
+		return true
+	}
+	msg := err.Error()
+	return strings.HasPrefix(msg, "unknown command") ||
+		strings.Contains(msg, "accepts") && strings.Contains(msg, "arg(s)")
+}
+
 func init() {
 	tui.InitCommonStyles(os.Stdout)
+
+	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return fmt.Errorf("%w: %s", ErrUsage, err)
+	})
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		tui.SetNonInteractive(JSONOutput)
@@ -332,7 +348,6 @@ func getCurrentBinaryPath() (string, error) {
 	}
 	return filepath.EvalSymlinks(exe)
 }
-
 
 func detectPackageManager(binPath string) string {
 	p := strings.ToLower(binPath)

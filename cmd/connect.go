@@ -113,11 +113,11 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	configLoader := resolveConfigLoader(opts)
 	config, err := configLoader()
 	if err != nil {
-		return fmt.Errorf("not authenticated. Please run 'tnr login' first")
+		return usageErr("not authenticated. Please run 'tnr login' first")
 	}
 
 	if config.Token == "" {
-		return fmt.Errorf("no authentication token found. Please run 'tnr login'")
+		return usageErr("no authentication token found. Please run 'tnr login'")
 	}
 
 	skipTTYCheck := opts != nil && opts.skipTTYCheck
@@ -146,7 +146,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	if instanceID == "" {
 		if !interactive {
-			return fmt.Errorf("instance ID required in non-interactive mode")
+			return usageErr("instance ID required in non-interactive mode")
 		}
 		instanceID, err = tui.RunConnectSelectWithInstances(instances)
 		if err != nil {
@@ -164,15 +164,15 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		foundInstance := findInstance(instances, instanceID)
 
 		if foundInstance == nil {
-			return fmt.Errorf("instance '%s' not found", instanceID)
+			return usageErr("instance '%s' not found", instanceID)
 		}
 
 		if foundInstance.Status != "RUNNING" {
-			return fmt.Errorf("instance '%s' is not running (status: %s)", instanceID, foundInstance.Status)
+			return usageErr("instance '%s' is not running (status: %s)", instanceID, foundInstance.Status)
 		}
 
 		if foundInstance.GetIP() == "" {
-			return fmt.Errorf("instance '%s' has no IP address", instanceID)
+			return usageErr("instance '%s' has no IP address", instanceID)
 		}
 
 		instanceID = foundInstance.ID
@@ -203,7 +203,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	for _, portStr := range tunnelPortsStr {
 		port, err := strconv.Atoi(portStr)
 		if err != nil {
-			return fmt.Errorf("invalid port: %s", portStr)
+			return usageErr("invalid port: %s", portStr)
 		}
 		tunnelPorts = append(tunnelPorts, port)
 	}

@@ -10,6 +10,10 @@ import (
 	"strings"
 )
 
+// ErrTransferCancelled is returned when a transfer process is killed by a
+// signal (e.g. user pressed Ctrl+C).
+var ErrTransferCancelled = errors.New("transfer cancelled")
+
 // WrapAPIError returns a cleaner error message for common network failures.
 func WrapAPIError(err error, context string) error {
 	if err == nil {
@@ -56,7 +60,7 @@ func wrapTransferError(err error, upload bool) error {
 
 	switch exitErr.ExitCode() {
 	case -1:
-		return fmt.Errorf("transfer cancelled")
+		return ErrTransferCancelled
 	case 1, 255:
 		return fmt.Errorf("connection failed: check your internet or instance status")
 	case 2, 23:

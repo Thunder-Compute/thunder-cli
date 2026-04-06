@@ -33,7 +33,7 @@ func init() {
 
 func runUpdateCommand() error {
 	if os.Getenv("TNR_NO_SELFUPDATE") == "1" {
-		return fmt.Errorf("self-update is disabled (TNR_NO_SELFUPDATE=1)")
+		return usageErr("self-update is disabled (TNR_NO_SELFUPDATE=1)")
 	}
 
 	// Finalize any previously staged Windows update before checking again
@@ -78,7 +78,7 @@ func handlePMUpdate(res updatepolicy.Result, binPath string) error {
 
 	fmt.Println(tui.RenderPMInstructions(pm, currentVer, latestVer))
 
-	return fmt.Errorf("cannot auto-update: installation is managed by a package manager")
+	return usageErr("cannot auto-update: installation is managed by a package manager")
 }
 
 // handleExplicitOptionalUpdate handles explicit update requests.
