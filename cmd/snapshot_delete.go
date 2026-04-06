@@ -42,7 +42,7 @@ func runSnapshotDelete(args []string) error {
 
 	if len(args) == 0 {
 		if !interactive {
-			return fmt.Errorf("snapshot name or ID required in non-interactive mode")
+			return usageErr("snapshot name or ID required in non-interactive mode")
 		}
 		// Interactive mode: fetch snapshots and let user select
 		var snapshots []api.Snapshot
@@ -95,7 +95,7 @@ func runSnapshotDelete(args []string) error {
 		}
 
 		if selectedSnapshot == nil {
-			return fmt.Errorf("snapshot '%s' not found", snapshotName)
+			return usageErr("snapshot '%s' not found", snapshotName)
 		}
 
 		snapshotID = selectedSnapshot.ID
@@ -103,7 +103,7 @@ func runSnapshotDelete(args []string) error {
 		// Confirm deletion (skip with --yes)
 		if !YesFlag {
 			if !interactive {
-				return fmt.Errorf("use --yes to confirm deletion in non-interactive mode")
+				return usageErr("use --yes to confirm deletion in non-interactive mode")
 			}
 			fmt.Println()
 			fmt.Printf("About to delete snapshot: %s\n", selectedSnapshot.Name)

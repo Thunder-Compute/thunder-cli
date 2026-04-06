@@ -78,7 +78,7 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 
 	if isFullInteractive {
 		if !interactive {
-			return fmt.Errorf("instance ID and --add/--remove flags required in non-interactive mode")
+			return usageErr("instance ID and --add/--remove flags required in non-interactive mode")
 		}
 		// Run interactive mode
 		return tui.RunPortsForwardInteractive(client, instances)
@@ -86,7 +86,7 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 
 	// Flag mode requires instance ID
 	if len(args) == 0 {
-		return fmt.Errorf("instance ID required when using flags")
+		return usageErr("instance ID required when using flags")
 	}
 
 	instanceIdentifier := args[0]
@@ -104,22 +104,22 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 	}
 
 	if selectedInstance == nil {
-		return fmt.Errorf("instance '%s' not found", instanceIdentifier)
+		return usageErr("instance '%s' not found", instanceIdentifier)
 	}
 
 	// Parse ports from flags
 	add, err := utils.ParsePorts(addPortsFlag)
 	if err != nil {
-		return fmt.Errorf("invalid --add ports: %w", err)
+		return usageErr("invalid --add ports: %w", err)
 	}
 
 	remove, err := utils.ParsePorts(removePortsFlag)
 	if err != nil {
-		return fmt.Errorf("invalid --remove ports: %w", err)
+		return usageErr("invalid --remove ports: %w", err)
 	}
 
 	if len(add) == 0 && len(remove) == 0 {
-		return fmt.Errorf("must specify --add or --remove ports")
+		return usageErr("must specify --add or --remove ports")
 	}
 
 	req := api.InstanceModifyRequest{

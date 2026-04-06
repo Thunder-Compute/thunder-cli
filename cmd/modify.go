@@ -77,7 +77,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 	// Determine which instance to modify
 	if len(args) == 0 {
 		if !interactive {
-			return fmt.Errorf("instance ID required in non-interactive mode")
+			return usageErr("instance ID required in non-interactive mode")
 		}
 		// No argument - show interactive selector
 		selectedInstance, err = tui.RunModifyInstanceSelector(client, instances)
@@ -104,13 +104,13 @@ func runModify(cmd *cobra.Command, args []string) error {
 		}
 
 		if selectedInstance == nil {
-			return fmt.Errorf("instance '%s' not found", instanceIdentifier)
+			return usageErr("instance '%s' not found", instanceIdentifier)
 		}
 	}
 
 	// Validate instance is RUNNING
 	if selectedInstance.Status != "RUNNING" {
-		return fmt.Errorf("instance must be in RUNNING state to modify (current state: %s)", selectedInstance.Status)
+		return usageErr("instance must be in RUNNING state to modify (current state: %s)", selectedInstance.Status)
 	}
 
 	// Build presets from flags
@@ -121,7 +121,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 
 	if modifyPresets.IsEmpty() {
 		if !interactive {
-			return fmt.Errorf("modification flags required in non-interactive mode (--mode, --gpu, --num-gpus, --vcpus, --disk-size-gb)")
+			return usageErr("modification flags required in non-interactive mode (--mode, --gpu, --num-gpus, --vcpus, --disk-size-gb)")
 		}
 		// No flags set — full interactive mode
 		modifyConfig, err = tui.RunModifyInteractive(client, selectedInstance, specs)
@@ -357,16 +357,16 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 	if presets.Mode != nil {
 		mode := strings.ToLower(*presets.Mode)
 		if mode != "prototyping" && mode != "production" {
-			return req, fmt.Errorf("mode must be 'prototyping' or 'production'")
+			return req, usageErr("mode must be 'prototyping' or 'production'")
 		}
 
 		// If switching modes, validate dependent fields
 		if mode != currentInstance.Mode {
 			if mode == "production" && presets.NumGPUs == nil {
-				return req, fmt.Errorf("switching to production requires --num-gpus flag (1, 2, or 4)")
+				return req, usageErr("switching to production requires --num-gpus flag (1, 2, or 4)")
 			}
 			if mode == "prototyping" && presets.VCPUs == nil {
-				return req, fmt.Errorf("switching to prototyping requires --vcpus flag (options vary by GPU type)")
+				return req, usageErr("switching to prototyping requires --vcpus flag (options vary by GPU type)")
 			}
 		}
 		instanceMode := api.InstanceMode(mode)
@@ -387,7 +387,7 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 		normalizedGPU, ok := specs.NormalizeGPUType(gpuType, effectiveMode)
 		if !ok {
 			availableGPUs := specs.GPUOptionsForMode(effectiveMode)
-			return req, fmt.Errorf("invalid GPU type '%s' for %s mode. Valid options: %s", gpuType, effectiveMode, strings.Join(availableGPUs, ", "))
+			return req, usageErr("invalid GPU type '%s' for %s mode. Valid options: %s", gpuType, effectiveMode, strings.Join(availableGPUs, ", "))
 		}
 
 		req.GPUType = &normalizedGPU
@@ -400,7 +400,7 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 
 		// Check mode compatibility
 		if effectiveMode == "production" {
-			return req, fmt.Errorf("production mode does not use --vcpus flag. Use --num-gpus instead (vCPUs auto-calculated)")
+			return req, usageErr("production mode does not use --vcpus flag. Use --num-gpus instead (vCPUs auto-calculated)")
 		}
 
 		// Determine effective GPU type for validation
@@ -419,7 +419,7 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 
 		allowedVCPUs := specs.VCPUOptions(effectiveGPU, effectiveNumGPUs, effectiveMode)
 		if allowedVCPUs != nil && !slices.Contains(allowedVCPUs, vcpus) {
-			return req, fmt.Errorf("vcpus must be one of %v for %s with %d GPU(s)", allowedVCPUs, effectiveGPU, effectiveNumGPUs)
+			return req, usageErr("vcpus must be one of %v for %s with %d GPU(s)", allowedVCPUs, effectiveGPU, effectiveNumGPUs)
 		}
 
 		req.CPUCores = &vcpus
@@ -436,7 +436,7 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 		}
 		allowedGPUCounts := specs.GPUCountsForMode(effectiveGPU, effectiveMode)
 		if !slices.Contains(allowedGPUCounts, numGPUs) {
-			return req, fmt.Errorf("num-gpus %d is not valid for %s %s. Allowed: %v", numGPUs, effectiveGPU, effectiveMode, allowedGPUCounts)
+			return req, usageErr("num-gpus %d is not valid for %s %s. Allowed: %v", numGPUs, effectiveGPU, effectiveMode, allowedGPUCounts)
 		}
 
 		req.NumGPUs = &numGPUs
@@ -447,7 +447,7 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 	if presets.DiskSizeGB != nil {
 		diskSize := *presets.DiskSizeGB
 		if diskSize < currentInstance.Storage {
-			return req, fmt.Errorf("disk size cannot be smaller than current size (%d GB)", currentInstance.Storage)
+			return req, usageErr("disk size cannot be smaller than current size (%d GB)", currentInstance.Storage)
 		}
 
 		// Determine effective GPU type and count for storage range lookup
@@ -465,14 +465,14 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 		}
 		_, maxDisk := specs.StorageRange(effectiveGPU, effectiveNumGPUs, effectiveMode)
 		if diskSize > maxDisk {
-			return req, fmt.Errorf("disk size must be between %d and %d GB", currentInstance.Storage, maxDisk)
+			return req, usageErr("disk size must be between %d and %d GB", currentInstance.Storage, maxDisk)
 		}
 		req.DiskSizeGB = &diskSize
 		hasChanges = true
 	}
 
 	if !hasChanges {
-		return req, fmt.Errorf("no changes specified. Use flags to modify instance configuration")
+		return req, usageErr("no changes specified. Use flags to modify instance configuration")
 	}
 
 	return req, nil

@@ -45,7 +45,7 @@ func runDelete(args []string) error {
 
 	if len(args) == 0 {
 		if !interactive {
-			return fmt.Errorf("instance ID required in non-interactive mode")
+			return usageErr("instance ID required in non-interactive mode")
 		}
 		var instances []api.Instance
 		if err := tui.RunWithBusySpinner("Fetching instances...", os.Stdout, func() error {
@@ -85,17 +85,17 @@ func runDelete(args []string) error {
 		selectedInstance = findInstance(instances, instanceID)
 
 		if selectedInstance == nil {
-			return fmt.Errorf("instance '%s' not found", instanceID)
+			return usageErr("instance '%s' not found", instanceID)
 		}
 	}
 
 	if selectedInstance.Status == "DELETING" {
-		return fmt.Errorf("instance '%s' is already being deleted", instanceID)
+		return usageErr("instance '%s' is already being deleted", instanceID)
 	}
 
 	if !interactive {
 		if !YesFlag {
-			return fmt.Errorf("use --yes to confirm deletion in non-interactive mode")
+			return usageErr("use --yes to confirm deletion in non-interactive mode")
 		}
 		// Non-interactive: direct API call
 		fmt.Fprintln(os.Stderr, "Deleting instance...")

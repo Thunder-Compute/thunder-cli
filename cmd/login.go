@@ -405,7 +405,7 @@ func runInteractiveLogin() error {
 		return model.Error()
 	}
 
-	return fmt.Errorf("authentication failed")
+	return usageErr("authentication failed")
 }
 
 func generateState() (string, error) {
@@ -496,7 +496,7 @@ func openBrowser(url string) error {
 	case "darwin":
 		cmd = exec.Command("open", url)
 	default:
-		return fmt.Errorf("unsupported platform")
+		return usageErr("unsupported platform")
 	}
 
 	return cmd.Start()

@@ -182,7 +182,7 @@ func runSSHKeysAdd(cmd *cobra.Command) error {
 	}
 
 	if !tui.IsInteractive() {
-		return fmt.Errorf("--name flag required in non-interactive mode")
+		return usageErr("--name flag required in non-interactive mode")
 	}
 
 	return runSSHKeysAddInteractive(client)
@@ -190,13 +190,13 @@ func runSSHKeysAdd(cmd *cobra.Command) error {
 
 func runSSHKeysAddNonInteractive(client *api.Client, cmd *cobra.Command) error {
 	if sshKeyAddName == "" {
-		return fmt.Errorf("--name is required")
+		return usageErr("--name is required")
 	}
 
 	var publicKey string
 
 	if sshKeyAddKeyFile != "" && sshKeyAddKey != "" {
-		return fmt.Errorf("provide either --key-file or --key, not both")
+		return usageErr("provide either --key-file or --key, not both")
 	}
 
 	if sshKeyAddKeyFile != "" {
@@ -208,7 +208,7 @@ func runSSHKeysAddNonInteractive(client *api.Client, cmd *cobra.Command) error {
 	} else if sshKeyAddKey != "" {
 		publicKey = strings.TrimSpace(sshKeyAddKey)
 	} else {
-		return fmt.Errorf("provide --key-file or --key with the public key")
+		return usageErr("provide --key-file or --key with the public key")
 	}
 
 	var resp *api.SSHKeyAddResponse
@@ -284,7 +284,7 @@ func runSSHKeysDelete(args []string) error {
 
 	if len(args) == 0 {
 		if !interactive {
-			return fmt.Errorf("SSH key name or ID required in non-interactive mode")
+			return usageErr("SSH key name or ID required in non-interactive mode")
 		}
 		// Interactive mode
 		var keys api.SSHKeyListResponse
@@ -335,7 +335,7 @@ func runSSHKeysDelete(args []string) error {
 		}
 
 		if selectedKey == nil {
-			return fmt.Errorf("SSH key '%s' not found", keyNameOrID)
+			return usageErr("SSH key '%s' not found", keyNameOrID)
 		}
 
 		keyID = selectedKey.ID
@@ -343,7 +343,7 @@ func runSSHKeysDelete(args []string) error {
 		// Confirm deletion (skip with --yes)
 		if !YesFlag {
 			if !interactive {
-				return fmt.Errorf("use --yes to confirm deletion in non-interactive mode")
+				return usageErr("use --yes to confirm deletion in non-interactive mode")
 			}
 			fmt.Println()
 			fmt.Printf("About to delete SSH key: %s\n", selectedKey.Name)

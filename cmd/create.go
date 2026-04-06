@@ -146,7 +146,7 @@ func runCreate(cmd *cobra.Command) error {
 
 	if presets.IsEmpty() {
 		if !interactive {
-			return fmt.Errorf("all flags required in non-interactive mode (--mode, --gpu, --template, --disk-size-gb, and --num-gpus or --vcpus)")
+			return usageErr("all flags required in non-interactive mode (--mode, --gpu, --template, --disk-size-gb, and --num-gpus or --vcpus)")
 		}
 		// No flags set — full interactive TUI
 		createConfig, err = tui.RunCreateInteractive(client, specs)
@@ -181,7 +181,7 @@ func runCreate(cmd *cobra.Command) error {
 		}
 
 		if len(templates) == 0 {
-			return fmt.Errorf("no templates available")
+			return usageErr("no templates available")
 		}
 
 		diskSizeWasSet := cmd.Flags().Changed("disk-size-gb")
@@ -223,7 +223,7 @@ func runCreate(cmd *cobra.Command) error {
 		}
 	} else {
 		if !interactive {
-			return fmt.Errorf("all flags required in non-interactive mode (--mode, --gpu, --template, --disk-size-gb, and --num-gpus or --vcpus)")
+			return usageErr("all flags required in non-interactive mode (--mode, --gpu, --template, --disk-size-gb, and --num-gpus or --vcpus)")
 		}
 		// Partial flags — hybrid TUI
 		createConfig, err = tui.RunCreateHybrid(client, specs, presets)
@@ -254,7 +254,7 @@ func runCreate(cmd *cobra.Command) error {
 		}
 
 		if matchedKey == nil {
-			return fmt.Errorf("SSH key '%s' not found. Run 'tnr ssh-keys list' to see available keys", createSSHKeyName)
+			return usageErr("SSH key '%s' not found. Run 'tnr ssh-keys list' to see available keys", createSSHKeyName)
 		}
 
 		// Verify local private key exists so user can connect later
@@ -331,14 +331,14 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	config.GPUType = strings.ToLower(config.GPUType)
 
 	if config.Mode != "prototyping" && config.Mode != "production" {
-		return fmt.Errorf("mode must be 'prototyping' or 'production'")
+		return usageErr("mode must be 'prototyping' or 'production'")
 	}
 
 	// Normalize GPU type
 	canonical, ok := specs.NormalizeGPUType(config.GPUType, config.Mode)
 	if !ok {
 		availableGPUs := specs.GPUOptionsForMode(config.Mode)
-		return fmt.Errorf("%s mode supports GPU types: %s", config.Mode, strings.Join(availableGPUs, ", "))
+		return usageErr("%s mode supports GPU types: %s", config.Mode, strings.Join(availableGPUs, ", "))
 	}
 	config.GPUType = canonical
 
@@ -350,16 +350,16 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	allowedVCPUs := specs.VCPUOptions(config.GPUType, config.NumGPUs, config.Mode)
 	if allowedVCPUs == nil {
 		allowedCounts := specs.GPUCountsForMode(config.GPUType, config.Mode)
-		return fmt.Errorf("GPU count %d is not valid for %s %s. Allowed: %v", config.NumGPUs, config.GPUType, config.Mode, allowedCounts)
+		return usageErr("GPU count %d is not valid for %s %s. Allowed: %v", config.NumGPUs, config.GPUType, config.Mode, allowedCounts)
 	}
 
 	if config.Mode == "prototyping" {
 		if config.VCPUs == 0 {
-			return fmt.Errorf("prototyping mode requires --vcpus flag (options for %s with %d GPU(s): %v)", config.GPUType, config.NumGPUs, allowedVCPUs)
+			return usageErr("prototyping mode requires --vcpus flag (options for %s with %d GPU(s): %v)", config.GPUType, config.NumGPUs, allowedVCPUs)
 		}
 
 		if !slices.Contains(allowedVCPUs, config.VCPUs) {
-			return fmt.Errorf("vcpus must be one of %v for %s with %d GPU(s)", allowedVCPUs, config.GPUType, config.NumGPUs)
+			return usageErr("vcpus must be one of %v for %s with %d GPU(s)", allowedVCPUs, config.GPUType, config.NumGPUs)
 		}
 	} else {
 		// Production: vCPUs are auto-set from the spec (first/only option)
@@ -367,7 +367,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	}
 
 	if config.Template == "" {
-		return fmt.Errorf("template is required (use --template flag)")
+		return usageErr("template is required (use --template flag)")
 	}
 
 	// Check if template is actually a snapshot
@@ -395,7 +395,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	}
 
 	if !templateFound {
-		return fmt.Errorf("template '%s' not found. Run 'tnr templates' to list available templates", config.Template)
+		return usageErr("template '%s' not found. Run 'tnr templates' to list available templates", config.Template)
 	}
 
 	// If a snapshot was selected, set default disk size or validate minimum
@@ -404,7 +404,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 			config.DiskSizeGB = selectedSnapshot.MinimumDiskSizeGB
 		} else {
 			if config.DiskSizeGB < selectedSnapshot.MinimumDiskSizeGB {
-				return fmt.Errorf("disk size must be at least %d GB for snapshot '%s'", selectedSnapshot.MinimumDiskSizeGB, selectedSnapshot.Name)
+				return usageErr("disk size must be at least %d GB for snapshot '%s'", selectedSnapshot.MinimumDiskSizeGB, selectedSnapshot.Name)
 			}
 		}
 	}
@@ -412,7 +412,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	// Validate disk size against spec storage range
 	minStorage, maxStorage := specs.StorageRange(config.GPUType, config.NumGPUs, config.Mode)
 	if config.DiskSizeGB < minStorage || config.DiskSizeGB > maxStorage {
-		return fmt.Errorf("disk size must be between %d and %d GB", minStorage, maxStorage)
+		return usageErr("disk size must be between %d and %d GB", minStorage, maxStorage)
 	}
 
 	return nil
