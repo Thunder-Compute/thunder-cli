@@ -2,9 +2,7 @@ package tui
 
 import (
 	"fmt"
-	"os"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -144,7 +142,7 @@ func (m ConnectFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "Q", "esc", "ctrl+c":
-			_ = syscall.Kill(os.Getpid(), syscall.SIGINT)
+			selfInterrupt()
 			m.cancelled = true
 			m.quitting = true
 			return m, connectDeferQuit()
