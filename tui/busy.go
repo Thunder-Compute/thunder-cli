@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"syscall"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -55,7 +54,7 @@ func (m BusyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "Q", "esc", "ctrl+c":
-			_ = syscall.Kill(os.Getpid(), syscall.SIGINT)
+			selfInterrupt()
 			m.Quitting = true
 			return m, tea.Quit
 		}
