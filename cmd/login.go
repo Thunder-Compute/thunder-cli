@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	authURL     = "https://console.thundercompute.com/login/app"
+	authURL     = "http://localhost:3000/login/app"
 	callbackURL = "http://127.0.0.1"
 )
 
@@ -220,7 +220,7 @@ type Config struct {
 	ExpiresAt    time.Time `json:"expires_at,omitempty"`
 }
 
-const DefaultAPIURL = "https://api.thundercompute.com:8443"
+const DefaultAPIURL = "https://giga-staging.thundercompute.com:8443"
 
 func getAPIURL() string {
 	if envURL := os.Getenv("TNR_API_URL"); envURL != "" {
