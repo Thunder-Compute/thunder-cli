@@ -179,6 +179,9 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	}
 
 	instance := findInstance(instances, instanceID)
+	if instance == nil {
+		return usageErr("instance '%s' not found", instanceID)
+	}
 
 	port := instance.Port
 	if port == 0 {
@@ -702,10 +705,11 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		sshClient.Close()
 	}
 
-	// Remote shell exit codes are not connect errors.
+	// Remote shell exit codes and connection drops are not connect errors.
 	if err != nil {
 		var exitErr *ssh.ExitError
-		if !errors.As(err, &exitErr) {
+		var exitMissing *ssh.ExitMissingError
+		if !errors.As(err, &exitErr) && !errors.As(err, &exitMissing) {
 			return fmt.Errorf("SSH session failed: %w", err)
 		}
 	}
