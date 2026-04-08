@@ -278,12 +278,15 @@ func RunConnectInteractiveSelect(client *api.Client) (string, error) {
 	if result.noInstances {
 		return "", ErrNoRunningInstances
 	}
-	if result.displayToID != nil && result.selected != "" {
+	if result.selected == "" {
+		return "", ErrCancelled
+	}
+	if result.displayToID != nil {
 		if id, ok := result.displayToID[result.selected]; ok {
 			return id, nil
 		}
 	}
-	return result.selected, nil
+	return "", fmt.Errorf("failed to resolve selected instance")
 }
 
 func RunConnectSelectWithInstances(instances []api.Instance) (string, error) {
@@ -328,10 +331,13 @@ func RunConnectSelectWithInstances(instances []api.Instance) (string, error) {
 	if result.cancelled {
 		return "", ErrCancelled
 	}
-	if result.displayToID != nil && result.selected != "" {
+	if result.selected == "" {
+		return "", ErrCancelled
+	}
+	if result.displayToID != nil {
 		if id, ok := result.displayToID[result.selected]; ok {
 			return id, nil
 		}
 	}
-	return result.selected, nil
+	return "", fmt.Errorf("failed to resolve selected instance")
 }
