@@ -125,6 +125,11 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 
 	client := resolveConnectClient(opts, config.Token, config.APIURL)
 
+	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	ctx, cancel := context.WithCancel(signalCtx)
+	defer cancel()
+
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{
 		Category: "connect",
 		Message:  "fetching instances",
@@ -137,7 +142,13 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		instances, e = client.ListInstances()
 		return e
 	}); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
 		return fmt.Errorf("failed to list instances: %w", err)
+	}
+	if ctx.Err() != nil {
+		return nil
 	}
 	if len(instances) == 0 {
 		PrintWarningSimple("No instances found. Create an instance first using 'tnr create'")
@@ -197,9 +208,6 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		Level: sentry.LevelInfo,
 	})
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-
 	phaseTimings := make(map[string]time.Duration)
 
 	var tunnelPorts []int
@@ -238,6 +246,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			finalModel, err := p.Run()
 			if fm, ok := finalModel.(tui.ConnectFlowModel); ok && fm.Cancelled() {
 				wasCancelled = true
+				cancel()
 			}
 			if err != nil {
 				tuiDone <- err
@@ -663,14 +672,9 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 				shutdownTUI()
 				return fmt.Errorf("TUI error: %w", err)
 			}
-		default:
-			if err := <-tuiDone; err != nil {
-				if checkCancelled() {
-					return nil
-				}
-				shutdownTUI()
-				return fmt.Errorf("TUI error: %w", err)
-			}
+		case <-ctx.Done():
+			shutdownTUI()
+			return nil
 		}
 
 		if checkCancelled() {
