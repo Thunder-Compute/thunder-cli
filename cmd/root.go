@@ -57,13 +57,37 @@ func Execute() {
 	}
 }
 
+var userErrorSubstrings = []string{
+	"unknown command",
+	"unknown shorthand flag",
+	"unknown flag",
+	"flag needs an argument",
+	"invalid argument",
+	"remote file not found",
+	"no such file or directory",
+	"ssh_key_duplicate",
+	"instance_not_found",
+	"authentication failed",
+	"invalid token",
+	"invalid header field value",
+	"executable file not found",
+	"Modifying instances is temporarily disabled",
+}
+
 func isUserError(err error) bool {
 	if errors.Is(err, ErrUsage) || errors.Is(err, tui.ErrCancelled) {
 		return true
 	}
 	msg := err.Error()
-	return strings.HasPrefix(msg, "unknown command") ||
-		strings.Contains(msg, "accepts") && strings.Contains(msg, "arg(s)")
+	if strings.Contains(msg, "accepts") && strings.Contains(msg, "arg(s)") {
+		return true
+	}
+	for _, sub := range userErrorSubstrings {
+		if strings.Contains(msg, sub) {
+			return true
+		}
+	}
+	return false
 }
 
 func init() {

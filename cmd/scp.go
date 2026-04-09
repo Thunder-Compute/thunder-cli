@@ -164,10 +164,12 @@ func runSCP(sources []string, destination string) error {
 				fmt.Println("\nTransfer cancelled")
 				return nil
 			}
-			sentry.WithScope(func(scope *sentry.Scope) {
-				scope.SetTag("operation", "scp_transfer")
-				sentry.CaptureException(err)
-			})
+			if !isUserError(err) {
+				sentry.WithScope(func(scope *sentry.Scope) {
+					scope.SetTag("operation", "scp_transfer")
+					sentry.CaptureException(err)
+				})
+			}
 			return err
 		}
 	}
