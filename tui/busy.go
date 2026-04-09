@@ -54,6 +54,7 @@ func (m BusyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "Q", "esc", "ctrl+c":
+			selfInterrupt()
 			m.Quitting = true
 			return m, tea.Quit
 		}
