@@ -46,11 +46,13 @@ func RunInteractiveSession(ctx context.Context, cfg SessionConfig) error {
 	}
 
 	fd := int(cfg.Stdin.Fd())
-	oldState, err := term.MakeRaw(fd)
-	if err != nil {
-		return fmt.Errorf("failed to set raw terminal mode: %w", err)
+	if term.IsTerminal(fd) {
+		oldState, err := term.MakeRaw(fd)
+		if err != nil {
+			return fmt.Errorf("failed to set raw terminal mode: %w", err)
+		}
+		defer term.Restore(fd, oldState)
 	}
-	defer term.Restore(fd, oldState)
 
 	session, err := sshClient.NewSession()
 	if err != nil {
@@ -135,17 +137,46 @@ func startPortForward(ctx context.Context, sshClient *ssh.Client, localPort int)
 	return nil
 }
 
-// startKeepalive sends periodic keepalives to detect dropped connections
-// within ~15s instead of hanging indefinitely.
+// startKeepalive sends periodic keepalives to keep the connection alive and
+// detect when it's dead. Each request runs in a goroutine with a timeout so
+// that a single lost reply packet doesn't block the loop - without this,
+// SendRequest blocks for minutes (waiting for TCP retransmission to give up),
+// during which no keepalives are sent and NAT/firewall entries can expire.
+// The connection is only considered dead after multiple consecutive failures.
 func startKeepalive(ctx context.Context, client *ssh.Client) {
-	ticker := time.NewTicker(15 * time.Second)
+	const (
+		keepaliveInterval    = 15 * time.Second
+		keepaliveTimeout     = 10 * time.Second
+		maxConsecutiveMisses = 3
+	)
+	ticker := time.NewTicker(keepaliveInterval)
 	defer ticker.Stop()
+
+	consecutiveMisses := 0
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if _, _, err := client.SendRequest("keepalive@openssh.com", true, nil); err != nil {
+			done := make(chan error, 1)
+			go func() {
+				_, _, err := client.SendRequest("keepalive@openssh.com", true, nil)
+				done <- err
+			}()
+			select {
+			case err := <-done:
+				if err != nil {
+					return // transport is dead
+				}
+				consecutiveMisses = 0
+			case <-time.After(keepaliveTimeout):
+				consecutiveMisses++
+				if consecutiveMisses >= maxConsecutiveMisses {
+					return // connection is dead
+				}
+				// Reply was lost but connection may still be alive - keep trying.
+				// The next SendRequest will generate fresh traffic to keep NAT entries alive.
+			case <-ctx.Done():
 				return
 			}
 		}
