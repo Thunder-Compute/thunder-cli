@@ -220,7 +220,7 @@ type Config struct {
 	ExpiresAt    time.Time `json:"expires_at,omitempty"`
 }
 
-const DefaultAPIURL = "https://giga-staging.thundercompute.com:8443"
+const DefaultAPIURL = "https://api.thundercompute.com:8443"
 
 func getAPIURL() string {
 	if envURL := os.Getenv("TNR_API_URL"); envURL != "" {
