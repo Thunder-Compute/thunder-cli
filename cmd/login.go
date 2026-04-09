@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	authURL     = "http://localhost:3000/login/app"
+	authURL     = "https://console.thundercompute.com/login/app"
 	callbackURL = "http://127.0.0.1"
 )
 
