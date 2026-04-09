@@ -3,13 +3,18 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 
+	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/cmd"
 	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
 	"github.com/Thunder-Compute/thunder-cli/internal/console"
@@ -59,6 +64,13 @@ func initSentry() error {
 		SampleRate:       1.0,
 		TracesSampleRate: 0.1,
 		EnableTracing:    true,
+		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			if len(event.Exception) > 0 {
+				msg := event.Exception[0].Value
+				event.Fingerprint = []string{errorFingerprint(msg, hint.OriginalException)}
+			}
+			return event
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize Sentry: %w", err)
@@ -111,4 +123,29 @@ func setUserContext(token string) {
 			ID: userID,
 		})
 	})
+}
+
+var statusCodeRe = regexp.MustCompile(`status (\d{3})`)
+
+func errorFingerprint(msg string, original error) string {
+	prefix := msg
+	if idx := strings.Index(msg, ": "); idx > 0 {
+		prefix = msg[:idx]
+	}
+
+	// Normalize to a slug.
+	fp := strings.ToLower(prefix)
+	fp = strings.ReplaceAll(fp, " ", "_")
+
+	// Append HTTP status code so different API errors are separate issues.
+	if m := statusCodeRe.FindStringSubmatch(msg); len(m) == 2 {
+		fp += "_" + m[1]
+	} else if original != nil {
+		var apiErr *api.APIError
+		if errors.As(original, &apiErr) {
+			fp += "_" + strconv.Itoa(apiErr.StatusCode)
+		}
+	}
+
+	return fp
 }
