@@ -12,11 +12,13 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
 
+	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
 	"github.com/Thunder-Compute/thunder-cli/internal/updatepolicy"
 	"github.com/Thunder-Compute/thunder-cli/internal/version"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
 // Global flags for non-interactive / automation mode.
@@ -58,25 +60,26 @@ func Execute() {
 }
 
 var userErrorSubstrings = []string{
+	// Cobra internals (no hook to wrap these at source)
 	"unknown command",
 	"unknown shorthand flag",
 	"unknown flag",
 	"flag needs an argument",
 	"invalid argument",
-	"remote file not found",
+	// OS/exec and net/http stdlib errors
 	"no such file or directory",
-	"ssh_key_duplicate",
-	"instance_not_found",
-	"authentication failed",
-	"invalid token",
-	"invalid header field value",
 	"executable file not found",
-	"Modifying instances is temporarily disabled",
-	"validation:",
+	"invalid header field value",
 }
 
 func isUserError(err error) bool {
-	if errors.Is(err, ErrUsage) || errors.Is(err, tui.ErrCancelled) {
+	if errors.Is(err, ErrUsage) || errors.Is(err, tui.ErrCancelled) || errors.Is(err, utils.ErrTransferUser) {
+		return true
+	}
+	// API 4xx responses are always user errors (auth, validation, not found, etc.).
+	// Server errors (5xx) are captured separately in doRequest.
+	var apiErr *api.APIError
+	if errors.As(err, &apiErr) {
 		return true
 	}
 	msg := err.Error()
