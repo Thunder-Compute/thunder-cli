@@ -2,6 +2,7 @@ package tui
 
 import (
 	"os"
+	"runtime"
 
 	termx "github.com/charmbracelet/x/term"
 )
@@ -18,5 +19,18 @@ func SetNonInteractive(v bool) {
 // is suitable for Bubble Tea TUI rendering. Commands use this to
 // decide between interactive TUI and plain-text output paths.
 func IsInteractive() bool {
-	return !forceNonInteractive && termx.IsTerminal(os.Stdout.Fd())
+	if forceNonInteractive || !termx.IsTerminal(os.Stdout.Fd()) {
+		return false
+	}
+	// On Unix, Bubble Tea opens /dev/tty for input. Verify it's accessible
+	// to avoid "device not configured" errors in sandboxed environments
+	// where stdout is a PTY but no controlling terminal exists.
+	if runtime.GOOS != "windows" {
+		f, err := os.Open("/dev/tty")
+		if err != nil {
+			return false
+		}
+		f.Close()
+	}
+	return true
 }
