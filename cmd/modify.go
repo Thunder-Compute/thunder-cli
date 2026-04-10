@@ -36,7 +36,7 @@ func init() {
 	modifyCmd.Flags().Int("num-gpus", 0, "Number of GPUs (production mode: 1, 2, or 4)")
 	modifyCmd.Flags().Int("vcpus", 0, "CPU cores (prototyping only): options vary by GPU type and count")
 	modifyCmd.Flags().Int("disk-size-gb", 0, "Disk size in GB (cannot shrink, max depends on config)")
-	modifyCmd.Flags().Int("scratch-disk-gb", -1, "Ephemeral scratch storage in GB, mounted at /scratch (0 to disable)")
+	modifyCmd.Flags().Int("ephemeral-disk-gb", -1, "Ephemeral storage in GB, mounted at /ephemeral (0 to disable)")
 
 	modifyCmd.SetHelpFunc(wrapHelp(helpmenus.RenderModifyHelp))
 
@@ -299,9 +299,9 @@ func buildModifyPresets(cmd *cobra.Command) *tui.ModifyPresets {
 		v, _ := cmd.Flags().GetInt("disk-size-gb")
 		p.DiskSizeGB = &v
 	}
-	if cmd.Flags().Changed("scratch-disk-gb") {
-		v, _ := cmd.Flags().GetInt("scratch-disk-gb")
-		p.ScratchDiskGB = &v
+	if cmd.Flags().Changed("ephemeral-disk-gb") {
+		v, _ := cmd.Flags().GetInt("ephemeral-disk-gb")
+		p.EphemeralDiskGB = &v
 	}
 	return p
 }
@@ -309,7 +309,7 @@ func buildModifyPresets(cmd *cobra.Command) *tui.ModifyPresets {
 func hasAllModifyFlags(cmd *cobra.Command) bool {
 	return cmd.Flags().Changed("mode") || cmd.Flags().Changed("gpu") ||
 		cmd.Flags().Changed("num-gpus") || cmd.Flags().Changed("vcpus") ||
-		cmd.Flags().Changed("disk-size-gb") || cmd.Flags().Changed("scratch-disk-gb")
+		cmd.Flags().Changed("disk-size-gb") || cmd.Flags().Changed("ephemeral-disk-gb")
 }
 
 func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api.Instance) (api.InstanceModifyRequest, error) {
@@ -341,12 +341,12 @@ func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api
 		req.DiskSizeGB = &config.DiskSizeGB
 	}
 
-	if config.ScratchDiskChanged {
-		req.ScratchDiskGB = &config.ScratchDiskGB
+	if config.EphemeralDiskChanged {
+		req.EphemeralDiskGB = &config.EphemeralDiskGB
 	}
 
 	// Check if any changes were made
-	if !config.ModeChanged && !config.GPUChanged && !config.ComputeChanged && !config.DiskChanged && !config.ScratchDiskChanged {
+	if !config.ModeChanged && !config.GPUChanged && !config.ComputeChanged && !config.DiskChanged && !config.EphemeralDiskChanged {
 		return req, fmt.Errorf("no changes specified")
 	}
 
@@ -482,13 +482,13 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 		hasChanges = true
 	}
 
-	// Scratch disk size validation
-	if presets.ScratchDiskGB != nil {
-		scratchSize := *presets.ScratchDiskGB
-		if scratchSize < 0 {
-			return req, usageErr("scratch disk size cannot be negative")
+	// Ephemeral disk size validation
+	if presets.EphemeralDiskGB != nil {
+		ephemeralSize := *presets.EphemeralDiskGB
+		if ephemeralSize < 0 {
+			return req, usageErr("ephemeral disk size cannot be negative")
 		}
-		req.ScratchDiskGB = &scratchSize
+		req.EphemeralDiskGB = &ephemeralSize
 		hasChanges = true
 	}
 
