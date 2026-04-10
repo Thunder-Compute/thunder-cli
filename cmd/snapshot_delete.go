@@ -139,10 +139,12 @@ func runSnapshotDelete(args []string) error {
 	// Run deletion with progress
 	successMsg, err := tui.RunSnapshotDeleteProgress(client, snapshotID, selectedSnapshot.Name)
 	if err != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "snapshot_delete")
-			sentry.CaptureException(err)
-		})
+		if !isUserError(err) {
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "snapshot_delete")
+				sentry.CaptureException(err)
+			})
+		}
 		return fmt.Errorf("failed to delete snapshot: %w", err)
 	}
 
