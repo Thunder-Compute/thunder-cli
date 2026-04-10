@@ -72,6 +72,7 @@ var userErrorSubstrings = []string{
 	"invalid header field value",
 	"executable file not found",
 	"Modifying instances is temporarily disabled",
+	"validation:",
 }
 
 func isUserError(err error) bool {
@@ -79,9 +80,6 @@ func isUserError(err error) bool {
 		return true
 	}
 	msg := err.Error()
-	if strings.Contains(msg, "accepts") && strings.Contains(msg, "arg(s)") {
-		return true
-	}
 	for _, sub := range userErrorSubstrings {
 		if strings.Contains(msg, sub) {
 			return true

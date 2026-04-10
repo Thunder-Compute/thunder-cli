@@ -265,7 +265,7 @@ func runSSHKeysAddInteractive(client *api.Client) error {
 var sshKeysDeleteCmd = &cobra.Command{
 	Use:   "delete [key_name_or_id]",
 	Short: "Delete an SSH key",
-	Args:  cobra.MaximumNArgs(1),
+	Args:  wrapArgs(cobra.MaximumNArgs(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runSSHKeysDelete(args)
 	},
