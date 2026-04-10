@@ -263,10 +263,12 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	if result.Err() != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "modify_instance")
-			sentry.CaptureException(result.Err())
-		})
+		if !isUserError(result.Err()) {
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "modify_instance")
+				sentry.CaptureException(result.Err())
+			})
+		}
 		return fmt.Errorf("failed to modify instance: %w", result.Err())
 	}
 

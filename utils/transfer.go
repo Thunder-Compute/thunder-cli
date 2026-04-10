@@ -83,6 +83,10 @@ func wrapTransferError(err error, upload bool) error {
 			return newTransferUserError("local file not found")
 		}
 		return newTransferUserError("remote file not found")
+	case 3:
+		return newTransferUserError("file access error: check that the path exists and you have permission")
+	case 10:
+		return newTransferUserError("connection lost during transfer: check your internet or instance status")
 	case 11:
 		if upload {
 			return newTransferUserError("remote directory does not exist")
