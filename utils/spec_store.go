@@ -123,6 +123,15 @@ func (s *SpecStore) StorageRange(gpuType string, numGPUs int, mode string) (int,
 	return spec.StorageGB.Min, spec.StorageGB.Max
 }
 
+// EphemeralStorageRange returns the min/max ephemeral storage for a configuration.
+func (s *SpecStore) EphemeralStorageRange(gpuType string, numGPUs int, mode string) (int, int) {
+	spec := s.Lookup(gpuType, numGPUs, mode)
+	if spec == nil {
+		return 0, 2000
+	}
+	return spec.EphemeralStorageGB.Min, spec.EphemeralStorageGB.Max
+}
+
 
 // NormalizeGPUType maps user-friendly GPU names to canonical names,
 // validated against available specs for the given mode.

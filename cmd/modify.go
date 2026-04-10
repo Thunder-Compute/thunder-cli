@@ -36,6 +36,7 @@ func init() {
 	modifyCmd.Flags().Int("num-gpus", 0, "Number of GPUs (production mode: 1, 2, or 4)")
 	modifyCmd.Flags().Int("vcpus", 0, "CPU cores (prototyping only): options vary by GPU type and count")
 	modifyCmd.Flags().Int("disk-size-gb", 0, "Disk size in GB (cannot shrink, max depends on config)")
+	modifyCmd.Flags().Int("scratch-disk-gb", -1, "Ephemeral scratch storage in GB, mounted at /scratch (0 to disable)")
 
 	modifyCmd.SetHelpFunc(wrapHelp(helpmenus.RenderModifyHelp))
 
@@ -298,13 +299,17 @@ func buildModifyPresets(cmd *cobra.Command) *tui.ModifyPresets {
 		v, _ := cmd.Flags().GetInt("disk-size-gb")
 		p.DiskSizeGB = &v
 	}
+	if cmd.Flags().Changed("scratch-disk-gb") {
+		v, _ := cmd.Flags().GetInt("scratch-disk-gb")
+		p.ScratchDiskGB = &v
+	}
 	return p
 }
 
 func hasAllModifyFlags(cmd *cobra.Command) bool {
 	return cmd.Flags().Changed("mode") || cmd.Flags().Changed("gpu") ||
 		cmd.Flags().Changed("num-gpus") || cmd.Flags().Changed("vcpus") ||
-		cmd.Flags().Changed("disk-size-gb")
+		cmd.Flags().Changed("disk-size-gb") || cmd.Flags().Changed("scratch-disk-gb")
 }
 
 func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api.Instance) (api.InstanceModifyRequest, error) {
@@ -336,8 +341,12 @@ func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api
 		req.DiskSizeGB = &config.DiskSizeGB
 	}
 
+	if config.ScratchDiskChanged {
+		req.ScratchDiskGB = &config.ScratchDiskGB
+	}
+
 	// Check if any changes were made
-	if !config.ModeChanged && !config.GPUChanged && !config.ComputeChanged && !config.DiskChanged {
+	if !config.ModeChanged && !config.GPUChanged && !config.ComputeChanged && !config.DiskChanged && !config.ScratchDiskChanged {
 		return req, fmt.Errorf("no changes specified")
 	}
 
@@ -470,6 +479,16 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 			return req, usageErr("disk size must be between %d and %d GB", currentInstance.Storage, maxDisk)
 		}
 		req.DiskSizeGB = &diskSize
+		hasChanges = true
+	}
+
+	// Scratch disk size validation
+	if presets.ScratchDiskGB != nil {
+		scratchSize := *presets.ScratchDiskGB
+		if scratchSize < 0 {
+			return req, usageErr("scratch disk size cannot be negative")
+		}
+		req.ScratchDiskGB = &scratchSize
 		hasChanges = true
 	}
 
