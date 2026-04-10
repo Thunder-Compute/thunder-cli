@@ -20,7 +20,7 @@ import (
 var deleteCmd = &cobra.Command{
 	Use:   "delete [instance_id]",
 	Short: "Delete a Thunder Compute instance",
-	Args:  cobra.MaximumNArgs(1),
+	Args:  wrapArgs(cobra.MaximumNArgs(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runDelete(args)
 	},

@@ -24,7 +24,7 @@ import (
 var modifyCmd = &cobra.Command{
 	Use:   "modify [instance_index_or_id]",
 	Short: "Modify a Thunder Compute instance configuration",
-	Args:  cobra.MaximumNArgs(1),
+	Args:  wrapArgs(cobra.MaximumNArgs(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runModify(cmd, args)
 	},

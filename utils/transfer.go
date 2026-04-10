@@ -59,7 +59,7 @@ func wrapTransferError(err error, upload bool) error {
 	}
 
 	switch exitErr.ExitCode() {
-	case -1:
+	case -1, 20:
 		return ErrTransferCancelled
 	case 1, 255:
 		return fmt.Errorf("connection failed: check your internet or instance status")

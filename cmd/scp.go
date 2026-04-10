@@ -21,7 +21,7 @@ import (
 var scpCmd = &cobra.Command{
 	Use:          "scp [source...] [destination]",
 	Short:        "Copy files between local machine and Thunder Compute instances",
-	Args:         cobra.MinimumNArgs(2),
+	Args:         wrapArgs(cobra.MinimumNArgs(2)),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sources := args[:len(args)-1]
