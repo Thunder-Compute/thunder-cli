@@ -17,7 +17,7 @@ import (
 var snapshotDeleteCmd = &cobra.Command{
 	Use:   "delete [snapshot_name]",
 	Short: "Delete a snapshot",
-	Args:  cobra.MaximumNArgs(1),
+	Args:  wrapArgs(cobra.MaximumNArgs(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runSnapshotDelete(args)
 	},
