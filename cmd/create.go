@@ -27,7 +27,7 @@ var (
 	vcpus            int
 	template         string
 	diskSizeGB       int
-	scratchDiskGB    int
+	ephemeralDiskGB  int
 	createSSHKeyName string
 )
 
@@ -50,7 +50,7 @@ func init() {
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): options vary by GPU type and count")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (range depends on GPU config)")
-	createCmd.Flags().IntVar(&scratchDiskGB, "scratch-disk-gb", 0, "Ephemeral scratch storage in GB, mounted at /scratch (default: 0)")
+	createCmd.Flags().IntVar(&ephemeralDiskGB, "ephemeral-disk-gb", 0, "Ephemeral storage in GB, mounted at /ephemeral (default: 0)")
 	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-key", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
 	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-keys", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
 	_ = createCmd.Flags().MarkHidden("ssh-keys")
@@ -112,8 +112,8 @@ func buildCreatePresets(cmd *cobra.Command) *tui.CreatePresets {
 	if cmd.Flags().Changed("disk-size-gb") {
 		p.DiskSizeGB = &diskSizeGB
 	}
-	if cmd.Flags().Changed("scratch-disk-gb") {
-		p.ScratchDiskGB = &scratchDiskGB
+	if cmd.Flags().Changed("ephemeral-disk-gb") {
+		p.EphemeralDiskGB = &ephemeralDiskGB
 	}
 	return p
 }
@@ -191,13 +191,13 @@ func runCreate(cmd *cobra.Command) error {
 
 		diskSizeWasSet := cmd.Flags().Changed("disk-size-gb")
 		createConfig = &tui.CreateConfig{
-			Mode:          mode,
-			GPUType:       gpuType,
-			NumGPUs:       numGPUs,
-			VCPUs:         vcpus,
-			Template:      template,
-			DiskSizeGB:    diskSizeGB,
-			ScratchDiskGB: scratchDiskGB,
+			Mode:            mode,
+			GPUType:         gpuType,
+			NumGPUs:         numGPUs,
+			VCPUs:           vcpus,
+			Template:        template,
+			DiskSizeGB:      diskSizeGB,
+			EphemeralDiskGB: ephemeralDiskGB,
 		}
 
 		if valErr := validateCreateConfig(createConfig, templates, snapshots, diskSizeWasSet, specs); valErr != nil {
@@ -273,14 +273,14 @@ func runCreate(cmd *cobra.Command) error {
 	}
 
 	req := api.CreateInstanceRequest{
-		Mode:          api.InstanceMode(createConfig.Mode),
-		GPUType:       createConfig.GPUType,
-		NumGPUs:       createConfig.NumGPUs,
-		CPUCores:      createConfig.VCPUs,
-		Template:      createConfig.Template,
-		DiskSizeGB:    createConfig.DiskSizeGB,
-		ScratchDiskGB: createConfig.ScratchDiskGB,
-		PublicKey:     resolvedPublicKey,
+		Mode:            api.InstanceMode(createConfig.Mode),
+		GPUType:         createConfig.GPUType,
+		NumGPUs:         createConfig.NumGPUs,
+		CPUCores:        createConfig.VCPUs,
+		Template:        createConfig.Template,
+		DiskSizeGB:      createConfig.DiskSizeGB,
+		EphemeralDiskGB: createConfig.EphemeralDiskGB,
+		PublicKey:       resolvedPublicKey,
 	}
 
 	var resp *api.CreateInstanceResponse

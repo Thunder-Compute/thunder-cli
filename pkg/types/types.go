@@ -55,7 +55,7 @@ type InstanceListItem struct {
 	CreatedAt        string    `json:"createdAt"`
 	UUID             string    `json:"uuid"`
 	Storage          int       `json:"storage"`
-	ScratchDiskGB    int       `json:"scratchDiskGB,omitempty"`
+	EphemeralDiskGB    int       `json:"ephemeralDiskGB,omitempty"`
 	CPUCores         string    `json:"cpuCores"`
 	Template         string    `json:"template"`
 	GPUType          string    `json:"gpuType"`
@@ -130,7 +130,7 @@ type InstanceCreateRequest struct {
 	GPUType       string       `json:"gpu_type"`
 	NumGPUs       int          `json:"num_gpus"`
 	DiskSizeGB    int          `json:"disk_size_gb"`
-	ScratchDiskGB int          `json:"scratch_disk_gb,omitempty"`
+	EphemeralDiskGB int          `json:"ephemeral_disk_gb,omitempty"`
 	PublicKey     string       `json:"public_key,omitempty"`
 }
 
@@ -155,7 +155,7 @@ type InstanceModifyRequest struct {
 	GPUType       *string       `json:"gpu_type,omitempty"`
 	NumGPUs       *int          `json:"num_gpus,omitempty"`
 	DiskSizeGB    *int          `json:"disk_size_gb,omitempty"`
-	ScratchDiskGB *int          `json:"scratch_disk_gb,omitempty"`
+	EphemeralDiskGB *int          `json:"ephemeral_disk_gb,omitempty"`
 	Mode          *InstanceMode `json:"mode,omitempty"`
 	AddPorts      []int         `json:"add_ports,omitempty"`
 	RemovePorts   []int         `json:"remove_ports,omitempty"`
