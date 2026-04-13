@@ -532,20 +532,31 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diskInput.Blur()
 				m.ephemeralDiskInput.Blur()
 				m.initStep()
-			case "tab", "shift+tab":
-				if m.step == stepDiskSize {
-					m.diskInput.Blur()
-					m.step = stepEphemeralDiskSize
-					m.ephemeralDiskInput.Focus()
-					m.ephemeralDiskInputTouched = false
-				} else {
+			case "up":
+				if m.step == stepEphemeralDiskSize {
 					m.ephemeralDiskInput.Blur()
 					m.step = stepDiskSize
 					m.diskInput.Focus()
 					m.diskInputTouched = false
 				}
 				return m, nil
+			case "down":
+				if m.step == stepDiskSize {
+					m.diskInput.Blur()
+					m.step = stepEphemeralDiskSize
+					m.ephemeralDiskInput.Focus()
+					m.ephemeralDiskInputTouched = false
+				}
+				return m, nil
 			case "enter":
+				if m.step == stepDiskSize {
+					// Enter on primary moves to ephemeral
+					m.diskInput.Blur()
+					m.step = stepEphemeralDiskSize
+					m.ephemeralDiskInput.Focus()
+					m.ephemeralDiskInputTouched = false
+					return m, nil
+				}
 				return m.handleEnter()
 			default:
 				if m.step == stepDiskSize {
@@ -730,14 +741,14 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 		}
 		diskSize, err := strconv.Atoi(m.diskInput.Value())
 		if err != nil || diskSize < minDisk || diskSize > maxDisk {
-			m.validationErr = fmt.Errorf("primary storage must be between %d and %d GB", minDisk, maxDisk)
+			m.validationErr = fmt.Errorf("primary storage for this instance type must be between %d and %d GB. Check storage limits at https://www.thundercompute.com/pricing", minDisk, maxDisk)
 			return m, nil
 		}
 
 		minEphemeral, maxEphemeral := m.specs.EphemeralStorageRange(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
 		ephemeralSize, err := strconv.Atoi(m.ephemeralDiskInput.Value())
 		if err != nil || ephemeralSize < minEphemeral || ephemeralSize > maxEphemeral {
-			m.validationErr = fmt.Errorf("ephemeral storage must be between %d and %d GB", minEphemeral, maxEphemeral)
+			m.validationErr = fmt.Errorf("ephemeral storage for this instance type must be between %d and %d GB. Check storage limits at https://www.thundercompute.com/pricing", minEphemeral, maxEphemeral)
 			return m, nil
 		}
 
@@ -1037,31 +1048,24 @@ func (m createModel) View() string {
 		}
 
 	case stepDiskSize, stepEphemeralDiskSize:
-		minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
-		if m.selectedSnapshot != nil && m.selectedSnapshot.MinimumDiskSizeGB > minDisk {
-			minDisk = m.selectedSnapshot.MinimumDiskSizeGB
-		}
-		minEphemeral, maxEphemeral := m.specs.EphemeralStorageRange(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
-
-		primaryLabel := "  Primary Storage"
-		ephemeralLabel := "  Ephemeral Storage"
+		primaryLabel := "  Primary"
+		ephemeralLabel := "  Ephemeral Storage (fast, temporary storage, 0 to disable)"
 		if m.step == stepDiskSize {
-			primaryLabel = m.styles.Selected.Render("▶ Primary Storage")
+			primaryLabel = m.styles.Selected.Render("▶ Primary")
 		} else {
-			ephemeralLabel = m.styles.Selected.Render("▶ Ephemeral Storage")
+			ephemeralLabel = m.styles.Selected.Render("▶ Ephemeral Storage (fast, temporary storage, 0 to disable)")
 		}
 
 		s.WriteString("Configure storage:\n\n")
 		s.WriteString(primaryLabel + "\n")
-		s.WriteString(fmt.Sprintf("  Range: %d-%d GB\n", minDisk, maxDisk))
 		s.WriteString("  " + m.diskInput.View() + "\n\n")
 		s.WriteString(ephemeralLabel + "\n")
-		s.WriteString("  Fast local ephemeral disk mounted at /ephemeral. Not persisted in snapshots.\n")
-		s.WriteString(fmt.Sprintf("  Range: %d-%d GB (0 to disable)\n", minEphemeral, maxEphemeral))
 		s.WriteString("  " + m.ephemeralDiskInput.View() + "\n")
-		s.WriteString("\n")
-		s.WriteString(helpStyleTUI.Render("Tab to switch fields, Enter to continue"))
-		s.WriteString("\n")
+		if m.step == stepEphemeralDiskSize {
+			s.WriteString("\n")
+			s.WriteString(warningStyleTUI.Render("Fast, temporary storage mounted at /ephemeral. Use for large model files or caches that require maximum performance. This will be lost if the instance restarts or is modified. More detail: https://www.thundercompute.com/docs"))
+			s.WriteString("\n")
+		}
 		if m.validationErr != nil {
 			s.WriteString(fmt.Sprintf("\n%s\n", errorStyleTUI.Render(fmt.Sprintf("✗ %v", m.validationErr))))
 		}
