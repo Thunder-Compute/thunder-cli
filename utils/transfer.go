@@ -30,13 +30,15 @@ func newTransferUserError(msg string) error {
 }
 
 // WrapAPIError returns a cleaner error message for common network failures.
+// The underlying error is always preserved via %w so callers can still match
+// against context.DeadlineExceeded, net.Error.Timeout(), etc.
 func WrapAPIError(err error, context string) error {
 	if err == nil {
 		return nil
 	}
 	errStr := err.Error()
 	if strings.Contains(errStr, "dial tcp") || strings.Contains(errStr, "timeout") || strings.Contains(errStr, "no such host") || strings.Contains(errStr, "deadline exceeded") {
-		return fmt.Errorf("%s: no internet connection", context)
+		return fmt.Errorf("%s: no internet connection: %w", context, err)
 	}
 	return fmt.Errorf("%s: %w", context, err)
 }
@@ -68,6 +70,13 @@ func Transfer(ctx context.Context, keyFile, ip string, port int, localPath, remo
 }
 
 func wrapTransferError(err error, upload bool) error {
+	// Context cancellation (Ctrl-C) can arrive before exec.CommandContext
+	// even manages to fork. In that case Run returns context.Canceled
+	// directly with no *exec.ExitError — map it to the same user-facing
+	// "Transfer cancelled" path as a signal-killed subprocess.
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return ErrTransferCancelled
+	}
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
 		return err
@@ -93,7 +102,10 @@ func wrapTransferError(err error, upload bool) error {
 		}
 		return newTransferUserError("local directory does not exist")
 	default:
-		return fmt.Errorf("transfer failed (exit code %d)", exitErr.ExitCode())
+		// Unknown rsync/scp exit code. Almost always indicates a user-side or
+		// network condition, not a CLI bug — wrap as user error so it doesn't
+		// reach Sentry.
+		return newTransferUserError(fmt.Sprintf("transfer failed (exit code %d)", exitErr.ExitCode()))
 	}
 }
 
