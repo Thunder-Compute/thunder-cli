@@ -130,6 +130,14 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	ctx, cancel := context.WithCancel(signalCtx)
 	defer cancel()
 
+	// Start a Sentry transaction so the trace ID propagates to API calls,
+	// enabling end-to-end correlation between CLI and server spans.
+	txn := sentry.StartTransaction(ctx, "cli.connect",
+		sentry.WithOpName("cli.command"),
+	)
+	defer txn.Finish()
+	ctx = txn.Context()
+
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{
 		Category: "connect",
 		Message:  "fetching instances",
@@ -512,26 +520,37 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			return fmt.Errorf("failed to generate new SSH key: %w", keyErr)
 		}
 
-		if keyResp.Key != nil {
-			if saveErr := utils.SavePrivateKey(instance.UUID, *keyResp.Key); saveErr != nil {
-				sentry.AddBreadcrumb(&sentry.Breadcrumb{
-					Category: "connect",
-					Message:  "key save failed after regeneration",
-					Data: map[string]interface{}{
-						"error": saveErr.Error(),
-					},
-					Level: sentry.LevelError,
-				})
-				shutdownTUI()
-				return fmt.Errorf("failed to save new private key: %w", saveErr)
-			}
+		if keyResp.Key == nil {
+			sentry.AddBreadcrumb(&sentry.Breadcrumb{
+				Category: "connect",
+				Message:  "key regeneration returned no private key",
+				Level:    sentry.LevelError,
+			})
+			shutdownTUI()
+			return fmt.Errorf("server did not return a new SSH key — try restarting the instance with 'tnr delete %s' and 'tnr create'", instanceID)
+		}
+
+		if saveErr := utils.SavePrivateKey(instance.UUID, *keyResp.Key); saveErr != nil {
+			sentry.AddBreadcrumb(&sentry.Breadcrumb{
+				Category: "connect",
+				Message:  "key save failed after regeneration",
+				Data: map[string]interface{}{
+					"error": saveErr.Error(),
+				},
+				Level: sentry.LevelError,
+			})
+			shutdownTUI()
+			return fmt.Errorf("failed to save new private key: %w", saveErr)
 		}
 
 		keyFile = utils.GetKeyFile(instance.UUID)
 		sentry.AddBreadcrumb(&sentry.Breadcrumb{
 			Category: "connect",
-			Message:  "key regenerated, retrying connection",
-			Level:    sentry.LevelInfo,
+			Message:  "key regenerated and saved, retrying connection",
+			Data: map[string]interface{}{
+				"key_file": keyFile,
+			},
+			Level: sentry.LevelInfo,
 		})
 
 		tui.SendPhaseUpdate(p, 1, tui.PhaseInProgress, fmt.Sprintf("Retrying connection with new key to %s:%d...", instance.GetIP(), port), 0)
@@ -550,7 +569,14 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		if checkCancelled() {
 			return nil
 		}
-		sshClient, err = utils.RobustSSHConnectWithProgress(ctx, instance.GetIP(), keyFile, port, 120, retryCallback)
+		// Use persistent auth detection on the retry: if auth still fails
+		// consistently after key regeneration, the instance is likely in
+		// an unrecoverable state
+		retryOpts := &utils.SSHConnectOptions{
+			DetectPersistentAuthFailure: true,
+			PersistentAuthTimeout:       30 * time.Second,
+		}
+		sshClient, err = utils.RobustSSHConnectWithOptions(ctx, instance.GetIP(), keyFile, port, 120, retryCallback, retryOpts)
 		if checkCancelled() {
 			return nil
 		}
@@ -559,11 +585,16 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 				Category: "connect",
 				Message:  "SSH connection failed after key regeneration",
 				Data: map[string]interface{}{
-					"error": err.Error(),
+					"error":                   err.Error(),
+					"is_persistent_auth_fail": errors.Is(err, utils.ErrPersistentAuthFailure),
 				},
 				Level: sentry.LevelError,
 			})
 			shutdownTUI()
+			if errors.Is(err, utils.ErrPersistentAuthFailure) {
+				return fmt.Errorf("SSH key regeneration succeeded but the instance still rejects connections. "+
+					"The instance may need to be restarted — try 'tnr delete %s' and 'tnr create'", instanceID)
+			}
 			return fmt.Errorf("failed to establish SSH connection after key regeneration: %w", err)
 		}
 	} else if err != nil {

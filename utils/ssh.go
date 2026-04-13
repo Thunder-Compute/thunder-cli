@@ -44,6 +44,10 @@ type SSHProgressCallback func(info SSHRetryInfo)
 
 type SSHConnectOptions struct {
 	DetectPersistentAuthFailure bool
+	// PersistentAuthTimeout overrides the default timeout for persistent auth
+	// failure detection. Use a longer value after key regeneration to allow
+	// time for key propagation before declaring failure.
+	PersistentAuthTimeout time.Duration
 }
 
 type SSHClient struct {
@@ -120,6 +124,10 @@ func RobustSSHConnectWithOptions(ctx context.Context, ip, keyFile string, port i
 	var lastErr error
 
 	detectPersistentAuth := opts != nil && opts.DetectPersistentAuthFailure
+	persistentAuthTimeout := PersistentAuthTimeout
+	if opts != nil && opts.PersistentAuthTimeout > 0 {
+		persistentAuthTimeout = opts.PersistentAuthTimeout
+	}
 	consecutiveAuthFailures := 0
 	var firstAuthFailureTime time.Time
 
@@ -214,7 +222,7 @@ func RobustSSHConnectWithOptions(ctx context.Context, ip, keyFile string, port i
 
 				if detectPersistentAuth {
 					authFailureDuration := time.Since(firstAuthFailureTime)
-					if consecutiveAuthFailures >= PersistentAuthMaxAttempts || authFailureDuration >= PersistentAuthTimeout {
+					if consecutiveAuthFailures >= PersistentAuthMaxAttempts || authFailureDuration >= persistentAuthTimeout {
 						if callback != nil {
 							callback(SSHRetryInfo{
 								Status:  SSHStatusAuth,

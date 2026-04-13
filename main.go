@@ -68,6 +68,7 @@ func initSentry() error {
 			if len(event.Exception) > 0 {
 				msg := event.Exception[0].Value
 				event.Fingerprint = []string{errorFingerprint(msg, hint.OriginalException)}
+				cleanExceptionType(event, hint)
 			}
 			return event
 		},
@@ -123,6 +124,26 @@ func setUserContext(token string) {
 			ID: userID,
 		})
 	})
+}
+
+// cleanExceptionType replaces raw Go type names (*fmt.wrapError,
+// *errors.errorString) with readable titles in Sentry issues.
+func cleanExceptionType(event *sentry.Event, hint *sentry.EventHint) {
+	if hint == nil || hint.OriginalException == nil {
+		return
+	}
+	for i := range event.Exception {
+		ex := &event.Exception[i]
+		if !strings.HasPrefix(ex.Type, "*fmt.") && !strings.HasPrefix(ex.Type, "*errors.") {
+			continue
+		}
+		// Use operation tag (set by scp, connect, etc.) or command tag as title.
+		if op := event.Tags["operation"]; op != "" {
+			ex.Type = op
+		} else if command := event.Tags["command"]; command != "" {
+			ex.Type = command + " error"
+		}
+	}
 }
 
 var statusCodeRe = regexp.MustCompile(`status (\d{3})`)

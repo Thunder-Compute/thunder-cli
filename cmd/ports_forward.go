@@ -165,10 +165,12 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 	}
 
 	if result.Err() != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "ports_forward")
-			sentry.CaptureException(result.Err())
-		})
+		if !isUserError(result.Err()) {
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "ports_forward")
+				sentry.CaptureException(result.Err())
+			})
+		}
 		return fmt.Errorf("failed to update ports: %w", result.Err())
 	}
 

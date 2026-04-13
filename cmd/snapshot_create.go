@@ -179,10 +179,12 @@ func runSnapshotCreate(cmd *cobra.Command) error {
 	}
 
 	if result.Err() != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "snapshot_create")
-			sentry.CaptureException(result.Err())
-		})
+		if !isUserError(result.Err()) {
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "snapshot_create")
+				sentry.CaptureException(result.Err())
+			})
+		}
 		return fmt.Errorf("failed to create snapshot: %w", result.Err())
 	}
 

@@ -34,13 +34,14 @@ type StorageRange struct {
 
 // GpuSpecConfig represents a single GPU configuration entry.
 type GpuSpecConfig struct {
-	DisplayName   string       `json:"displayName"`
-	VramGB        int          `json:"vramGB"`
-	GpuCount      int          `json:"gpuCount"`
-	Mode          string       `json:"mode"`
-	VcpuOptions   []int        `json:"vcpuOptions"`
-	RamPerVCPUGiB int          `json:"ramPerVCPUGiB"`
-	StorageGB     StorageRange `json:"storageGB"`
+	DisplayName        string       `json:"displayName"`
+	VramGB             int          `json:"vramGB"`
+	GpuCount           int          `json:"gpuCount"`
+	Mode               string       `json:"mode"`
+	VcpuOptions        []int        `json:"vcpuOptions"`
+	RamPerVCPUGiB      int          `json:"ramPerVCPUGiB"`
+	StorageGB          StorageRange `json:"storageGB"`
+	EphemeralStorageGB StorageRange `json:"ephemeralStorageGB"`
 }
 
 // TemplateEntry represents a template with its key, used for ordered iteration.

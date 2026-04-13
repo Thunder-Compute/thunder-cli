@@ -14,6 +14,21 @@ import (
 // signal (e.g. user pressed Ctrl+C).
 var ErrTransferCancelled = errors.New("transfer cancelled")
 
+// ErrTransferUser is a sentinel for transfer errors caused by bad user input
+// (wrong path, missing file, etc.). Callers can check errors.Is(err, ErrTransferUser).
+var ErrTransferUser = errors.New("transfer user error")
+
+type transferUserError struct {
+	msg string
+}
+
+func (e *transferUserError) Error() string { return e.msg }
+func (e *transferUserError) Unwrap() error { return ErrTransferUser }
+
+func newTransferUserError(msg string) error {
+	return &transferUserError{msg: msg}
+}
+
 // WrapAPIError returns a cleaner error message for common network failures.
 func WrapAPIError(err error, context string) error {
 	if err == nil {
@@ -59,20 +74,24 @@ func wrapTransferError(err error, upload bool) error {
 	}
 
 	switch exitErr.ExitCode() {
-	case -1:
+	case -1, 20:
 		return ErrTransferCancelled
 	case 1, 255:
-		return fmt.Errorf("connection failed: check your internet or instance status")
+		return newTransferUserError("connection failed: check your internet or instance status")
 	case 2, 23:
 		if upload {
-			return fmt.Errorf("local file not found")
+			return newTransferUserError("local file not found")
 		}
-		return fmt.Errorf("remote file not found")
+		return newTransferUserError("remote file not found")
+	case 3:
+		return newTransferUserError("file access error: check that the path exists and you have permission")
+	case 10:
+		return newTransferUserError("connection lost during transfer: check your internet or instance status")
 	case 11:
 		if upload {
-			return fmt.Errorf("remote directory does not exist")
+			return newTransferUserError("remote directory does not exist")
 		}
-		return fmt.Errorf("local directory does not exist")
+		return newTransferUserError("local directory does not exist")
 	default:
 		return fmt.Errorf("transfer failed (exit code %d)", exitErr.ExitCode())
 	}

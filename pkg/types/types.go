@@ -55,6 +55,7 @@ type InstanceListItem struct {
 	CreatedAt        string    `json:"createdAt"`
 	UUID             string    `json:"uuid"`
 	Storage          int       `json:"storage"`
+	EphemeralDiskGB    int       `json:"ephemeralDiskGB,omitempty"`
 	CPUCores         string    `json:"cpuCores"`
 	Template         string    `json:"template"`
 	GPUType          string    `json:"gpuType"`
@@ -123,13 +124,14 @@ func (i *InstanceListItem) UnmarshalJSON(data []byte) error {
 
 // InstanceCreateRequest represents the request body for creating an instance.
 type InstanceCreateRequest struct {
-	CPUCores   int          `json:"cpu_cores"`
-	Mode       InstanceMode `json:"mode"`
-	Template   string       `json:"template"`
-	GPUType    string       `json:"gpu_type"`
-	NumGPUs    int          `json:"num_gpus"`
-	DiskSizeGB int          `json:"disk_size_gb"`
-	PublicKey  string       `json:"public_key,omitempty"`
+	CPUCores      int          `json:"cpu_cores"`
+	Mode          InstanceMode `json:"mode"`
+	Template      string       `json:"template"`
+	GPUType       string       `json:"gpu_type"`
+	NumGPUs       int          `json:"num_gpus"`
+	DiskSizeGB    int          `json:"disk_size_gb"`
+	EphemeralDiskGB int          `json:"ephemeral_disk_gb,omitempty"`
+	PublicKey     string       `json:"public_key,omitempty"`
 }
 
 // InstanceCreateResponse represents the response from creating an instance.
@@ -149,13 +151,14 @@ type InstanceAddKeyResponse struct {
 
 // InstanceModifyRequest represents the request body for modifying an instance.
 type InstanceModifyRequest struct {
-	CPUCores    *int          `json:"cpu_cores,omitempty"`
-	GPUType     *string       `json:"gpu_type,omitempty"`
-	NumGPUs     *int          `json:"num_gpus,omitempty"`
-	DiskSizeGB  *int          `json:"disk_size_gb,omitempty"`
-	Mode        *InstanceMode `json:"mode,omitempty"`
-	AddPorts    []int         `json:"add_ports,omitempty"`
-	RemovePorts []int         `json:"remove_ports,omitempty"`
+	CPUCores      *int          `json:"cpu_cores,omitempty"`
+	GPUType       *string       `json:"gpu_type,omitempty"`
+	NumGPUs       *int          `json:"num_gpus,omitempty"`
+	DiskSizeGB    *int          `json:"disk_size_gb,omitempty"`
+	EphemeralDiskGB *int          `json:"ephemeral_disk_gb,omitempty"`
+	Mode          *InstanceMode `json:"mode,omitempty"`
+	AddPorts      []int         `json:"add_ports,omitempty"`
+	RemovePorts   []int         `json:"remove_ports,omitempty"`
 }
 
 // InstanceModifyResponse represents the response from modifying an instance.
