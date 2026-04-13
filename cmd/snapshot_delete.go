@@ -17,7 +17,7 @@ import (
 var snapshotDeleteCmd = &cobra.Command{
 	Use:   "delete [snapshot_name]",
 	Short: "Delete a snapshot",
-	Args:  cobra.MaximumNArgs(1),
+	Args:  wrapArgs(cobra.MaximumNArgs(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runSnapshotDelete(args)
 	},
@@ -139,10 +139,12 @@ func runSnapshotDelete(args []string) error {
 	// Run deletion with progress
 	successMsg, err := tui.RunSnapshotDeleteProgress(client, snapshotID, selectedSnapshot.Name)
 	if err != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "snapshot_delete")
-			sentry.CaptureException(err)
-		})
+		if !isUserError(err) {
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "snapshot_delete")
+				sentry.CaptureException(err)
+			})
+		}
 		return fmt.Errorf("failed to delete snapshot: %w", err)
 	}
 

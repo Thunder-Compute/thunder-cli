@@ -24,7 +24,7 @@ import (
 var modifyCmd = &cobra.Command{
 	Use:   "modify [instance_index_or_id]",
 	Short: "Modify a Thunder Compute instance configuration",
-	Args:  cobra.MaximumNArgs(1),
+	Args:  wrapArgs(cobra.MaximumNArgs(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runModify(cmd, args)
 	},
@@ -36,6 +36,7 @@ func init() {
 	modifyCmd.Flags().Int("num-gpus", 0, "Number of GPUs (production mode: 1, 2, or 4)")
 	modifyCmd.Flags().Int("vcpus", 0, "CPU cores (prototyping only): options vary by GPU type and count")
 	modifyCmd.Flags().Int("disk-size-gb", 0, "Disk size in GB (cannot shrink, max depends on config)")
+	modifyCmd.Flags().Int("ephemeral-disk-gb", -1, "Ephemeral storage in GB, mounted at /ephemeral (0 to disable)")
 
 	modifyCmd.SetHelpFunc(wrapHelp(helpmenus.RenderModifyHelp))
 
@@ -263,10 +264,12 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	if result.Err() != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "modify_instance")
-			sentry.CaptureException(result.Err())
-		})
+		if !isUserError(result.Err()) {
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "modify_instance")
+				sentry.CaptureException(result.Err())
+			})
+		}
 		return fmt.Errorf("failed to modify instance: %w", result.Err())
 	}
 
@@ -296,13 +299,17 @@ func buildModifyPresets(cmd *cobra.Command) *tui.ModifyPresets {
 		v, _ := cmd.Flags().GetInt("disk-size-gb")
 		p.DiskSizeGB = &v
 	}
+	if cmd.Flags().Changed("ephemeral-disk-gb") {
+		v, _ := cmd.Flags().GetInt("ephemeral-disk-gb")
+		p.EphemeralDiskGB = &v
+	}
 	return p
 }
 
 func hasAllModifyFlags(cmd *cobra.Command) bool {
 	return cmd.Flags().Changed("mode") || cmd.Flags().Changed("gpu") ||
 		cmd.Flags().Changed("num-gpus") || cmd.Flags().Changed("vcpus") ||
-		cmd.Flags().Changed("disk-size-gb")
+		cmd.Flags().Changed("disk-size-gb") || cmd.Flags().Changed("ephemeral-disk-gb")
 }
 
 func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api.Instance) (api.InstanceModifyRequest, error) {
@@ -334,8 +341,12 @@ func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api
 		req.DiskSizeGB = &config.DiskSizeGB
 	}
 
+	if config.EphemeralDiskChanged {
+		req.EphemeralDiskGB = &config.EphemeralDiskGB
+	}
+
 	// Check if any changes were made
-	if !config.ModeChanged && !config.GPUChanged && !config.ComputeChanged && !config.DiskChanged {
+	if !config.ModeChanged && !config.GPUChanged && !config.ComputeChanged && !config.DiskChanged && !config.EphemeralDiskChanged {
 		return req, fmt.Errorf("no changes specified")
 	}
 
@@ -468,6 +479,16 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 			return req, usageErr("disk size must be between %d and %d GB", currentInstance.Storage, maxDisk)
 		}
 		req.DiskSizeGB = &diskSize
+		hasChanges = true
+	}
+
+	// Ephemeral disk size validation
+	if presets.EphemeralDiskGB != nil {
+		ephemeralSize := *presets.EphemeralDiskGB
+		if ephemeralSize < 0 {
+			return req, usageErr("ephemeral disk size cannot be negative")
+		}
+		req.EphemeralDiskGB = &ephemeralSize
 		hasChanges = true
 	}
 

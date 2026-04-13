@@ -13,6 +13,7 @@ import (
 
 	"github.com/Thunder-Compute/thunder-cli/pkg/types"
 	"github.com/getsentry/sentry-go"
+	sentryhttpclient "github.com/getsentry/sentry-go/httpclient"
 )
 
 // APIError is returned for HTTP responses with status >= 400 (except 401).
@@ -36,7 +37,8 @@ func NewClient(token, baseURL string) *Client {
 		baseURL: baseURL,
 		token:   token,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:   30 * time.Second,
+			Transport: sentryhttpclient.NewSentryRoundTripper(nil),
 		},
 	}
 }
@@ -89,7 +91,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body, resul
 
 	if resp.StatusCode >= 400 {
 		if resp.StatusCode == 401 {
-			return fmt.Errorf("authentication failed: invalid token")
+			return &APIError{StatusCode: 401, Message: "authentication failed: invalid token"}
 		}
 		apiErr := &APIError{StatusCode: resp.StatusCode}
 		var parsed struct {

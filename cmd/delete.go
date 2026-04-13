@@ -20,7 +20,7 @@ import (
 var deleteCmd = &cobra.Command{
 	Use:   "delete [instance_id]",
 	Short: "Delete a Thunder Compute instance",
-	Args:  cobra.MaximumNArgs(1),
+	Args:  wrapArgs(cobra.MaximumNArgs(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runDelete(args)
 	},
@@ -117,10 +117,12 @@ func runDelete(args []string) error {
 
 	successMsg, err := tui.RunDeleteProgress(client, instanceID)
 	if err != nil {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "delete_instance")
-			sentry.CaptureException(err)
-		})
+		if !isUserError(err) {
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "delete_instance")
+				sentry.CaptureException(err)
+			})
+		}
 		return fmt.Errorf("failed to delete instance: %w\n\nPossible reasons:\n• Instance may already be deleted\n• Server error occurred\n\nTry running 'tnr status' to check the instance state", err)
 	}
 

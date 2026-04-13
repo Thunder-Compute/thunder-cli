@@ -23,7 +23,7 @@ func renderPlainStatusTable(instances []api.Instance, verbose bool) {
 
 	for _, inst := range instances {
 		gpu := fmt.Sprintf("%sx%s", inst.NumGPUs, utils.FormatGPUType(inst.GPUType))
-		disk := fmt.Sprintf("%dGB", inst.Storage)
+		disk := fmt.Sprintf("%dGB", inst.Storage+inst.EphemeralDiskGB)
 		ram := fmt.Sprintf("%sGB", inst.Memory)
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			inst.ID,

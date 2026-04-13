@@ -21,7 +21,7 @@ import (
 var scpCmd = &cobra.Command{
 	Use:          "scp [source...] [destination]",
 	Short:        "Copy files between local machine and Thunder Compute instances",
-	Args:         cobra.MinimumNArgs(2),
+	Args:         wrapArgs(cobra.MinimumNArgs(2)),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sources := args[:len(args)-1]
@@ -113,10 +113,12 @@ func runSCP(sources []string, destination string) error {
 	if !utils.KeyExists(target.UUID) {
 		keyResp, err := client.AddSSHKey(target.ID)
 		if err != nil {
-			sentry.WithScope(func(scope *sentry.Scope) {
-				scope.SetTag("operation", "scp_ssh_key_add")
-				sentry.CaptureException(err)
-			})
+			if !isUserError(err) {
+				sentry.WithScope(func(scope *sentry.Scope) {
+					scope.SetTag("operation", "scp_ssh_key_add")
+					sentry.CaptureException(err)
+				})
+			}
 			return fmt.Errorf("failed to add SSH key: %w", err)
 		}
 		if keyResp.Key != nil {
