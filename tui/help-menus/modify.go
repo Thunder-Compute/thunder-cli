@@ -38,7 +38,7 @@ func RenderModifyHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("# Modify instance GPU and disk size"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr modify 0 --gpu h100 --persistent-disk 500"))
+	output.WriteString(CommandTextStyle.Render("tnr modify 0 --gpu h100 --primary-disk 500"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
@@ -77,9 +77,9 @@ func RenderModifyHelp(cmd *cobra.Command) {
 	output.WriteString("\n")
 
 	output.WriteString("  ")
-	output.WriteString(FlagStyle.Render("--persistent-disk"))
+	output.WriteString(FlagStyle.Render("--primary-disk"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Persistent disk storage in GB"))
+	output.WriteString(DescStyle.Render("Primary disk storage in GB"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
