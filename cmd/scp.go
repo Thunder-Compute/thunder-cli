@@ -123,10 +123,12 @@ func runSCP(sources []string, destination string) error {
 		}
 		if keyResp.Key != nil {
 			if err := utils.SavePrivateKey(target.UUID, *keyResp.Key); err != nil {
-				sentry.WithScope(func(scope *sentry.Scope) {
-					scope.SetTag("operation", "scp_ssh_key_save")
-					sentry.CaptureException(err)
-				})
+				if !isUserError(err) {
+					sentry.WithScope(func(scope *sentry.Scope) {
+						scope.SetTag("operation", "scp_ssh_key_save")
+						sentry.CaptureException(err)
+					})
+				}
 				return fmt.Errorf("failed to save private key: %w", err)
 			}
 		}
