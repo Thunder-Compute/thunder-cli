@@ -62,19 +62,19 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--gpu"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("GPU type: a6000, a100, or h100"))
+	output.WriteString(DescStyle.Render("GPU type"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--num-gpus"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Number of GPUs: 1-8"))
+	output.WriteString(DescStyle.Render("Number of GPUs"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--vcpus"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("CPU cores (prototyping only)"))
+	output.WriteString(DescStyle.Render("CPU cores"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
@@ -92,7 +92,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--primary-disk"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Primary disk storage in GB: 100-1000"))
+	output.WriteString(DescStyle.Render("Disk storage in GB"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

@@ -72,6 +72,7 @@ var userErrorSubstrings = []string{
 	"executable file not found",
 	"invalid header field value",
 	"could not open a new TTY",
+	"authentication timeout",
 }
 
 // isTransientNetworkError returns true if err is a network timeout, user
@@ -218,14 +219,8 @@ func checkIfUpdateNeeded(cmd *cobra.Command) {
 
 	policyResult, err := updatepolicy.Check(ctx, version.BuildVersion, false)
 	if err != nil {
-		if !isTransientNetworkError(err) {
-			sentry.WithScope(func(scope *sentry.Scope) {
-				scope.SetTag("operation", "update_check")
-				scope.SetTag("version", version.BuildVersion)
-				scope.SetLevel(sentry.LevelWarning)
-				sentry.CaptureException(err)
-			})
-		}
+		// Update checks hit external services (GitHub API). Any failure —
+		// timeouts, 5xx, network errors — is not actionable from Sentry.
 		fmt.Fprintf(os.Stderr, "Warning: update check failed: %v\n", err)
 		return
 	}
