@@ -67,13 +67,13 @@ func RenderModifyHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--num-gpus"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Number of GPUs: 1-8"))
+	output.WriteString(DescStyle.Render("Number of GPUs"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--vcpus"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("CPU cores (prototyping only)"))
+	output.WriteString(DescStyle.Render("CPU cores"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")
@@ -87,7 +87,6 @@ func RenderModifyHelp(cmd *cobra.Command) {
 	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Ephemeral storage in GB, mounted at /ephemeral (0 to disable)"))
 	output.WriteString("\n")
-
 
 	// Important Notes Section
 	output.WriteString(SectionStyle.Render("● IMPORTANT NOTES"))
