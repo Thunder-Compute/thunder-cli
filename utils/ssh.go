@@ -16,6 +16,12 @@ import (
 
 var ErrPersistentAuthFailure = errors.New("persistent SSH authentication failure: remote SSH keys may be missing")
 
+// ErrSSHUnreachable marks SSH reachability failures (TCP port closed, dial
+// timeout, handshake timeout). These indicate the instance is not ready yet
+// or the user's network/firewall is blocking the connection — not a CLI bug,
+// so they are filtered out of Sentry reporting.
+var ErrSSHUnreachable = errors.New("SSH unreachable")
+
 type SSHRetryStatus string
 
 const (
@@ -661,9 +667,9 @@ func messageContainsAny(msg string, substrings ...string) bool {
 
 func timeoutError(maxWait int, lastErr error) error {
 	if lastErr != nil {
-		return fmt.Errorf("SSH connection timeout after %d seconds: %w", maxWait, lastErr)
+		return fmt.Errorf("%w: SSH connection timeout after %d seconds: %w", ErrSSHUnreachable, maxWait, lastErr)
 	}
-	return fmt.Errorf("SSH connection timeout after %d seconds", maxWait)
+	return fmt.Errorf("%w: SSH connection timeout after %d seconds", ErrSSHUnreachable, maxWait)
 }
 
 func WaitForTCPPort(ctx context.Context, host string, port int, overallTimeout time.Duration) error {
@@ -676,10 +682,10 @@ func WaitForTCPPort(ctx context.Context, host string, port int, overallTimeout t
 	for {
 		attempt++
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("TCP port check cancelled: %w", err)
+			return fmt.Errorf("%w: TCP port check cancelled: %w", ErrSSHUnreachable, err)
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("TCP port %s not available after %v", address, overallTimeout)
+			return fmt.Errorf("%w: TCP port %s not available after %v", ErrSSHUnreachable, address, overallTimeout)
 		}
 
 		remaining := time.Until(deadline)
@@ -688,7 +694,7 @@ func WaitForTCPPort(ctx context.Context, host string, port int, overallTimeout t
 			attemptTimeout = 5 * time.Second
 		}
 		if attemptTimeout <= 0 {
-			return fmt.Errorf("TCP port %s not available after %v", address, overallTimeout)
+			return fmt.Errorf("%w: TCP port %s not available after %v", ErrSSHUnreachable, address, overallTimeout)
 		}
 
 		dialer := &net.Dialer{
@@ -703,12 +709,12 @@ func WaitForTCPPort(ctx context.Context, host string, port int, overallTimeout t
 
 		// Only retry on connection-related errors
 		if !shouldRetryDial(err) {
-			return fmt.Errorf("TCP port check failed: %w", err)
+			return fmt.Errorf("%w: TCP port check failed: %w", ErrSSHUnreachable, err)
 		}
 
 		// Exponential backoff with cap
 		if err := sleepWithContext(ctx, backoff); err != nil {
-			return fmt.Errorf("TCP port check cancelled: %w", err)
+			return fmt.Errorf("%w: TCP port check cancelled: %w", ErrSSHUnreachable, err)
 		}
 		backoff = minDuration(backoff*2, maxBackoff)
 	}

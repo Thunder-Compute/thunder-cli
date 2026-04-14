@@ -16,6 +16,13 @@ import (
 	sentryhttpclient "github.com/getsentry/sentry-go/httpclient"
 )
 
+// ErrTransport marks transport-level HTTP failures where http.Client.Do could
+// not complete the request — DNS failure, connection refused, connection
+// reset, TLS handshake error, mid-stream EOF, etc. Callers use errors.Is to
+// classify these uniformly as user/network noise, distinct from *APIError
+// (which means the server did respond with a status >= 400).
+var ErrTransport = errors.New("transport error")
+
 // APIError is returned for HTTP responses with status >= 400 (except 401).
 type APIError struct {
 	StatusCode int
@@ -70,7 +77,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body, resul
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to make request: %w", err)
+		return fmt.Errorf("%w: failed to make request: %w", ErrTransport, err)
 	}
 	defer resp.Body.Close()
 

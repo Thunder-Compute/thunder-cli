@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,10 +71,45 @@ var userErrorSubstrings = []string{
 	"no such file or directory",
 	"executable file not found",
 	"invalid header field value",
+	"could not open a new TTY",
+}
+
+// isTransientNetworkError returns true if err is a network timeout, user
+// cancellation, or other transient transport failure. Used to suppress Sentry
+// noise on paths where the CLI intentionally makes best-effort network calls
+// (e.g. update checks).
+func isTransientNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	return false
 }
 
 func isUserError(err error) bool {
 	if errors.Is(err, ErrUsage) || errors.Is(err, tui.ErrCancelled) || errors.Is(err, utils.ErrTransferUser) {
+		return true
+	}
+	if errors.Is(err, utils.ErrSSHUnreachable) {
+		return true
+	}
+	// Transport-level HTTP failures (DNS, conn refused, TLS, EOF, reset):
+	// classified at the api.Client boundary. Never a CLI bug.
+	if errors.Is(err, api.ErrTransport) {
+		return true
+	}
+	// User cancellation (Ctrl-C) and network timeouts - neither is a CLI bug.
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
 		return true
 	}
 	// API 4xx responses are always user errors (auth, validation, not found, etc.).
@@ -182,13 +218,14 @@ func checkIfUpdateNeeded(cmd *cobra.Command) {
 
 	policyResult, err := updatepolicy.Check(ctx, version.BuildVersion, false)
 	if err != nil {
-		// Capture update check failures to Sentry
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("operation", "update_check")
-			scope.SetTag("version", version.BuildVersion)
-			scope.SetLevel(sentry.LevelWarning)
-			sentry.CaptureException(err)
-		})
+		if !isTransientNetworkError(err) {
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTag("operation", "update_check")
+				scope.SetTag("version", version.BuildVersion)
+				scope.SetLevel(sentry.LevelWarning)
+				sentry.CaptureException(err)
+			})
+		}
 		fmt.Fprintf(os.Stderr, "Warning: update check failed: %v\n", err)
 		return
 	}

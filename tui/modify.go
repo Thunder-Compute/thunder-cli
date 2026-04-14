@@ -384,28 +384,6 @@ func (m modifyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case "up", "k":
-			if m.step != modifyStepDiskSize && m.step != modifyStepEphemeralDiskSize {
-				if m.cursor > 0 {
-					m.cursor--
-				}
-			}
-
-		case "down", "j":
-			if m.step != modifyStepDiskSize && m.step != modifyStepEphemeralDiskSize {
-				maxCursor := m.getMaxCursor()
-				if m.cursor < maxCursor {
-					m.cursor++
-				}
-			}
-
-		case "tab", "shift+tab":
-			if m.step == modifyStepDiskSize {
-				m.diskInput.Blur()
-				m.step = modifyStepEphemeralDiskSize
-				m.ephemeralDiskInput.Focus()
-				m.ephemeralDiskInputTouched = false
-				return m, nil
-			}
 			if m.step == modifyStepEphemeralDiskSize {
 				m.ephemeralDiskInput.Blur()
 				m.step = modifyStepDiskSize
@@ -413,8 +391,35 @@ func (m modifyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diskInputTouched = false
 				return m, nil
 			}
+			if m.step != modifyStepDiskSize {
+				if m.cursor > 0 {
+					m.cursor--
+				}
+			}
+
+		case "down", "j":
+			if m.step == modifyStepDiskSize {
+				m.diskInput.Blur()
+				m.step = modifyStepEphemeralDiskSize
+				m.ephemeralDiskInput.Focus()
+				m.ephemeralDiskInputTouched = false
+				return m, nil
+			}
+			if m.step != modifyStepEphemeralDiskSize {
+				maxCursor := m.getMaxCursor()
+				if m.cursor < maxCursor {
+					m.cursor++
+				}
+			}
 
 		case "enter":
+			if m.step == modifyStepDiskSize {
+				m.diskInput.Blur()
+				m.step = modifyStepEphemeralDiskSize
+				m.ephemeralDiskInput.Focus()
+				m.ephemeralDiskInputTouched = false
+				return m, nil
+			}
 			return m.handleEnter()
 		}
 
@@ -521,7 +526,7 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs, effectiveMode)
 		diskSize, err := strconv.Atoi(m.diskInput.Value())
 		if err != nil || diskSize < minDisk || diskSize > maxDisk {
-			m.validationErr = fmt.Errorf("primary storage must be between %d and %d GB", minDisk, maxDisk)
+			m.validationErr = fmt.Errorf("primary storage for this instance type must be between %d and %d GB. Check storage limits at https://www.thundercompute.com/pricing", minDisk, maxDisk)
 			return m, nil
 		}
 
@@ -533,7 +538,7 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		minEphemeral, maxEphemeral := m.specs.EphemeralStorageRange(m.config.GPUType, m.config.NumGPUs, effectiveMode)
 		ephemeralSize, err := strconv.Atoi(m.ephemeralDiskInput.Value())
 		if err != nil || ephemeralSize < minEphemeral || ephemeralSize > maxEphemeral {
-			m.validationErr = fmt.Errorf("ephemeral storage must be between %d and %d GB", minEphemeral, maxEphemeral)
+			m.validationErr = fmt.Errorf("ephemeral storage for this instance type must be between %d and %d GB. Check storage limits at https://www.thundercompute.com/pricing", minEphemeral, maxEphemeral)
 			return m, nil
 		}
 
@@ -691,8 +696,8 @@ func (m modifyModel) View() string {
 	switch m.step {
 	case modifyStepConfirmation:
 		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Quit"))
-	case modifyStepDiskSize:
-		s.WriteString(m.styles.Help.Render("Type disk size  Enter: Continue  Esc: Back  Q: Quit"))
+	case modifyStepDiskSize, modifyStepEphemeralDiskSize:
+		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Quit"))
 	default:
 		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Quit"))
 	}
@@ -878,29 +883,24 @@ func (m modifyModel) renderComputeStep() string {
 func (m modifyModel) renderDiskSizeStep() string {
 	var s strings.Builder
 
-	effectiveMode := m.getEffectiveMode()
-	_, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs, effectiveMode)
-	minEphemeral, maxEphemeral := m.specs.EphemeralStorageRange(m.config.GPUType, m.config.NumGPUs, effectiveMode)
-
-	primaryLabel := "  Primary Storage"
-	ephemeralLabel := "  Ephemeral Storage"
+	primaryLabel := "  Primary"
+	ephemeralLabel := "  Ephemeral Storage (fast, temporary storage, 0 to disable)"
 	if m.step == modifyStepDiskSize {
-		primaryLabel = m.styles.Selected.Render("▶ Primary Storage")
+		primaryLabel = m.styles.Selected.Render("▶ Primary")
 	} else {
-		ephemeralLabel = m.styles.Selected.Render("▶ Ephemeral Storage")
+		ephemeralLabel = m.styles.Selected.Render("▶ Ephemeral Storage (fast, temporary storage, 0 to disable)")
 	}
 
 	s.WriteString("Configure storage:\n\n")
 	s.WriteString(primaryLabel + fmt.Sprintf(" [current: %d GB]\n", m.currentInstance.Storage))
-	s.WriteString(fmt.Sprintf("  Range: %d-%d GB (cannot be smaller than current)\n", m.currentInstance.Storage, maxDisk))
 	s.WriteString("  " + m.diskInput.View() + "\n\n")
 	s.WriteString(ephemeralLabel + fmt.Sprintf(" [current: %d GB]\n", m.currentInstance.EphemeralDiskGB))
-	s.WriteString("  Fast local ephemeral disk mounted at /ephemeral. Not persisted across restarts.\n")
-	s.WriteString(fmt.Sprintf("  Range: %d-%d GB (0 to disable)\n", minEphemeral, maxEphemeral))
 	s.WriteString("  " + m.ephemeralDiskInput.View() + "\n")
-	s.WriteString("\n")
-	s.WriteString(helpStyleTUI.Render("Tab to switch fields, Enter to continue"))
-	s.WriteString("\n")
+	if m.step == modifyStepEphemeralDiskSize {
+		s.WriteString("\n")
+		s.WriteString(warningStyleTUI.Render("Fast, temporary storage mounted at /ephemeral. Use for large model files or caches that require maximum performance. This will be lost if the instance restarts or is modified. More detail: https://www.thundercompute.com/docs"))
+		s.WriteString("\n")
+	}
 
 	if m.validationErr != nil {
 		s.WriteString("\n")
