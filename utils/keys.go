@@ -6,28 +6,31 @@ import (
 	"path/filepath"
 )
 
-// GetKeyFile returns the path to the SSH key file for a given instance UUID
+// GetKeyFile returns the path to the SSH key file for a given instance UUID.
+// Falls back to empty string only if ThunderDir resolution fails, which
+// callers should treat as "no cached key".
 func GetKeyFile(uuid string) string {
-	homeDir, _ := os.UserHomeDir()
-	return filepath.Join(homeDir, ".thunder", "keys", uuid)
+	base, err := ThunderDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(base, "keys", uuid)
 }
 
 // KeyExists checks if the SSH key file exists for a given UUID
 func KeyExists(uuid string) bool {
 	keyFile := GetKeyFile(uuid)
+	if keyFile == "" {
+		return false
+	}
 	_, err := os.Stat(keyFile)
 	return err == nil
 }
 
 // SavePrivateKey writes the private key to disk with appropriate permissions
 func SavePrivateKey(uuid, privateKey string) error {
-	homeDir, err := os.UserHomeDir()
+	keyDir, err := ThunderSubdir("keys")
 	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
-	}
-
-	keyDir := filepath.Join(homeDir, ".thunder", "keys")
-	if err := os.MkdirAll(keyDir, 0700); err != nil {
 		return fmt.Errorf("failed to create keys directory: %w", err)
 	}
 
