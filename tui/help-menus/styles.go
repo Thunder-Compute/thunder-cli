@@ -54,7 +54,7 @@ func InitHelpStyles(out io.Writer) {
 		CommandTextStyle = theme.Primary().Bold(true)
 		DescStyle = r.NewStyle() // Uses terminal default foreground
 		LinkStyle = theme.Label().Underline(true)
-		FlagStyle = r.NewStyle().Foreground(lipgloss.Color(flagColor)).Bold(true).Width(15)
+		FlagStyle = r.NewStyle().Foreground(lipgloss.Color(flagColor)).Bold(true).Width(19)
 		ExampleStyle = r.NewStyle().Foreground(lipgloss.Color(exampleColor)).Italic(true)
 	})
 }

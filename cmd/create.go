@@ -51,8 +51,10 @@ func init() {
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): options vary by GPU type and count")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name (accepts snapshot names too; --snapshot is an alias)")
 	createCmd.Flags().StringVar(&snapshotAlias, "snapshot", "", "Alias for --template; accepts a snapshot name or template key")
+	createCmd.Flags().IntVar(&diskSizeGB, "persistent-disk", 100, "Persistent disk storage in GB (range depends on GPU config)")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (range depends on GPU config)")
-	createCmd.Flags().IntVar(&ephemeralDiskGB, "ephemeral-disk-gb", 0, "Ephemeral storage in GB, mounted at /ephemeral (default: 0)")
+	_ = createCmd.Flags().MarkHidden("disk-size-gb")
+	createCmd.Flags().IntVar(&ephemeralDiskGB, "ephemeral-disk", 0, "Ephemeral storage in GB, mounted at /ephemeral (default: 0)")
 	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-key", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
 	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-keys", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
 	_ = createCmd.Flags().MarkHidden("ssh-keys")
@@ -111,10 +113,10 @@ func buildCreatePresets(cmd *cobra.Command) *tui.CreatePresets {
 	if templateFlagChanged(cmd) {
 		p.Template = &template
 	}
-	if cmd.Flags().Changed("disk-size-gb") {
+	if cmd.Flags().Changed("persistent-disk") || cmd.Flags().Changed("disk-size-gb") {
 		p.DiskSizeGB = &diskSizeGB
 	}
-	if cmd.Flags().Changed("ephemeral-disk-gb") {
+	if cmd.Flags().Changed("ephemeral-disk") {
 		p.EphemeralDiskGB = &ephemeralDiskGB
 	}
 	return p
@@ -141,7 +143,7 @@ func resolveTemplateAlias(cmd *cobra.Command) error {
 
 func hasAllCreateFlags(cmd *cobra.Command) bool {
 	if !cmd.Flags().Changed("mode") || !cmd.Flags().Changed("gpu") ||
-		!templateFlagChanged(cmd) || !cmd.Flags().Changed("disk-size-gb") {
+		!templateFlagChanged(cmd) || !(cmd.Flags().Changed("persistent-disk") || cmd.Flags().Changed("disk-size-gb")) {
 		return false
 	}
 	m, _ := cmd.Flags().GetString("mode")
@@ -176,7 +178,7 @@ func runCreate(cmd *cobra.Command) error {
 
 	if presets.IsEmpty() {
 		if !interactive {
-			return usageErr("all flags required in non-interactive mode (--mode, --gpu, --template/--snapshot, --disk-size-gb, and --num-gpus or --vcpus)")
+			return usageErr("all flags required in non-interactive mode (--mode, --gpu, --template/--snapshot, --persistent-disk, and --num-gpus or --vcpus)")
 		}
 		// No flags set — full interactive TUI
 		createConfig, err = tui.RunCreateInteractive(client, specs)
@@ -214,7 +216,7 @@ func runCreate(cmd *cobra.Command) error {
 			return usageErr("no templates available")
 		}
 
-		diskSizeWasSet := cmd.Flags().Changed("disk-size-gb")
+		diskSizeWasSet := cmd.Flags().Changed("persistent-disk") || cmd.Flags().Changed("disk-size-gb")
 		createConfig = &tui.CreateConfig{
 			Mode:            mode,
 			GPUType:         gpuType,
@@ -254,7 +256,7 @@ func runCreate(cmd *cobra.Command) error {
 		}
 	} else {
 		if !interactive {
-			return usageErr("all flags required in non-interactive mode (--mode, --gpu, --template/--snapshot, --disk-size-gb, and --num-gpus or --vcpus)")
+			return usageErr("all flags required in non-interactive mode (--mode, --gpu, --template/--snapshot, --persistent-disk, and --num-gpus or --vcpus)")
 		}
 		// Partial flags — hybrid TUI
 		createConfig, err = tui.RunCreateHybrid(client, specs, presets)
