@@ -49,14 +49,14 @@ if [[ -n "$LATEST_URL" ]]; then
 elif [[ -n "$VERSION" ]]; then
   VERSION="${VERSION#v}"
   url="https://github.com/Thunder-Compute/thunder-cli/releases/download/v${VERSION}/tnr_${VERSION}_${FILE_OS}_${ARCH}.tar.gz"
-  checksums="https://github.com/Thunder-Compute/thunder-cli/releases/download/v${VERSION}/checksums-${OS}.txt"
+  checksums="https://github.com/Thunder-Compute/thunder-cli/releases/download/v${VERSION}/checksums.txt"
 else
   echo "Fetching latest release from GitHub..."
   curl -fsSL -H "Accept: application/vnd.github+json" "$GITHUB_API" -o "$tmpdir/release.json"
   VERSION=$(jq -r '.tag_name' "$tmpdir/release.json")
   VERSION="${VERSION#v}"
   url="https://github.com/Thunder-Compute/thunder-cli/releases/download/v${VERSION}/tnr_${VERSION}_${FILE_OS}_${ARCH}.tar.gz"
-  checksums="https://github.com/Thunder-Compute/thunder-cli/releases/download/v${VERSION}/checksums-${OS}.txt"
+  checksums="https://github.com/Thunder-Compute/thunder-cli/releases/download/v${VERSION}/checksums.txt"
 fi
 
 # Download and verify
