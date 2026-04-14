@@ -235,26 +235,42 @@ func TestSaveConfigCreatesDirectory(t *testing.T) {
 	assert.FileExists(t, configFile)
 }
 
-// TestSaveConfigPermissionError verifies that the saveConfig function properly
-// handles errors when the .thunder directory cannot be created.
+// TestSaveConfigPermissionError verifies that saveConfig surfaces a clear
+// error when TNR_HOME points at an unusable path. TNR_HOME is an explicit
+// override, so there is no fallback — failures must propagate.
 func TestSaveConfigPermissionError(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	thunderDir := filepath.Join(tmpDir, ".thunder")
-	err := os.WriteFile(thunderDir, []byte("not a directory"), 0600)
-	require.NoError(t, err)
+	// Create a regular file where TNR_HOME points, so MkdirAll fails.
+	blocker := filepath.Join(tmpDir, "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a directory"), 0600))
 
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", tmpDir)
+	t.Setenv("TNR_HOME", blocker)
 
-	authResp := AuthResponse{
-		Token: "test_token",
-	}
-
-	err = saveConfig(authResp)
+	err := saveConfig(AuthResponse{Token: "test_token"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not a directory")
+}
+
+// TestSaveConfigFallback verifies that saveConfig succeeds via a fallback
+// directory when $HOME/.thunder is not usable, so agents running in
+// sandboxes with read-only HOME don't hit a hard failure.
+func TestSaveConfigFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Block $HOME/.thunder by putting a file there.
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".thunder"), []byte("x"), 0600))
+
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(tmpDir, "cache"))
+	t.Setenv("TNR_HOME", "")
+
+	require.NoError(t, saveConfig(AuthResponse{Token: "test_token"}))
+
+	// Config must have landed in the UserCacheDir fallback, not under $HOME/.thunder.
+	cacheBase, err := os.UserCacheDir()
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(cacheBase, "thunder", "cli_config.json"))
 }
 
 // TestLoginCommandTableDriven provides comprehensive test coverage for various
