@@ -242,7 +242,7 @@ func runCreate(cmd *cobra.Command) error {
 			if pricing, pErr := client.FetchPricing(); pErr == nil {
 				pd := &utils.PricingData{Rates: pricing}
 				included := specs.IncludedVCPUs(createConfig.GPUType, createConfig.NumGPUs, createConfig.Mode)
-				price := utils.CalculateHourlyPrice(pd, createConfig.Mode, createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB, included)
+				price := utils.CalculateHourlyPrice(pd, createConfig.Mode, createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB, createConfig.EphemeralDiskGB, included)
 				fmt.Printf("\nEstimated cost: %s\n", utils.FormatPrice(price))
 			}
 
