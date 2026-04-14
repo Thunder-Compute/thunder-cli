@@ -202,7 +202,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 			},
 			expectError:   true,
-			errorContains: "template 'nonexistent' not found",
+			errorContains: "template or snapshot 'nonexistent' not found",
 		},
 	}
 
