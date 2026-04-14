@@ -18,6 +18,7 @@ func testPricingData() *PricingData {
 			"h100_x1_production":    3.49,
 			"additional_vcpus":      0.03,
 			"disk_gb":               0.0001,
+			"ephemeral_disk_gb":     0.0002,
 		},
 	}
 }
@@ -26,15 +27,16 @@ func TestCalculateHourlyPrice(t *testing.T) {
 	p := testPricingData()
 
 	tests := []struct {
-		name         string
-		pricing      *PricingData
-		mode         string
-		gpuType      string
-		numGPUs      int
-		vcpus        int
-		diskSizeGB   int
-		includedVCPU int
-		expected     float64
+		name            string
+		pricing         *PricingData
+		mode            string
+		gpuType         string
+		numGPUs         int
+		vcpus           int
+		diskSizeGB      int
+		ephemeralDiskGB int
+		includedVCPU    int
+		expected        float64
 	}{
 		{
 			name:         "nil pricing returns zero",
@@ -82,7 +84,7 @@ func TestCalculateHourlyPrice(t *testing.T) {
 			expected: 0.50 + 0.12,
 		},
 		{
-			name:         "production mode ignores extra vCPU charges",
+			name:         "production mode with included vCPUs has no surcharge",
 			pricing:      p,
 			mode:         "production",
 			gpuType:      "a100xl",
@@ -166,11 +168,24 @@ func TestCalculateHourlyPrice(t *testing.T) {
 			includedVCPU: 4,
 			expected:     0,
 		},
+		{
+			name:            "ephemeral disk cost",
+			pricing:         p,
+			mode:            "prototyping",
+			gpuType:         "a6000",
+			numGPUs:         1,
+			vcpus:           4,
+			diskSizeGB:      100,
+			ephemeralDiskGB: 200,
+			includedVCPU:    4,
+			// 200 * 0.0002 = 0.04
+			expected: 0.50 + 0.04,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CalculateHourlyPrice(tt.pricing, tt.mode, tt.gpuType, tt.numGPUs, tt.vcpus, tt.diskSizeGB, tt.includedVCPU)
+			got := CalculateHourlyPrice(tt.pricing, tt.mode, tt.gpuType, tt.numGPUs, tt.vcpus, tt.diskSizeGB, tt.ephemeralDiskGB, tt.includedVCPU)
 			assert.InDelta(t, tt.expected, got, 0.001)
 		})
 	}

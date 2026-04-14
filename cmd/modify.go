@@ -223,8 +223,13 @@ func runModify(cmd *cobra.Command, args []string) error {
 			resultVCPUs = vcpuOpts[0]
 		}
 
+		resultEphemeral := selectedInstance.EphemeralDiskGB
+		if modifyReq.EphemeralDiskGB != nil {
+			resultEphemeral = *modifyReq.EphemeralDiskGB
+		}
+
 		included := specs.IncludedVCPUs(resultGPU, resultNumGPUs, resultMode)
-		price := utils.CalculateHourlyPrice(pd, resultMode, resultGPU, resultNumGPUs, resultVCPUs, resultDisk, included)
+		price := utils.CalculateHourlyPrice(pd, resultMode, resultGPU, resultNumGPUs, resultVCPUs, resultDisk, resultEphemeral, included)
 		fmt.Printf("\nEstimated cost: %s\n", utils.FormatPrice(price))
 	}
 

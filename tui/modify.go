@@ -764,8 +764,10 @@ func (m modifyModel) computePreviewPrice() float64 {
 		}
 	}
 
+	ephemeralDiskGB := m.config.EphemeralDiskGB
+
 	included := m.specs.IncludedVCPUs(gpuType, numGPUs, mode)
-	return utils.CalculateHourlyPrice(m.pricing, mode, gpuType, numGPUs, vcpus, diskSizeGB, included)
+	return utils.CalculateHourlyPrice(m.pricing, mode, gpuType, numGPUs, vcpus, diskSizeGB, ephemeralDiskGB, included)
 }
 
 func (m modifyModel) renderModeStep() string {
