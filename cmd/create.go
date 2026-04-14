@@ -26,6 +26,7 @@ var (
 	numGPUs          int
 	vcpus            int
 	template         string
+	snapshotAlias    string
 	diskSizeGB       int
 	ephemeralDiskGB  int
 	createSSHKeyName string
@@ -48,7 +49,8 @@ func init() {
 	createCmd.Flags().StringVar(&gpuType, "gpu", "", "GPU type (prototyping: a6000, a100, or h100; production: a100 or h100)")
 	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs: 1-8 (production), 1-2 for A100/H100 (prototyping)")
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): options vary by GPU type and count")
-	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name")
+	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name (accepts snapshot names too; --snapshot is an alias)")
+	createCmd.Flags().StringVar(&snapshotAlias, "snapshot", "", "Alias for --template; accepts a snapshot name or template key")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (range depends on GPU config)")
 	createCmd.Flags().IntVar(&ephemeralDiskGB, "ephemeral-disk-gb", 0, "Ephemeral storage in GB, mounted at /ephemeral (default: 0)")
 	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-key", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
@@ -106,7 +108,7 @@ func buildCreatePresets(cmd *cobra.Command) *tui.CreatePresets {
 	if cmd.Flags().Changed("vcpus") {
 		p.VCPUs = &vcpus
 	}
-	if cmd.Flags().Changed("template") {
+	if templateFlagChanged(cmd) {
 		p.Template = &template
 	}
 	if cmd.Flags().Changed("disk-size-gb") {
@@ -118,9 +120,28 @@ func buildCreatePresets(cmd *cobra.Command) *tui.CreatePresets {
 	return p
 }
 
+func templateFlagChanged(cmd *cobra.Command) bool {
+	return cmd.Flags().Changed("template") || cmd.Flags().Changed("snapshot")
+}
+
+// resolveTemplateAlias reconciles --template and --snapshot. They're aliases,
+// so using both with different values is an error; using only --snapshot copies
+// its value into the shared template var.
+func resolveTemplateAlias(cmd *cobra.Command) error {
+	templateSet := cmd.Flags().Changed("template")
+	snapshotSet := cmd.Flags().Changed("snapshot")
+	if templateSet && snapshotSet && template != snapshotAlias {
+		return usageErr("--template and --snapshot are aliases; use only one")
+	}
+	if snapshotSet && !templateSet {
+		template = snapshotAlias
+	}
+	return nil
+}
+
 func hasAllCreateFlags(cmd *cobra.Command) bool {
 	if !cmd.Flags().Changed("mode") || !cmd.Flags().Changed("gpu") ||
-		!cmd.Flags().Changed("template") || !cmd.Flags().Changed("disk-size-gb") {
+		!templateFlagChanged(cmd) || !cmd.Flags().Changed("disk-size-gb") {
 		return false
 	}
 	m, _ := cmd.Flags().GetString("mode")
@@ -131,6 +152,10 @@ func hasAllCreateFlags(cmd *cobra.Command) bool {
 }
 
 func runCreate(cmd *cobra.Command) error {
+	if err := resolveTemplateAlias(cmd); err != nil {
+		return err
+	}
+
 	client, err := getAuthenticatedClient()
 	if err != nil {
 		return err
@@ -151,7 +176,7 @@ func runCreate(cmd *cobra.Command) error {
 
 	if presets.IsEmpty() {
 		if !interactive {
-			return usageErr("all flags required in non-interactive mode (--mode, --gpu, --template, --disk-size-gb, and --num-gpus or --vcpus)")
+			return usageErr("all flags required in non-interactive mode (--mode, --gpu, --template/--snapshot, --disk-size-gb, and --num-gpus or --vcpus)")
 		}
 		// No flags set — full interactive TUI
 		createConfig, err = tui.RunCreateInteractive(client, specs)
@@ -229,7 +254,7 @@ func runCreate(cmd *cobra.Command) error {
 		}
 	} else {
 		if !interactive {
-			return usageErr("all flags required in non-interactive mode (--mode, --gpu, --template, --disk-size-gb, and --num-gpus or --vcpus)")
+			return usageErr("all flags required in non-interactive mode (--mode, --gpu, --template/--snapshot, --disk-size-gb, and --num-gpus or --vcpus)")
 		}
 		// Partial flags — hybrid TUI
 		createConfig, err = tui.RunCreateHybrid(client, specs, presets)
@@ -374,7 +399,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	}
 
 	if config.Template == "" {
-		return usageErr("template is required (use --template flag)")
+		return usageErr("template is required (use --template or --snapshot flag)")
 	}
 
 	// Check if template is actually a snapshot
@@ -402,7 +427,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	}
 
 	if !templateFound {
-		return usageErr("template '%s' not found. Run 'tnr templates' to list available templates", config.Template)
+		return usageErr("template or snapshot '%s' not found. Run 'tnr templates' to list available templates and 'tnr snapshots' for snapshots", config.Template)
 	}
 
 	// If a snapshot was selected, set default disk size or validate minimum
