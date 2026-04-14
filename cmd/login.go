@@ -22,6 +22,7 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
 const (
@@ -503,13 +504,8 @@ func openBrowser(url string) error {
 }
 
 func saveConfig(authResp AuthResponse) error {
-	homeDir, err := os.UserHomeDir()
+	configDir, err := utils.ThunderDir()
 	if err != nil {
-		return err
-	}
-
-	configDir := filepath.Join(homeDir, ".thunder")
-	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		return err
 	}
 
@@ -567,12 +563,12 @@ func LoadConfig() (*Config, error) {
 		return config, nil
 	}
 
-	homeDir, err := os.UserHomeDir()
+	configDir, err := utils.ThunderDir()
 	if err != nil {
 		return nil, err
 	}
 
-	configPath := filepath.Join(homeDir, ".thunder", "cli_config.json")
+	configPath := filepath.Join(configDir, "cli_config.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, err
@@ -617,12 +613,12 @@ func init() {
 func runLogout() error {
 	envToken := os.Getenv("TNR_API_TOKEN")
 
-	homeDir, err := os.UserHomeDir()
+	configDir, err := utils.ThunderDir()
 	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
+		return fmt.Errorf("failed to resolve thunder directory: %w", err)
 	}
 
-	configPath := filepath.Join(homeDir, ".thunder", "cli_config.json")
+	configPath := filepath.Join(configDir, "cli_config.json")
 	configExists := true
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		configExists = false
