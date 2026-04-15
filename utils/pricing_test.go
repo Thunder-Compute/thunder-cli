@@ -118,7 +118,7 @@ func TestCalculateHourlyPrice(t *testing.T) {
 			expected:     2.49,
 		},
 		{
-			name:         "vCPU tiered pricing: beyond 32 total at 1.5x rate",
+			name:         "vCPU pricing: beyond 32 total at flat rate",
 			pricing:      p,
 			mode:         "prototyping",
 			gpuType:      "a100xl",
@@ -127,10 +127,8 @@ func TestCalculateHourlyPrice(t *testing.T) {
 			diskSizeGB:   100,
 			includedVCPU: 8,
 			// extra = 40-8 = 32
-			// coresAtNormal = min(32, 32-8) = 24
-			// coresBeyond = 32-24 = 8
-			// vcpuCost = 24*0.03 + 8*0.03*1.5 = 0.72 + 0.36 = 1.08
-			expected: 2.20 + 1.08,
+			// vcpuCost = 32 * 0.03 = 0.96
+			expected: 2.20 + 0.96,
 		},
 		{
 			name:         "all extras combined",

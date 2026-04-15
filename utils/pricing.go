@@ -30,10 +30,7 @@ func CalculateHourlyPrice(p *PricingData, mode, gpuType string, numGPUs, vcpus, 
 	extra := max(0, vcpus-included)
 	if extra > 0 {
 		rate := p.Rates["additional_vcpus"]
-		// Cores up to 32 total at normal rate, beyond 32 at 1.5x rate
-		coresAtNormal := max(0, min(extra, 32-included))
-		coresBeyond := extra - coresAtNormal
-		vcpuCost = float64(coresAtNormal)*rate + float64(coresBeyond)*rate*1.5
+		vcpuCost = float64(extra) * rate
 	}
 
 	var diskCost float64
