@@ -11,7 +11,7 @@ Add to your MCP configuration:
 {
   "mcpServers": {
     "thunder-compute": {
-      "serverUrl": "https://api.thundercompute.com:8443/mcp",
+      "serverUrl": "https://thundercompute.com/mcp",
       "headers": {
         "Content-Type": "application/json"
       }

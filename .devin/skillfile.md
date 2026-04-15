@@ -20,7 +20,7 @@ Connect to the hosted MCP server with OAuth authentication:
   "mcpServers": {
     "thunder-compute": {
       "type": "http",
-      "url": "https://api.thundercompute.com:8443/mcp"
+      "url": "https://thundercompute.com/mcp"
     }
   }
 }
