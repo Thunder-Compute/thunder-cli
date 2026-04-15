@@ -10,7 +10,7 @@ Thunder Compute provides a remote MCP server that lets AI coding agents manage G
 
 | Agent | Setup |
 |-------|-------|
-| Claude Code | `/mcp add --transport http https://thundercompute.com/mcp` |
+| Claude Code | `/mcp add --transport http https://www.thundercompute.com/mcp` |
 | Cursor | Add to `.cursor/mcp.json` (see config below) |
 | Windsurf | Add to MCP settings (see config below) |
 | Other agents | POST to endpoint with OAuth 2.0 |
@@ -20,7 +20,7 @@ Thunder Compute provides a remote MCP server that lets AI coding agents manage G
   "mcpServers": {
     "thunder-compute": {
       "type": "http",
-      "url": "https://thundercompute.com/mcp"
+      "url": "https://www.thundercompute.com/mcp"
     }
   }
 }
