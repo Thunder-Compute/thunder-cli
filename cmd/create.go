@@ -432,19 +432,23 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 		return usageErr("template or snapshot '%s' not found. Run 'tnr templates' to list available templates and 'tnr snapshots' for snapshots", config.Template)
 	}
 
-	// If a snapshot was selected, set default disk size or validate minimum
-	if selectedSnapshot != nil {
-		if !diskSizeWasSet {
-			config.DiskSizeGB = selectedSnapshot.MinimumDiskSizeGB
-		} else {
-			if config.DiskSizeGB < selectedSnapshot.MinimumDiskSizeGB {
-				return usageErr("disk size must be at least %d GB for snapshot '%s'", selectedSnapshot.MinimumDiskSizeGB, selectedSnapshot.Name)
-			}
-		}
+	// Default disk size to the snapshot's size when unspecified.
+	if selectedSnapshot != nil && !diskSizeWasSet {
+		config.DiskSizeGB = selectedSnapshot.MinimumDiskSizeGB
 	}
 
-	// Validate disk size against spec storage range
+	// Validate disk size. With a snapshot the range becomes
+	// [max(minSpec, snapshot), max(maxSpec, snapshot)]: disk must be at least the
+	// snapshot's size, and snapshots larger than maxSpec restore as-is.
 	minStorage, maxStorage := specs.StorageRange(config.GPUType, config.NumGPUs, config.Mode)
+	if selectedSnapshot != nil {
+		if selectedSnapshot.MinimumDiskSizeGB > minStorage {
+			minStorage = selectedSnapshot.MinimumDiskSizeGB
+		}
+		if selectedSnapshot.MinimumDiskSizeGB > maxStorage {
+			maxStorage = selectedSnapshot.MinimumDiskSizeGB
+		}
+	}
 	if config.DiskSizeGB < minStorage || config.DiskSizeGB > maxStorage {
 		return usageErr("disk size must be between %d and %d GB", minStorage, maxStorage)
 	}

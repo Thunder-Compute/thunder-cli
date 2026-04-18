@@ -736,8 +736,13 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 
 	case stepDiskSize, stepEphemeralDiskSize:
 		minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
-		if m.selectedSnapshot != nil && m.selectedSnapshot.MinimumDiskSizeGB > minDisk {
-			minDisk = m.selectedSnapshot.MinimumDiskSizeGB
+		if m.selectedSnapshot != nil {
+			if m.selectedSnapshot.MinimumDiskSizeGB > minDisk {
+				minDisk = m.selectedSnapshot.MinimumDiskSizeGB
+			}
+			if m.selectedSnapshot.MinimumDiskSizeGB > maxDisk {
+				maxDisk = m.selectedSnapshot.MinimumDiskSizeGB
+			}
 		}
 		diskSize, err := strconv.Atoi(m.diskInput.Value())
 		if err != nil || diskSize < minDisk || diskSize > maxDisk {
