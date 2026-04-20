@@ -23,6 +23,7 @@ const (
 	InstanceStatus_Modifying    InstanceStatus = "MODIFYING"
 	InstanceStatus_Snapshotting InstanceStatus = "SNAPPING"
 	InstanceStatus_Restoring    InstanceStatus = "RESTORING"
+	InstanceStatus_Migrating    InstanceStatus = "MIGRATING"
 )
 
 // InstanceMode represents the mode of operation for an instance.
