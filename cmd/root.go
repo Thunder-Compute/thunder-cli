@@ -12,6 +12,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
@@ -36,8 +37,16 @@ var rootCmd = &cobra.Command{
 	Version:       version.BuildVersion,
 	SilenceErrors: true,
 	Run: func(cmd *cobra.Command, args []string) {
+		if v, err := cmd.Flags().GetBool("version"); err == nil && v {
+			fmt.Fprint(cmd.OutOrStdout(), versionTemplate())
+			return
+		}
 		helpmenus.RenderRootHelp(cmd)
 	},
+}
+
+func versionTemplate() string {
+	return fmt.Sprintf("tnr version %s\n", version.BuildVersion)
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -100,6 +109,22 @@ func isUserError(err error) bool {
 	if errors.Is(err, utils.ErrSSHUnreachable) {
 		return true
 	}
+	var notExistErr *pflag.NotExistError
+	if errors.As(err, &notExistErr) {
+		return true
+	}
+	var valueReqErr *pflag.ValueRequiredError
+	if errors.As(err, &valueReqErr) {
+		return true
+	}
+	var invalidValErr *pflag.InvalidValueError
+	if errors.As(err, &invalidValErr) {
+		return true
+	}
+	var invalidSyntaxErr *pflag.InvalidSyntaxError
+	if errors.As(err, &invalidSyntaxErr) {
+		return true
+	}
 	// Transport-level HTTP failures (DNS, conn refused, TLS, EOF, reset):
 	// classified at the api.Client boundary. Never a CLI bug.
 	if errors.Is(err, api.ErrTransport) {
@@ -130,6 +155,10 @@ func isUserError(err error) bool {
 
 func init() {
 	tui.InitCommonStyles(os.Stdout)
+	rootCmd.SetVersionTemplate(versionTemplate())
+	if rootCmd.Flags().Lookup("version") == nil {
+		rootCmd.Flags().BoolP("version", "v", false, "Show version information")
+	}
 
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return fmt.Errorf("%w: %s", ErrUsage, err)
