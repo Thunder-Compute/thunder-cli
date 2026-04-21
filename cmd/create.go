@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
-	"github.com/Thunder-Compute/thunder-cli/internal/sshkeys"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
@@ -21,15 +19,14 @@ import (
 )
 
 var (
-	mode             string
-	gpuType          string
-	numGPUs          int
-	vcpus            int
-	template         string
-	snapshotAlias    string
-	diskSizeGB       int
-	ephemeralDiskGB  int
-	createSSHKeyName string
+	mode            string
+	gpuType         string
+	numGPUs         int
+	vcpus           int
+	template        string
+	snapshotAlias   string
+	diskSizeGB      int
+	ephemeralDiskGB int
 )
 
 var createCmd = &cobra.Command{
@@ -55,9 +52,6 @@ func init() {
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (range depends on GPU config)")
 	_ = createCmd.Flags().MarkHidden("disk-size-gb")
 	createCmd.Flags().IntVar(&ephemeralDiskGB, "ephemeral-disk", 0, "Ephemeral storage in GB, mounted at /ephemeral (default: 0)")
-	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-key", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
-	createCmd.Flags().StringVar(&createSSHKeyName, "ssh-keys", "", "[Optional] Name of an external SSH key to attach (see 'tnr ssh-keys --help')")
-	_ = createCmd.Flags().MarkHidden("ssh-keys")
 }
 
 func createInstanceCmd(client *api.Client, req api.CreateInstanceRequest, resp **api.CreateInstanceResponse) tea.Cmd {
@@ -269,36 +263,6 @@ func runCreate(cmd *cobra.Command) error {
 		}
 	}
 
-	// Resolve SSH key if --ssh-key flag was provided
-	var resolvedPublicKey string
-	var privateKeyPath string
-	if createSSHKeyName != "" {
-		keys, err := client.ListSSHKeys()
-		if err != nil {
-			return fmt.Errorf("failed to fetch SSH keys: %w", err)
-		}
-
-		var matchedKey *api.SSHKey
-		for i := range keys {
-			if strings.EqualFold(keys[i].Name, createSSHKeyName) {
-				matchedKey = &keys[i]
-				break
-			}
-		}
-
-		if matchedKey == nil {
-			return usageErr("SSH key '%s' not found. Run 'tnr ssh-keys list' to see available keys", createSSHKeyName)
-		}
-
-		// Verify local private key exists so user can connect later
-		privateKeyPath, err = sshkeys.FindPrivateKeyForPublicKey(matchedKey.PublicKey)
-		if err != nil {
-			return fmt.Errorf("failed to find local private key for '%s': %w", createSSHKeyName, err)
-		}
-
-		resolvedPublicKey = matchedKey.PublicKey
-	}
-
 	req := api.CreateInstanceRequest{
 		Mode:            api.InstanceMode(createConfig.Mode),
 		GPUType:         createConfig.GPUType,
@@ -307,7 +271,6 @@ func runCreate(cmd *cobra.Command) error {
 		Template:        createConfig.Template,
 		DiskSizeGB:      createConfig.DiskSizeGB,
 		EphemeralDiskGB: createConfig.EphemeralDiskGB,
-		PublicKey:       resolvedPublicKey,
 	}
 
 	var resp *api.CreateInstanceResponse
@@ -344,16 +307,6 @@ func runCreate(cmd *cobra.Command) error {
 
 		if result.Err() != nil {
 			return fmt.Errorf("failed to create instance: %w", result.Err())
-		}
-	}
-
-	// Symlink user's private key so `tnr connect` finds it automatically
-	if privateKeyPath != "" && resp != nil {
-		keyFile := utils.GetKeyFile(resp.UUID)
-		_ = os.MkdirAll(filepath.Dir(keyFile), 0o700)
-		_ = os.Remove(keyFile)
-		if err := os.Symlink(privateKeyPath, keyFile); err != nil {
-			PrintWarningSimple(fmt.Sprintf("Could not link SSH key for auto-connect: %v", err))
 		}
 	}
 

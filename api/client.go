@@ -239,39 +239,6 @@ func (c *Client) DeleteSnapshot(snapshotID string) error {
 	return c.doRequest(context.Background(), "DELETE", fmt.Sprintf("/v1/snapshots/%s", snapshotID), nil, nil)
 }
 
-func (c *Client) ListSSHKeys() (SSHKeyListResponse, error) {
-	var resp SSHKeyListResponse
-	if err := c.doRequest(context.Background(), "GET", "/v1/keys/list", nil, &resp); err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-// AddSSHKeyToOrg adds an SSH public key to the user's organization.
-func (c *Client) AddSSHKeyToOrg(name, publicKey string) (*SSHKeyAddResponse, error) {
-	var resp SSHKeyAddResponse
-	if err := c.doRequest(context.Background(), "POST", "/v1/keys/add", SSHKeyAddRequest{Name: name, PublicKey: publicKey}, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}
-
-func (c *Client) DeleteSSHKey(keyID string) error {
-	return c.doRequest(context.Background(), "DELETE", fmt.Sprintf("/v1/keys/%s", keyID), nil, nil)
-}
-
-// AddSSHKeyToInstanceWithPublicKey adds an existing public key to an instance.
-func (c *Client) AddSSHKeyToInstanceWithPublicKey(instanceID, publicKey string) (*AddSSHKeyResponse, error) {
-	body := struct {
-		PublicKey string `json:"public_key"`
-	}{PublicKey: publicKey}
-	var resp AddSSHKeyResponse
-	if err := c.doRequest(context.Background(), "POST", fmt.Sprintf("/v1/instances/%s/add_key", instanceID), body, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}
-
 // FetchPricing retrieves the public pricing data from the API.
 func (c *Client) FetchPricing() (map[string]float64, error) {
 	var result struct {
