@@ -125,14 +125,13 @@ func (i *InstanceListItem) UnmarshalJSON(data []byte) error {
 
 // InstanceCreateRequest represents the request body for creating an instance.
 type InstanceCreateRequest struct {
-	CPUCores      int          `json:"cpu_cores"`
-	Mode          InstanceMode `json:"mode"`
-	Template      string       `json:"template"`
-	GPUType       string       `json:"gpu_type"`
-	NumGPUs       int          `json:"num_gpus"`
-	DiskSizeGB    int          `json:"disk_size_gb"`
+	CPUCores        int          `json:"cpu_cores"`
+	Mode            InstanceMode `json:"mode"`
+	Template        string       `json:"template"`
+	GPUType         string       `json:"gpu_type"`
+	NumGPUs         int          `json:"num_gpus"`
+	DiskSizeGB      int          `json:"disk_size_gb"`
 	EphemeralDiskGB int          `json:"ephemeral_disk_gb,omitempty"`
-	PublicKey     string       `json:"public_key,omitempty"`
 }
 
 // InstanceCreateResponse represents the response from creating an instance.
@@ -220,36 +219,6 @@ type EnvironmentTemplate struct {
 
 // ThunderTemplatesResponse is the response from the /thunder-templates endpoint.
 type ThunderTemplatesResponse map[string]EnvironmentTemplate
-
-// SSHKey represents an organization-level SSH public key.
-type SSHKey struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	PublicKey   string `json:"public_key"`
-	Fingerprint string `json:"fingerprint"`
-	KeyType     string `json:"key_type"`
-	CreatedAt   int64  `json:"created_at"`
-}
-
-// SSHKeyAddRequest is the request body for adding an SSH key.
-type SSHKeyAddRequest struct {
-	Name      string `json:"name"`
-	PublicKey string `json:"public_key"`
-}
-
-// SSHKeyAddResponse is the response from adding an SSH key.
-type SSHKeyAddResponse struct {
-	Key     SSHKey `json:"key"`
-	Message string `json:"message"`
-}
-
-// SSHKeyListResponse is the list of organization SSH keys.
-type SSHKeyListResponse []SSHKey
-
-// SSHKeyDeleteResponse is the response from deleting an SSH key.
-type SSHKeyDeleteResponse struct {
-	Message string `json:"message"`
-}
 
 // ValidateTokenResponse represents the response from token validation.
 type ValidateTokenResponse struct {

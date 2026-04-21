@@ -76,7 +76,7 @@ func RenderRootHelp(cmd *cobra.Command) {
 	}
 	sections := []section{
 		{"CORE", []string{"create", "status", "connect", "modify", "delete"}},
-		{"UTILS", []string{"scp", "ports", "snapshot", "ssh-keys"}},
+		{"UTILS", []string{"scp", "ports", "snapshot"}},
 		{"SETTINGS", []string{"login", "logout", "update"}},
 	}
 
