@@ -68,10 +68,28 @@ func newSnapshotListModel(client *api.Client, monitoring bool, snapshots api.Lis
 
 func (m snapshotListModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.spinner.Tick}
-	if m.monitoring {
+	if m.monitoring && hasRecentCreatingSnapshots(m.snapshots) {
 		cmds = append(cmds, snapshotsTickCmd())
 	}
 	return tea.Batch(cmds...)
+}
+
+const recentCreatingBudget = 30 * time.Minute
+
+func hasRecentCreatingSnapshots(snapshots api.ListSnapshotsResponse) bool {
+	now := time.Now()
+	for _, s := range snapshots {
+		if s.Status != "CREATING" {
+			continue
+		}
+		if s.CreatedAt <= 0 {
+			continue
+		}
+		if now.Sub(time.Unix(s.CreatedAt, 0)) < recentCreatingBudget {
+			return true
+		}
+	}
+	return false
 }
 
 func snapshotsTickCmd() tea.Cmd {
@@ -124,12 +142,14 @@ func (m snapshotListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.snapshots = msg.snapshots
 		m.lastUpdate = time.Now()
 
-		if m.monitoring {
+		if m.monitoring && hasRecentCreatingSnapshots(m.snapshots) {
 			return m, snapshotsTickCmd()
 		}
 
-		m.quitting = true
-		return m, deferQuit()
+		if !m.monitoring {
+			m.quitting = true
+			return m, deferQuit()
+		}
 	}
 
 	return m, nil
