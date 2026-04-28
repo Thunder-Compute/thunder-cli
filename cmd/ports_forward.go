@@ -34,11 +34,8 @@ Examples:
   tnr ports forward 1 --add 8080,3000
   tnr ports forward 1 --add 9000-9010
   tnr ports fwd 1 --add 8080 --remove 443`,
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := runPortsForward(cmd, args); err != nil {
-			PrintError(err)
-			os.Exit(1)
-		}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runPortsForward(cmd, args)
 	},
 }
 
