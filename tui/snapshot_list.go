@@ -68,16 +68,15 @@ func newSnapshotListModel(client *api.Client, monitoring bool, snapshots api.Lis
 
 func (m snapshotListModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.spinner.Tick}
-	if m.monitoring && hasRecentCreatingSnapshots(m.snapshots) {
-		cmds = append(cmds, snapshotsTickCmd())
+	if delay, ok := nextSnapshotPollDelay(m.snapshots); m.monitoring && ok {
+		cmds = append(cmds, snapshotsTickCmd(delay))
 	}
 	return tea.Batch(cmds...)
 }
 
-const recentCreatingBudget = 30 * time.Minute
-
-func hasRecentCreatingSnapshots(snapshots api.ListSnapshotsResponse) bool {
+func nextSnapshotPollDelay(snapshots api.ListSnapshotsResponse) (time.Duration, bool) {
 	now := time.Now()
+	oldestCreatingAge := time.Duration(-1)
 	for _, s := range snapshots {
 		if s.Status != "CREATING" {
 			continue
@@ -85,15 +84,26 @@ func hasRecentCreatingSnapshots(snapshots api.ListSnapshotsResponse) bool {
 		if s.CreatedAt <= 0 {
 			continue
 		}
-		if now.Sub(time.Unix(s.CreatedAt, 0)) < recentCreatingBudget {
-			return true
+		age := now.Sub(time.Unix(s.CreatedAt, 0))
+		if age > oldestCreatingAge {
+			oldestCreatingAge = age
 		}
 	}
-	return false
+	if oldestCreatingAge < 0 {
+		return 0, false
+	}
+	switch {
+	case oldestCreatingAge < 30*time.Minute:
+		return 30 * time.Second, true
+	case oldestCreatingAge < 2*time.Hour:
+		return 2 * time.Minute, true
+	default:
+		return 5 * time.Minute, true
+	}
 }
 
-func snapshotsTickCmd() tea.Cmd {
-	return tea.Tick(30*time.Second, func(t time.Time) tea.Msg {
+func snapshotsTickCmd(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -142,8 +152,8 @@ func (m snapshotListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.snapshots = msg.snapshots
 		m.lastUpdate = time.Now()
 
-		if m.monitoring && hasRecentCreatingSnapshots(m.snapshots) {
-			return m, snapshotsTickCmd()
+		if delay, ok := nextSnapshotPollDelay(m.snapshots); m.monitoring && ok {
+			return m, snapshotsTickCmd(delay)
 		}
 
 		if !m.monitoring {
