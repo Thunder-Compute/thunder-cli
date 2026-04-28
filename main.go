@@ -43,7 +43,7 @@ func main() {
 		}
 	}()
 
-	cmd.Execute()
+	os.Exit(cmd.Execute())
 }
 
 func initSentry() error {

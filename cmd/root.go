@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/tty"
+
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
 	"github.com/Thunder-Compute/thunder-cli/internal/updatepolicy"
@@ -50,8 +52,26 @@ func versionTemplate() string {
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute() {
+// Returns the process exit code; main is responsible for os.Exit so deferred tty
+// restore runs on every path (os.Exit skips defers).
+func Execute() int {
+	// Heal an inherited-broken tty (e.g. left in raw mode by a previous tnr
+	// process that was SIGKILL'd) before snapshotting. Detect-and-heal only
+	// touches the tty when canonical cooked-mode bits are missing, so users
+	// with custom termios setups are unaffected. No-op on Windows.
+	tty.Heal()
+	// Snapshot tty state on entry so a panic or error-return from any subcommand
+	// (typically a Bubble Tea TUI that put the terminal in raw mode and didn't
+	// get a chance to restore it) doesn't strand the user's shell.
+	restoreTTY := tty.Snapshot()
+	defer restoreTTY()
+	defer func() {
+		if r := recover(); r != nil {
+			restoreTTY()
+			panic(r)
+		}
+	}()
+
 	c, err := rootCmd.ExecuteC()
 	if err != nil {
 		if !isUserError(err) {
@@ -65,8 +85,9 @@ func Execute() {
 			sentry.Flush(2 * time.Second)
 		}
 		PrintError(err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 var userErrorSubstrings = []string{
