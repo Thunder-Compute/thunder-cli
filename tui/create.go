@@ -882,6 +882,11 @@ func (m createModel) View() string {
 			}
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, display))
 		}
+		if m.cursor == 0 {
+			s.WriteString("\n")
+			warning := "⚠ Prototyping mode is optimized for development. Long running GPU processes may be interrupted. For production inference or batch training, use production mode.\n"
+			s.WriteString(warningStyleTUI.Render(warning))
+		}
 
 	case stepGPU:
 		if !m.specsLoaded {
@@ -1091,12 +1096,6 @@ func (m createModel) View() string {
 
 		s.WriteString(m.styles.Panel.Render(panel.String()))
 		s.WriteString("\n")
-
-		if m.config.Mode == "prototyping" {
-			warning := "⚠ Prototyping mode is optimized for dev/testing; switch to production mode for inference servers or large training runs.\n"
-			s.WriteString(warningStyleTUI.Render(warning))
-			s.WriteString("\n")
-		}
 
 		s.WriteString("Confirm creation?\n\n")
 		options := []string{"✓ Create Instance", "✗ Cancel"}
