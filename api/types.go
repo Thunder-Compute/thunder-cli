@@ -39,6 +39,12 @@ type GpuSpecConfig struct {
 	EphemeralStorageGB StorageRange `json:"ephemeralStorageGB"`
 }
 
+// GPUAvailabilityResponse represents GPU availability returned by /v1/status.
+type GPUAvailabilityResponse struct {
+	GPUType map[string]map[string]string `json:"gpu_type"`
+	Specs   map[string]string            `json:"specs"`
+}
+
 // TemplateEntry represents a template with its key, used for ordered iteration.
 type TemplateEntry struct {
 	Key      string
