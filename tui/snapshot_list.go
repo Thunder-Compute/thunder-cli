@@ -90,13 +90,17 @@ func nextSnapshotPollDelay(snapshots api.ListSnapshotsResponse) (time.Duration, 
 		}
 	}
 	if oldestCreatingAge < 0 {
-		return 0, false
+		return 60 * time.Second, true
 	}
 	switch {
-	case oldestCreatingAge < 30*time.Minute:
+	case oldestCreatingAge < 2*time.Minute:
+		return 10 * time.Second, true
+	case oldestCreatingAge < 10*time.Minute:
+		return 20 * time.Second, true
+	case oldestCreatingAge < time.Hour:
 		return 30 * time.Second, true
 	case oldestCreatingAge < 2*time.Hour:
-		return 2 * time.Minute, true
+		return 60 * time.Second, true
 	default:
 		return 5 * time.Minute, true
 	}
