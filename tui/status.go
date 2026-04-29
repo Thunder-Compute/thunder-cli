@@ -59,6 +59,8 @@ type statusModel struct {
 	cancelled    bool
 	progressBars map[string]progress.Model
 
+	transitionStartedAt time.Time
+
 	styles statusStyles
 }
 
@@ -74,7 +76,7 @@ type quitNow struct{}
 func newStatusModel(client *api.Client, monitoring bool, instances []api.Instance, verbose bool) statusModel {
 	s := NewPrimarySpinner()
 
-	return statusModel{
+	m := statusModel{
 		client:       client,
 		monitoring:   monitoring,
 		verbose:      verbose,
@@ -84,23 +86,49 @@ func newStatusModel(client *api.Client, monitoring bool, instances []api.Instanc
 		progressBars: make(map[string]progress.Model),
 		styles:       newStatusStyles(),
 	}
+	if hasTransitionalInstance(instances) {
+		m.transitionStartedAt = time.Now()
+	}
+	return m
 }
 
 func (m statusModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.spinner.Tick}
 	if m.monitoring {
-		cmds = append(cmds, tickCmd(m.instances))
+		cmds = append(cmds, tickCmd(m.transitionStartedAt))
 	}
 	return tea.Batch(cmds...)
 }
 
-func tickCmd(instances []api.Instance) tea.Cmd {
-	interval := 10 * time.Second
+func hasTransitionalInstance(instances []api.Instance) bool {
 	for _, inst := range instances {
-		if inst.Status == "PROVISIONING" || inst.Status == "RESTORING" || inst.Status == "UNKNOWN" {
-			interval = 5 * time.Second
-			break
+		switch inst.Status {
+		case "PROVISIONING", "RESTORING", "STARTING", "STAGING", "PENDING", "QUEUED", "UNKNOWN":
+			return true
 		}
+	}
+	return false
+}
+
+func nextInstancePollDelay(transitionAge time.Duration) time.Duration {
+	switch {
+	case transitionAge < 2*time.Minute:
+		return 1 * time.Second
+	case transitionAge < 10*time.Minute:
+		return 10 * time.Second
+	case transitionAge < time.Hour:
+		return 30 * time.Second
+	case transitionAge < 2*time.Hour:
+		return 60 * time.Second
+	default:
+		return 5 * time.Minute
+	}
+}
+
+func tickCmd(transitionStartedAt time.Time) tea.Cmd {
+	interval := 60 * time.Second
+	if !transitionStartedAt.IsZero() {
+		interval = nextInstancePollDelay(time.Since(transitionStartedAt))
 	}
 	return tea.Tick(interval, func(t time.Time) tea.Msg {
 		return tickMsg(t)
@@ -138,7 +166,7 @@ func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		if m.monitoring && len(m.instances) > 0 {
-			return m, tea.Batch(tickCmd(m.instances), fetchInstancesCmd(m.client))
+			return m, tea.Batch(tickCmd(m.transitionStartedAt), fetchInstancesCmd(m.client))
 		}
 
 	case spinner.TickMsg:
@@ -154,6 +182,14 @@ func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.instances = msg.instances
 		m.lastUpdate = time.Now()
+
+		if hasTransitionalInstance(m.instances) {
+			if m.transitionStartedAt.IsZero() {
+				m.transitionStartedAt = time.Now()
+			}
+		} else {
+			m.transitionStartedAt = time.Time{}
+		}
 
 		if len(m.instances) == 0 {
 			m.monitoring = false
