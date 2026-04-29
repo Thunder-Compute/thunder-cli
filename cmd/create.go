@@ -243,9 +243,8 @@ func runCreate(cmd *cobra.Command) error {
 			if createConfig.Mode == "prototyping" {
 				fmt.Println()
 				PrintWarningSimple("PROTOTYPING MODE DISCLAIMER")
-				fmt.Println("Prototyping instances are designed for development and testing.")
-				fmt.Println("They may experience incompatibilities with some workloads")
-				fmt.Println("for production inference or long-running tasks.")
+				fmt.Println("Prototyping mode is optimized for development. Long running GPU processes may be interrupted.")
+				fmt.Println("For production inference or batch training, use production mode.")
 			}
 		}
 	} else {
