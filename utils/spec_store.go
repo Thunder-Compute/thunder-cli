@@ -10,12 +10,18 @@ import (
 // SpecStore wraps fetched GPU specs and provides helper methods
 // that replace the old hardcoded prototyping/production config.
 type SpecStore struct {
-	specs map[string]api.GpuSpecConfig
+	specs        map[string]api.GpuSpecConfig
+	availability map[string]string
 }
 
 // NewSpecStore creates a SpecStore from API-fetched specs.
 func NewSpecStore(specs map[string]api.GpuSpecConfig) *SpecStore {
 	return &SpecStore{specs: specs}
+}
+
+// NewSpecStoreWithAvailability creates a SpecStore with optional per-spec availability.
+func NewSpecStoreWithAvailability(specs map[string]api.GpuSpecConfig, availability map[string]string) *SpecStore {
+	return &SpecStore{specs: specs, availability: availability}
 }
 
 func configKey(gpuType string, gpuCount int, mode string) string {
@@ -30,6 +36,25 @@ func (s *SpecStore) Lookup(gpuType string, gpuCount int, mode string) *api.GpuSp
 		return nil
 	}
 	return &spec
+}
+
+// IsSpecAvailable reports whether a concrete spec is available. Availability
+// fails open when the API did not provide availability data.
+func (s *SpecStore) IsSpecAvailable(gpuType string, gpuCount int, mode string) bool {
+	if s == nil || len(s.availability) == 0 {
+		return true
+	}
+	return s.availability[configKey(gpuType, gpuCount, mode)] == "available"
+}
+
+// IsGPUTypeAvailableForMode reports whether any count for this GPU type is available.
+func (s *SpecStore) IsGPUTypeAvailableForMode(gpuType string, mode string) bool {
+	for _, count := range s.GPUCountsForMode(gpuType, mode) {
+		if s.IsSpecAvailable(gpuType, count, mode) {
+			return true
+		}
+	}
+	return false
 }
 
 // gpuDisplayOrder defines the canonical display ordering for GPU types
@@ -131,7 +156,6 @@ func (s *SpecStore) EphemeralStorageRange(gpuType string, numGPUs int, mode stri
 	}
 	return spec.EphemeralStorageGB.Min, spec.EphemeralStorageGB.Max
 }
-
 
 // NormalizeGPUType maps user-friendly GPU names to canonical names,
 // validated against available specs for the given mode.

@@ -162,7 +162,12 @@ func runCreate(cmd *cobra.Command) error {
 	if specsErr != nil {
 		return fmt.Errorf("failed to fetch GPU specs: %w", specsErr)
 	}
-	specs := utils.NewSpecStore(specsMap)
+	availability, availabilityErr := client.GetAvailability()
+	var specAvailability map[string]string
+	if availabilityErr == nil && availability != nil {
+		specAvailability = availability.Specs
+	}
+	specs := utils.NewSpecStoreWithAvailability(specsMap, specAvailability)
 
 	presets := buildCreatePresets(cmd)
 
@@ -350,6 +355,10 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	} else {
 		// Production: vCPUs are auto-set from the spec (first/only option)
 		config.VCPUs = allowedVCPUs[0]
+	}
+
+	if !specs.IsSpecAvailable(config.GPUType, config.NumGPUs, config.Mode) {
+		return usageErr("GPU configuration %s x%d in %s mode is currently unavailable", config.GPUType, config.NumGPUs, config.Mode)
 	}
 
 	if config.Template == "" {

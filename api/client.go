@@ -260,3 +260,12 @@ func (c *Client) GetSpecs() (map[string]GpuSpecConfig, error) {
 	}
 	return result.Specs, nil
 }
+
+// GetAvailability retrieves per-spec GPU availability from the API.
+func (c *Client) GetAvailability() (*GPUAvailabilityResponse, error) {
+	var result GPUAvailabilityResponse
+	if err := c.doRequest(context.Background(), "GET", "/v1/status", nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
