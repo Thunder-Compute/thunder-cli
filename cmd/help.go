@@ -99,10 +99,22 @@ func printJSONHelp(cmd *cobra.Command) {
 }
 
 // printDefaultHelp renders Cobra's built-in plain-text help by temporarily
-// clearing the custom help function.
+// clearing the custom help function on the command and all its ancestors.
+// Clearing only `cmd` is not enough: cobra's Help() walks up the parent chain
+// to resolve a help func, which would re-enter wrapHelp on the still-wrapped
+// root and recurse forever in non-TTY mode.
 func printDefaultHelp(cmd *cobra.Command) {
-	saved := cmd.HelpFunc()
-	cmd.SetHelpFunc(nil)
+	type saved struct {
+		cmd *cobra.Command
+		fn  func(*cobra.Command, []string)
+	}
+	var stack []saved
+	for c := cmd; c != nil; c = c.Parent() {
+		stack = append(stack, saved{c, c.HelpFunc()})
+		c.SetHelpFunc(nil)
+	}
 	cmd.Help() //nolint:errcheck // stdout write failure is non-recoverable
-	cmd.SetHelpFunc(saved)
+	for _, s := range stack {
+		s.cmd.SetHelpFunc(s.fn)
+	}
 }
