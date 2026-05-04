@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -59,10 +60,11 @@ func (s *SpecStore) IsGPUTypeAvailableForMode(gpuType string, mode string) bool 
 
 // gpuDisplayOrder defines the canonical display ordering for GPU types
 // (ascending by cost/performance).
-var gpuDisplayOrder = []string{"a6000", "a100xl", "h100"}
+var gpuDisplayOrder = []string{"a6000", "a100xl", "l40", "l40s", "h100"}
 
 // GPUOptionsForMode returns the GPU type identifiers available for a mode,
-// ordered by gpuDisplayOrder (a6000, a100xl, h100).
+// ordered by gpuDisplayOrder (a6000, a100xl, l40, l40s, h100). Out-of-stock
+// types are preserved in the list but pushed to the bottom.
 func (s *SpecStore) GPUOptionsForMode(mode string) []string {
 	seen := map[string]bool{}
 	for key, spec := range s.specs {
@@ -71,26 +73,28 @@ func (s *SpecStore) GPUOptionsForMode(mode string) []string {
 			seen[gpuType] = true
 		}
 	}
-	var types []string
+	var ordered []string
 	for _, gpu := range gpuDisplayOrder {
 		if seen[gpu] {
-			types = append(types, gpu)
+			ordered = append(ordered, gpu)
 		}
 	}
 	// Append any GPU types not in the predefined order
 	for gpuType := range seen {
-		found := false
-		for _, g := range gpuDisplayOrder {
-			if g == gpuType {
-				found = true
-				break
-			}
-		}
-		if !found {
-			types = append(types, gpuType)
+		if !slices.Contains(gpuDisplayOrder, gpuType) {
+			ordered = append(ordered, gpuType)
 		}
 	}
-	return types
+	// Stable partition: available types first, out-of-stock at the bottom.
+	var available, unavailable []string
+	for _, gpu := range ordered {
+		if s.IsGPUTypeAvailableForMode(gpu, mode) {
+			available = append(available, gpu)
+		} else {
+			unavailable = append(unavailable, gpu)
+		}
+	}
+	return append(available, unavailable...)
 }
 
 // GPUCountsForMode returns all valid GPU counts for a given GPU type and mode, sorted.
