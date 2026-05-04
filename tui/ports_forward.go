@@ -40,7 +40,7 @@ type portsForwardModel struct {
 	quitting         bool
 	cancelled        bool
 	spinner          spinner.Model
-	resp             *api.InstanceModifyResponse
+	resp             *api.PortAddResponse
 
 	styles PanelStyles
 }
@@ -242,21 +242,30 @@ func calculatePortChanges(current, desired []int) (add, remove []int) {
 }
 
 type portsForwardApiResultMsg struct {
-	resp *api.InstanceModifyResponse
+	resp *api.PortAddResponse
 	err  error
 }
 
+// portsForwardApiCmd issues one batch DELETE for removed ports followed by one
+// batch POST for added ports. Removes happen first so swapping a port (remove
+// old, add new) is safe even when the per-instance forwarded-port cap would
+// otherwise be hit during the transition.
 func portsForwardApiCmd(client *api.Client, instanceID string, addPorts, removePorts []int) tea.Cmd {
 	return func() tea.Msg {
-		req := api.InstanceModifyRequest{
-			AddPorts:    addPorts,
-			RemovePorts: removePorts,
+		if len(removePorts) > 0 {
+			if err := client.RemovePorts(instanceID, removePorts); err != nil {
+				return portsForwardApiResultMsg{err: err}
+			}
 		}
-		resp, err := client.ModifyInstance(instanceID, req)
-		return portsForwardApiResultMsg{
-			resp: resp,
-			err:  err,
+		var lastResp *api.PortAddResponse
+		if len(addPorts) > 0 {
+			resp, err := client.AddPorts(instanceID, addPorts)
+			if err != nil {
+				return portsForwardApiResultMsg{err: err}
+			}
+			lastResp = resp
 		}
+		return portsForwardApiResultMsg{resp: lastResp}
 	}
 }
 
@@ -416,18 +425,35 @@ func (m portsForwardModel) renderCompleteStep() string {
 	successTitleStyle := theme.Success()
 	lines = append(lines, successTitleStyle.Render("✓ Ports updated successfully!"))
 	lines = append(lines, "")
-	lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(m.resp.Identifier))
+	lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render(m.selectedInstance.ID))
 	lines = append(lines, labelStyle.Render("Instance UUID:")+" "+valueStyle.Render(m.selectedInstance.UUID))
 
-	if len(m.resp.HTTPPorts) > 0 {
-		lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render(utils.FormatPorts(m.resp.HTTPPorts)))
+	// Resolve the latest port list. m.resp is nil when only removes happened,
+	// in which case we derive the result from the local diff instead.
+	var finalPorts []int
+	if m.resp != nil {
+		finalPorts = m.resp.HTTPPorts
+	} else {
+		removedSet := make(map[int]bool, len(m.removePorts))
+		for _, p := range m.removePorts {
+			removedSet[p] = true
+		}
+		for _, p := range m.currentPorts {
+			if !removedSet[p] {
+				finalPorts = append(finalPorts, p)
+			}
+		}
+	}
+
+	if len(finalPorts) > 0 {
+		lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render(utils.FormatPorts(finalPorts)))
 	} else {
 		lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render("(none)"))
 	}
 
 	lines = append(lines, "")
 	lines = append(lines, headerStyle.Render("Access your services:"))
-	if len(m.resp.HTTPPorts) > 0 {
+	if len(finalPorts) > 0 {
 		lines = append(lines, labelStyle.Render(fmt.Sprintf("  • https://%s-<port>.thundercompute.net", m.selectedInstance.UUID)))
 	}
 	lines = append(lines, labelStyle.Render("  • Run 'tnr ports list' to see all forwarded ports"))
