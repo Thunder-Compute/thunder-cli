@@ -169,10 +169,8 @@ type InstanceModifyResponse struct {
 }
 
 // PortAddRequest represents the request body for forwarding HTTP ports.
-// Either Port (single) or Ports (batch) may be provided; the server unions them.
 type PortAddRequest struct {
-	Port  *int  `json:"port,omitempty"`
-	Ports []int `json:"ports,omitempty"`
+	Ports []int `json:"ports"`
 }
 
 // PortAddResponse represents the response from forwarding a port.
