@@ -136,15 +136,27 @@ func resolveTemplateAlias(cmd *cobra.Command) error {
 }
 
 func hasAllCreateFlags(cmd *cobra.Command) bool {
-	if !cmd.Flags().Changed("mode") || !cmd.Flags().Changed("gpu") ||
-		!templateFlagChanged(cmd) || !(cmd.Flags().Changed("primary-disk") || cmd.Flags().Changed("disk-size-gb")) {
-		return false
+	return len(missingCreateFlags(cmd)) == 0
+}
+
+func missingCreateFlags(cmd *cobra.Command) []string {
+	var missing []string
+	if !cmd.Flags().Changed("mode") {
+		missing = append(missing, "--mode")
 	}
-	m, _ := cmd.Flags().GetString("mode")
-	if strings.ToLower(m) == "prototyping" {
-		return cmd.Flags().Changed("vcpus")
+	if !cmd.Flags().Changed("gpu") {
+		missing = append(missing, "--gpu")
 	}
-	return cmd.Flags().Changed("num-gpus")
+	if !templateFlagChanged(cmd) {
+		missing = append(missing, "--template/--snapshot")
+	}
+	if !(cmd.Flags().Changed("primary-disk") || cmd.Flags().Changed("disk-size-gb")) {
+		missing = append(missing, "--primary-disk")
+	}
+	if !(cmd.Flags().Changed("num-gpus") || cmd.Flags().Changed("vcpus")) {
+		missing = append(missing, "--num-gpus or --vcpus")
+	}
+	return missing
 }
 
 func runCreate(cmd *cobra.Command) error {
@@ -177,7 +189,7 @@ func runCreate(cmd *cobra.Command) error {
 
 	if presets.IsEmpty() {
 		if !interactive {
-			return usageErr("all flags required in non-interactive mode (--mode, --gpu, --template/--snapshot, --primary-disk, and --num-gpus or --vcpus)")
+			return usageErr("missing required flag(s) for non-interactive mode: %s", strings.Join(missingCreateFlags(cmd), ", "))
 		}
 		// No flags set — full interactive TUI
 		createConfig, err = tui.RunCreateInteractive(client, specs)
@@ -227,6 +239,9 @@ func runCreate(cmd *cobra.Command) error {
 		}
 
 		if valErr := validateCreateConfig(createConfig, templates, snapshots, diskSizeWasSet, specs); valErr != nil {
+			if !interactive {
+				return valErr
+			}
 			// Validation failed — fall through to hybrid mode
 			createConfig, err = tui.RunCreateHybrid(client, specs, presets)
 			if err != nil {
@@ -242,19 +257,19 @@ func runCreate(cmd *cobra.Command) error {
 				pd := &utils.PricingData{Rates: pricing}
 				included := specs.IncludedVCPUs(createConfig.GPUType, createConfig.NumGPUs, createConfig.Mode)
 				price := utils.CalculateHourlyPrice(pd, createConfig.Mode, createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB, createConfig.EphemeralDiskGB, included)
-				fmt.Printf("\nEstimated cost: %s\n", utils.FormatPrice(price))
+				fmt.Fprintf(os.Stderr, "\nEstimated cost: %s\n", utils.FormatPrice(price))
 			}
 
 			if createConfig.Mode == "prototyping" {
-				fmt.Println()
-				PrintWarningSimple("PROTOTYPING MODE DISCLAIMER")
-				fmt.Println("Prototyping mode is optimized for development. Long running GPU processes may be interrupted.")
-				fmt.Println("For production inference or batch training, use production mode.")
+				fmt.Fprintln(os.Stderr)
+				fmt.Fprintln(os.Stderr, tui.RenderWarningSimple("PROTOTYPING MODE DISCLAIMER"))
+				fmt.Fprintln(os.Stderr, "Prototyping mode is optimized for development. Long running GPU processes may be interrupted.")
+				fmt.Fprintln(os.Stderr, "For production inference or batch training, use production mode.")
 			}
 		}
 	} else {
 		if !interactive {
-			return usageErr("all flags required in non-interactive mode (--mode, --gpu, --template/--snapshot, --primary-disk, and --num-gpus or --vcpus)")
+			return usageErr("missing required flag(s) for non-interactive mode: %s", strings.Join(missingCreateFlags(cmd), ", "))
 		}
 		// Partial flags — hybrid TUI
 		createConfig, err = tui.RunCreateHybrid(client, specs, presets)
