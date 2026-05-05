@@ -130,4 +130,3 @@ func Refresh(ctx context.Context, client *api.Client) {
 		CheckedAt: time.Now(),
 	})
 }
-
