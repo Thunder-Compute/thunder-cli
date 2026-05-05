@@ -18,6 +18,7 @@ import (
 
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
+	"github.com/Thunder-Compute/thunder-cli/internal/pastdue"
 	"github.com/Thunder-Compute/thunder-cli/internal/updatepolicy"
 	"github.com/Thunder-Compute/thunder-cli/internal/version"
 	"github.com/Thunder-Compute/thunder-cli/tui"
@@ -188,6 +189,8 @@ func init() {
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		tui.SetNonInteractive(JSONOutput)
 		checkIfUpdateNeeded(cmd)
+		kickoffSubscriptionCheck(cmd)
+		showCachedSubscriptionWarning(cmd)
 		return nil
 	}
 
@@ -468,6 +471,50 @@ func detectPackageManager(binPath string) string {
 		return "winget"
 	}
 	return ""
+}
+
+// kickoffSubscriptionCheck launches a fire-and-forget refresh of the
+// subscription-status cache so subsequent commands can surface a past_due
+// warning. Never blocks the current command and silently no-ops when no auth
+// is configured. Skipped under --json so scripted output stays clean.
+func kickoffSubscriptionCheck(cmd *cobra.Command) {
+	if shouldSkipSubscriptionCheck(cmd) {
+		return
+	}
+	cfg, err := LoadConfig()
+	if err != nil || cfg == nil || cfg.Token == "" {
+		return
+	}
+	client := api.NewClient(cfg.Token, cfg.APIURL)
+	go pastdue.Refresh(context.Background(), client)
+}
+
+func showCachedSubscriptionWarning(cmd *cobra.Command) {
+	if shouldSkipSubscriptionCheck(cmd) {
+		return
+	}
+	if msg := pastdue.CachedWarning(); msg != "" {
+		fmt.Fprintln(os.Stderr, tui.ErrorStyle().Render("⚠ Warning: "+msg))
+	}
+}
+
+func shouldSkipSubscriptionCheck(cmd *cobra.Command) bool {
+	if JSONOutput {
+		return true
+	}
+	if cmd == nil {
+		return true
+	}
+	for current := cmd; current != nil; current = current.Parent() {
+		switch current.Name() {
+		case "help", "completion", "version", "login", "logout":
+			return true
+		}
+	}
+	if helpFlag := cmd.Flags().Lookup("help"); helpFlag != nil && helpFlag.Changed {
+		return true
+	}
+	return false
 }
 
 func shouldSkipUpdateCheck(cmd *cobra.Command) bool {
