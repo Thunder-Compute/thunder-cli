@@ -141,6 +141,20 @@ func (c *Client) ValidateToken(ctx context.Context) (*ValidateTokenResult, error
 	return &result, nil
 }
 
+// GetSubscriptionStatusCtx returns the caller's Stripe subscription status
+// (e.g. "active", "past_due", "canceled") from /v1/user-data.
+func (c *Client) GetSubscriptionStatusCtx(ctx context.Context) (string, error) {
+	var result struct {
+		Data struct {
+			SubscriptionStatus string `json:"subscriptionStatus"`
+		} `json:"data"`
+	}
+	if err := c.doRequest(ctx, "GET", "/v1/user-data", nil, &result); err != nil {
+		return "", err
+	}
+	return result.Data.SubscriptionStatus, nil
+}
+
 func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, error) {
 	var raw map[string]Instance
 	if err := c.doRequest(ctx, "GET", "/v1/instances/list?update_ips=true", nil, &raw); err != nil {
