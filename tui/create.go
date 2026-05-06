@@ -931,20 +931,6 @@ func (m createModel) View() string {
 			}
 			displayName := utils.FormatGPUType(gpu)
 
-			switch gpu {
-			case "a100xl":
-				if m.config.Mode == "prototyping" {
-					displayName = "A100 80GB (more powerful)"
-				}
-			case "h100":
-				if m.config.Mode == "prototyping" {
-					displayName += " (most powerful)"
-				}
-			case "a6000":
-				if m.config.Mode == "prototyping" {
-					displayName += " (more affordable)"
-				}
-			}
 			if !m.specs.IsGPUTypeAvailableForMode(gpu, m.config.Mode) {
 				displayName += " (unavailable)"
 				displayName = subtleTextStyle.Render(displayName)
