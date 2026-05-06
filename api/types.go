@@ -13,8 +13,6 @@ type (
 	CreateInstanceResponse = types.InstanceCreateResponse
 	InstanceModifyRequest  = types.InstanceModifyRequest
 	InstanceModifyResponse = types.InstanceModifyResponse
-	PortUpdateRequest      = types.PortUpdateRequest
-	PortAddResponse        = types.PortAddResponse
 	AddSSHKeyResponse      = types.InstanceAddKeyResponse
 	CreateSnapshotRequest  = types.CreateSnapshotRequest
 	CreateSnapshotResponse = types.CreateSnapshotResponse

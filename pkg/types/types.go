@@ -49,27 +49,27 @@ type InstanceListResponse map[string]InstanceListItem
 
 // InstanceListItem represents a single instance in the list response.
 type InstanceListItem struct {
-	ID               string           `json:"id,omitempty"`
-	IP               *string          `json:"ip,omitempty"`
-	Name             string           `json:"name"`
-	Status           string           `json:"status"`
-	CreatedAt        string           `json:"createdAt"`
-	UUID             string           `json:"uuid"`
-	Storage          int              `json:"storage"`
-	EphemeralDiskGB  int              `json:"ephemeralDiskGB,omitempty"`
-	CPUCores         string           `json:"cpuCores"`
-	Template         string           `json:"template"`
-	GPUType          string           `json:"gpuType"`
-	NumGPUs          string           `json:"numGpus"`
-	Memory           string           `json:"memory"`
-	Promoted         bool             `json:"promoted"`
-	Mode             string           `json:"mode"`
-	Port             int              `json:"port"`
-	HTTPPorts        []int            `json:"httpPorts,omitempty"`
-	K8s              bool             `json:"k8s"`
-	ProvisioningTime time.Time        `json:"provisioningTime,omitempty"`
-	RestoringTime    time.Time        `json:"restoringTime,omitempty"`
-	SnapshotSize     int64            `json:"snapshotSize,omitempty"`
+	ID               string    `json:"id,omitempty"`
+	IP               *string   `json:"ip,omitempty"`
+	Name             string    `json:"name"`
+	Status           string    `json:"status"`
+	CreatedAt        string    `json:"createdAt"`
+	UUID             string    `json:"uuid"`
+	Storage          int       `json:"storage"`
+	EphemeralDiskGB    int       `json:"ephemeralDiskGB,omitempty"`
+	CPUCores         string    `json:"cpuCores"`
+	Template         string    `json:"template"`
+	GPUType          string    `json:"gpuType"`
+	NumGPUs          string    `json:"numGpus"`
+	Memory           string    `json:"memory"`
+	Promoted         bool      `json:"promoted"`
+	Mode             string    `json:"mode"`
+	Port             int       `json:"port"`
+	HTTPPorts        []int     `json:"httpPorts,omitempty"`
+	K8s              bool      `json:"k8s"`
+	ProvisioningTime time.Time `json:"provisioningTime,omitempty"`
+	RestoringTime    time.Time `json:"restoringTime,omitempty"`
+	SnapshotSize     int64     `json:"snapshotSize,omitempty"`
 	SSHPublicKeys    []string         `json:"sshPublicKeys,omitempty"`
 	LastRestart      *InstanceRestart `json:"lastRestart,omitempty"`
 }
@@ -151,12 +151,14 @@ type InstanceAddKeyResponse struct {
 
 // InstanceModifyRequest represents the request body for modifying an instance.
 type InstanceModifyRequest struct {
-	CPUCores        *int          `json:"cpu_cores,omitempty"`
-	GPUType         *string       `json:"gpu_type,omitempty"`
-	NumGPUs         *int          `json:"num_gpus,omitempty"`
-	DiskSizeGB      *int          `json:"disk_size_gb,omitempty"`
+	CPUCores      *int          `json:"cpu_cores,omitempty"`
+	GPUType       *string       `json:"gpu_type,omitempty"`
+	NumGPUs       *int          `json:"num_gpus,omitempty"`
+	DiskSizeGB    *int          `json:"disk_size_gb,omitempty"`
 	EphemeralDiskGB *int          `json:"ephemeral_disk_gb,omitempty"`
-	Mode            *InstanceMode `json:"mode,omitempty"`
+	Mode          *InstanceMode `json:"mode,omitempty"`
+	AddPorts      []int         `json:"add_ports,omitempty"`
+	RemovePorts   []int         `json:"remove_ports,omitempty"`
 }
 
 // InstanceModifyResponse represents the response from modifying an instance.
@@ -166,19 +168,7 @@ type InstanceModifyResponse struct {
 	Mode         *string `json:"mode,omitempty"`
 	GPUType      *string `json:"gpu_type,omitempty"`
 	NumGPUs      *int    `json:"num_gpus,omitempty"`
-}
-
-// PortUpdateRequest represents an atomic batch update for forwarded HTTP ports.
-type PortUpdateRequest struct {
-	AddPorts    []int `json:"add_ports,omitempty"`
-	RemovePorts []int `json:"remove_ports,omitempty"`
-}
-
-// PortAddResponse represents the response from forwarding a port.
-type PortAddResponse struct {
-	Identifier   string `json:"identifier"`
-	InstanceName string `json:"instance_name"`
-	HTTPPorts    []int  `json:"http_ports"`
+	HTTPPorts    []int   `json:"http_ports,omitempty"`
 }
 
 // CreateSnapshotRequest represents the request to create a snapshot.
