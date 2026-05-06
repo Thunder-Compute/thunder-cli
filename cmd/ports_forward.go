@@ -119,20 +119,15 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 		return usageErr("must specify --add or --remove ports")
 	}
 
-	req := api.InstanceModifyRequest{
-		AddPorts:    add,
-		RemovePorts: remove,
-	}
-
-	// Make API call
-	var portsResp *api.InstanceModifyResponse
+	var portsResp *api.PortAddResponse
 
 	if !interactive {
 		fmt.Fprintln(os.Stderr, "Updating ports...")
-		portsResp, err = client.ModifyInstance(selectedInstance.ID, req)
+		r, err := client.UpdatePorts(selectedInstance.ID, add, remove)
 		if err != nil {
 			return fmt.Errorf("failed to update ports: %w", err)
 		}
+		portsResp = r
 		if JSONOutput {
 			printJSON(portsResp)
 		} else {
@@ -142,7 +137,7 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 	}
 
 	p := tea.NewProgram(tui.NewProgressModel("Updating ports...",
-		portsForwardApiCall(client, selectedInstance.ID, req, &portsResp),
+		portsForwardApiCall(client, selectedInstance.ID, add, remove, &portsResp),
 		renderPortsForwardSuccess(&portsResp),
 	))
 	finalModel, err := p.Run()
@@ -174,17 +169,18 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func portsForwardApiCall(client *api.Client, instanceID string, req api.InstanceModifyRequest, resp **api.InstanceModifyResponse) tea.Cmd {
+func portsForwardApiCall(client *api.Client, instanceID string, add, remove []int, resp **api.PortAddResponse) tea.Cmd {
 	return func() tea.Msg {
-		r, err := client.ModifyInstance(instanceID, req)
-		if err == nil {
-			*resp = r
+		r, err := client.UpdatePorts(instanceID, add, remove)
+		if err != nil {
+			return tui.ProgressResultMsg{Err: err}
 		}
-		return tui.ProgressResultMsg{Err: err}
+		*resp = r
+		return tui.ProgressResultMsg{Err: nil}
 	}
 }
 
-func renderPortsForwardSuccess(resp **api.InstanceModifyResponse) func() string {
+func renderPortsForwardSuccess(resp **api.PortAddResponse) func() string {
 	return func() string {
 		headerStyle := theme.Primary().Bold(true)
 		labelStyle := theme.Neutral()
@@ -198,19 +194,22 @@ func renderPortsForwardSuccess(resp **api.InstanceModifyResponse) func() string 
 		successTitleStyle := theme.Success()
 		lines = append(lines, successTitleStyle.Render("✓ Ports updated successfully!"))
 		lines = append(lines, "")
-		lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render((*resp).Identifier))
-		lines = append(lines, labelStyle.Render("Instance UUID:")+" "+valueStyle.Render((*resp).InstanceName))
 
-		if len((*resp).HTTPPorts) > 0 {
-			lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render(utils.FormatPorts((*resp).HTTPPorts)))
-		} else {
-			lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render("(none)"))
-		}
+		if *resp != nil {
+			lines = append(lines, labelStyle.Render("Instance ID:")+" "+valueStyle.Render((*resp).Identifier))
+			lines = append(lines, labelStyle.Render("Instance UUID:")+" "+valueStyle.Render((*resp).InstanceName))
 
-		lines = append(lines, "")
-		lines = append(lines, headerStyle.Render("Access your services:"))
-		if len((*resp).HTTPPorts) > 0 {
-			lines = append(lines, labelStyle.Render(fmt.Sprintf("  https://%s-<port>.thundercompute.net", (*resp).InstanceName)))
+			if len((*resp).HTTPPorts) > 0 {
+				lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render(utils.FormatPorts((*resp).HTTPPorts)))
+			} else {
+				lines = append(lines, labelStyle.Render("Forwarded Ports:")+" "+valueStyle.Render("(none)"))
+			}
+
+			lines = append(lines, "")
+			lines = append(lines, headerStyle.Render("Access your services:"))
+			if len((*resp).HTTPPorts) > 0 {
+				lines = append(lines, labelStyle.Render(fmt.Sprintf("  https://%s-<port>.thundercompute.net", (*resp).InstanceName)))
+			}
 		}
 		lines = append(lines, labelStyle.Render("  • Run 'tnr ports list' to see all forwarded ports"))
 

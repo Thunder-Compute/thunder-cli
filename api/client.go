@@ -141,6 +141,20 @@ func (c *Client) ValidateToken(ctx context.Context) (*ValidateTokenResult, error
 	return &result, nil
 }
 
+// GetSubscriptionStatusCtx returns the caller's Stripe subscription status
+// (e.g. "active", "past_due", "canceled") from /v1/user-data.
+func (c *Client) GetSubscriptionStatusCtx(ctx context.Context) (string, error) {
+	var result struct {
+		Data struct {
+			SubscriptionStatus string `json:"subscriptionStatus"`
+		} `json:"data"`
+	}
+	if err := c.doRequest(ctx, "GET", "/v1/user-data", nil, &result); err != nil {
+		return "", err
+	}
+	return result.Data.SubscriptionStatus, nil
+}
+
 func (c *Client) ListInstancesWithIPUpdateCtx(ctx context.Context) ([]Instance, error) {
 	var raw map[string]Instance
 	if err := c.doRequest(ctx, "GET", "/v1/instances/list?update_ips=true", nil, &raw); err != nil {
@@ -217,6 +231,35 @@ func (c *Client) ModifyInstance(instanceID string, req InstanceModifyRequest) (*
 		return nil, err
 	}
 	return &resp, nil
+}
+
+// UpdatePorts atomically adds and removes forwarded HTTP ports on an instance.
+func (c *Client) UpdatePorts(instanceID string, addPorts, removePorts []int) (*PortAddResponse, error) {
+	if len(addPorts) == 0 && len(removePorts) == 0 {
+		return nil, fmt.Errorf("no ports specified")
+	}
+	var resp PortAddResponse
+	err := c.doRequest(context.Background(), "PATCH", fmt.Sprintf("/v1/instances/%s/ports", instanceID), PortUpdateRequest{
+		AddPorts:    addPorts,
+		RemovePorts: removePorts,
+	}, &resp)
+	if err != nil {
+		var apiErr *APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
+			return nil, fmt.Errorf("instance not found")
+		}
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// RemovePorts removes one or more forwarded HTTP ports from an instance in a single call.
+func (c *Client) RemovePorts(instanceID string, ports []int) error {
+	if len(ports) == 0 {
+		return nil
+	}
+	_, err := c.UpdatePorts(instanceID, nil, ports)
+	return err
 }
 
 func (c *Client) CreateSnapshot(req CreateSnapshotRequest) (*CreateSnapshotResponse, error) {
