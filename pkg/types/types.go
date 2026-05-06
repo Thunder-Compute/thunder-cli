@@ -168,9 +168,10 @@ type InstanceModifyResponse struct {
 	NumGPUs      *int    `json:"num_gpus,omitempty"`
 }
 
-// PortAddRequest represents the request body for forwarding HTTP ports.
-type PortAddRequest struct {
-	Ports []int `json:"ports"`
+// PortUpdateRequest represents an atomic batch update for forwarded HTTP ports.
+type PortUpdateRequest struct {
+	AddPorts    []int `json:"add_ports,omitempty"`
+	RemovePorts []int `json:"remove_ports,omitempty"`
 }
 
 // PortAddResponse represents the response from forwarding a port.
@@ -178,11 +179,6 @@ type PortAddResponse struct {
 	Identifier   string `json:"identifier"`
 	InstanceName string `json:"instance_name"`
 	HTTPPorts    []int  `json:"http_ports"`
-}
-
-// PortRemoveResponse represents the response from removing a forwarded port.
-type PortRemoveResponse struct {
-	Message string `json:"message"`
 }
 
 // CreateSnapshotRequest represents the request to create a snapshot.

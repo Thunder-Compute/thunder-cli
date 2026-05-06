@@ -123,18 +123,11 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 
 	if !interactive {
 		fmt.Fprintln(os.Stderr, "Updating ports...")
-		if len(remove) > 0 {
-			if err := client.RemovePorts(selectedInstance.ID, remove); err != nil {
-				return fmt.Errorf("failed to remove ports: %w", err)
-			}
+		r, err := client.UpdatePorts(selectedInstance.ID, add, remove)
+		if err != nil {
+			return fmt.Errorf("failed to update ports: %w", err)
 		}
-		if len(add) > 0 {
-			r, err := client.AddPorts(selectedInstance.ID, add)
-			if err != nil {
-				return fmt.Errorf("failed to add ports: %w", err)
-			}
-			portsResp = r
-		}
+		portsResp = r
 		if JSONOutput {
 			printJSON(portsResp)
 		} else {
@@ -178,18 +171,11 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 
 func portsForwardApiCall(client *api.Client, instanceID string, add, remove []int, resp **api.PortAddResponse) tea.Cmd {
 	return func() tea.Msg {
-		if len(remove) > 0 {
-			if err := client.RemovePorts(instanceID, remove); err != nil {
-				return tui.ProgressResultMsg{Err: err}
-			}
+		r, err := client.UpdatePorts(instanceID, add, remove)
+		if err != nil {
+			return tui.ProgressResultMsg{Err: err}
 		}
-		if len(add) > 0 {
-			r, err := client.AddPorts(instanceID, add)
-			if err != nil {
-				return tui.ProgressResultMsg{Err: err}
-			}
-			*resp = r
-		}
+		*resp = r
 		return tui.ProgressResultMsg{Err: nil}
 	}
 }

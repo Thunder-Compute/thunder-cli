@@ -246,26 +246,14 @@ type portsForwardApiResultMsg struct {
 	err  error
 }
 
-// portsForwardApiCmd issues one batch DELETE for removed ports followed by one
-// batch POST for added ports. Removes happen first so swapping a port (remove
-// old, add new) is safe even when the per-instance forwarded-port cap would
-// otherwise be hit during the transition.
+// portsForwardApiCmd applies the desired-port diff in one API transaction.
 func portsForwardApiCmd(client *api.Client, instanceID string, addPorts, removePorts []int) tea.Cmd {
 	return func() tea.Msg {
-		if len(removePorts) > 0 {
-			if err := client.RemovePorts(instanceID, removePorts); err != nil {
-				return portsForwardApiResultMsg{err: err}
-			}
+		resp, err := client.UpdatePorts(instanceID, addPorts, removePorts)
+		if err != nil {
+			return portsForwardApiResultMsg{err: err}
 		}
-		var lastResp *api.PortAddResponse
-		if len(addPorts) > 0 {
-			resp, err := client.AddPorts(instanceID, addPorts)
-			if err != nil {
-				return portsForwardApiResultMsg{err: err}
-			}
-			lastResp = resp
-		}
-		return portsForwardApiResultMsg{resp: lastResp}
+		return portsForwardApiResultMsg{resp: resp}
 	}
 }
 

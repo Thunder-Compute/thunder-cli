@@ -9,8 +9,6 @@ import (
 	"io"
 	"net/http"
 	"sort"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/Thunder-Compute/thunder-cli/pkg/types"
@@ -221,14 +219,16 @@ func (c *Client) ModifyInstance(instanceID string, req InstanceModifyRequest) (*
 	return &resp, nil
 }
 
-// AddPorts forwards one or more HTTP ports on an instance in a single request.
-// Ports already forwarded are deduplicated server-side.
-func (c *Client) AddPorts(instanceID string, ports []int) (*PortAddResponse, error) {
-	if len(ports) == 0 {
+// UpdatePorts atomically adds and removes forwarded HTTP ports on an instance.
+func (c *Client) UpdatePorts(instanceID string, addPorts, removePorts []int) (*PortAddResponse, error) {
+	if len(addPorts) == 0 && len(removePorts) == 0 {
 		return nil, fmt.Errorf("no ports specified")
 	}
 	var resp PortAddResponse
-	err := c.doRequest(context.Background(), "POST", fmt.Sprintf("/v1/instances/%s/ports", instanceID), PortAddRequest{Ports: ports}, &resp)
+	err := c.doRequest(context.Background(), "PATCH", fmt.Sprintf("/v1/instances/%s/ports", instanceID), PortUpdateRequest{
+		AddPorts:    addPorts,
+		RemovePorts: removePorts,
+	}, &resp)
 	if err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
@@ -244,22 +244,8 @@ func (c *Client) RemovePorts(instanceID string, ports []int) error {
 	if len(ports) == 0 {
 		return nil
 	}
-	parts := make([]string, len(ports))
-	for i, p := range ports {
-		parts[i] = strconv.Itoa(p)
-	}
-	err := c.doRequest(context.Background(), "DELETE", fmt.Sprintf("/v1/instances/%s/ports/%s", instanceID, strings.Join(parts, ",")), nil, nil)
-	if err != nil {
-		var apiErr *APIError
-		if errors.As(err, &apiErr) {
-			switch apiErr.StatusCode {
-			case 404:
-				return fmt.Errorf("none of the specified ports are forwarded on this instance")
-			}
-		}
-		return err
-	}
-	return nil
+	_, err := c.UpdatePorts(instanceID, nil, ports)
+	return err
 }
 
 func (c *Client) CreateSnapshot(req CreateSnapshotRequest) (*CreateSnapshotResponse, error) {
