@@ -259,13 +259,6 @@ func runCreate(cmd *cobra.Command) error {
 				price := utils.CalculateHourlyPrice(pd, createConfig.Mode, createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB, createConfig.EphemeralDiskGB, included)
 				fmt.Fprintf(os.Stderr, "\nEstimated cost: %s\n", utils.FormatPrice(price))
 			}
-
-			if createConfig.Mode == "prototyping" {
-				fmt.Fprintln(os.Stderr)
-				fmt.Fprintln(os.Stderr, tui.RenderWarningSimple("PROTOTYPING MODE DISCLAIMER"))
-				fmt.Fprintln(os.Stderr, "Prototyping mode is optimized for development. Long running GPU processes may be interrupted.")
-				fmt.Fprintln(os.Stderr, "For production inference or batch training, use production mode.")
-			}
 		}
 	} else {
 		if !interactive {

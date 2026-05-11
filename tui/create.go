@@ -898,7 +898,7 @@ func (m createModel) View() string {
 	switch m.step {
 	case stepMode:
 		s.WriteString("Select instance mode:\n\n")
-		modes := []string{"Prototyping (lowest cost, dev/test)", "Production (highest stability, long-running)"}
+		modes := []string{"Prototyping (R&D, single-instance training, fine-tuning)", "Production (Production Inference, multi-instance training)"}
 		for i, mode := range modes {
 			cursor := "  "
 			if m.cursor == i {
@@ -909,11 +909,6 @@ func (m createModel) View() string {
 				display = m.styles.Selected.Render(mode)
 			}
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, display))
-		}
-		if m.cursor == 0 {
-			s.WriteString("\n")
-			warning := "⚠ Prototyping mode is optimized for development. Long running GPU processes may be interrupted. For production inference or batch training, use production mode.\n"
-			s.WriteString(warningStyleTUI.Render(warning))
 		}
 
 	case stepGPU:
