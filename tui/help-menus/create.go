@@ -36,10 +36,10 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString(SectionStyle.Render("● EXAMPLES"))
 	output.WriteString("\n\n")
 	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Create a prototyping instance"))
+	output.WriteString(ExampleStyle.Render("# Create a development instance"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr create --mode prototyping --gpu a6000 --vcpus 8 --template base --primary-disk 100"))
+	output.WriteString(CommandTextStyle.Render("tnr create --mode development --gpu a6000 --vcpus 8 --template base --primary-disk 100"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
@@ -56,7 +56,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--mode"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Instance mode: prototyping or production"))
+	output.WriteString(DescStyle.Render("Instance mode: development or production"))
 	output.WriteString("\n")
 
 	output.WriteString("  ")

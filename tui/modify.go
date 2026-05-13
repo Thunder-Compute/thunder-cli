@@ -776,7 +776,7 @@ func (m modifyModel) renderModeStep() string {
 	s.WriteString("Select instance mode:\n\n")
 
 	modeLabels := []string{
-		"Prototyping (lowest cost, dev/test)",
+		"Development (lowest cost, dev/test)",
 		"Production (highest stability, long-running)",
 	}
 	modeValues := []string{"prototyping", "production"}

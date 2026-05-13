@@ -31,10 +31,10 @@ var modifyCmd = &cobra.Command{
 }
 
 func init() {
-	modifyCmd.Flags().String("mode", "", "Instance mode (prototyping or production)")
+	modifyCmd.Flags().String("mode", "", "Instance mode (development or production)")
 	modifyCmd.Flags().String("gpu", "", "GPU type (a6000, a100, h100)")
 	modifyCmd.Flags().Int("num-gpus", 0, "Number of GPUs (production mode: 1, 2, or 4)")
-	modifyCmd.Flags().Int("vcpus", 0, "CPU cores (prototyping only): options vary by GPU type and count")
+	modifyCmd.Flags().Int("vcpus", 0, "CPU cores (development only): options vary by GPU type and count")
 	modifyCmd.Flags().Int("primary-disk", 0, "Primary disk size in GB (cannot shrink, max depends on config)")
 	modifyCmd.Flags().Int("disk-size-gb", 0, "Disk size in GB (cannot shrink, max depends on config)")
 	_ = modifyCmd.Flags().MarkHidden("disk-size-gb")
@@ -376,9 +376,9 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 
 	// Mode validation
 	if presets.Mode != nil {
-		mode := strings.ToLower(*presets.Mode)
+		mode := utils.NormalizeModeInput(*presets.Mode)
 		if mode != "prototyping" && mode != "production" {
-			return req, usageErr("mode must be 'prototyping' or 'production'")
+			return req, usageErr("mode must be 'development' or 'production'")
 		}
 
 		// If switching modes, validate dependent fields
@@ -387,7 +387,7 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 				return req, usageErr("switching to production requires --num-gpus flag (1, 2, or 4)")
 			}
 			if mode == "prototyping" && presets.VCPUs == nil {
-				return req, usageErr("switching to prototyping requires --vcpus flag (options vary by GPU type)")
+				return req, usageErr("switching to development requires --vcpus flag (options vary by GPU type)")
 			}
 		}
 		instanceMode := api.InstanceMode(mode)
@@ -408,14 +408,14 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 		normalizedGPU, ok := specs.NormalizeGPUType(gpuType, effectiveMode)
 		if !ok {
 			availableGPUs := specs.GPUOptionsForMode(effectiveMode)
-			return req, usageErr("invalid GPU type '%s' for %s mode. Valid options: %s", gpuType, effectiveMode, strings.Join(availableGPUs, ", "))
+			return req, usageErr("invalid GPU type '%s' for %s mode. Valid options: %s", gpuType, utils.DisplayMode(effectiveMode), strings.Join(availableGPUs, ", "))
 		}
 
 		req.GPUType = &normalizedGPU
 		hasChanges = true
 	}
 
-	// VCPUs validation (prototyping only)
+	// VCPUs validation (development only)
 	if presets.VCPUs != nil {
 		vcpus := *presets.VCPUs
 
@@ -457,7 +457,7 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 		}
 		allowedGPUCounts := specs.GPUCountsForMode(effectiveGPU, effectiveMode)
 		if !slices.Contains(allowedGPUCounts, numGPUs) {
-			return req, usageErr("num-gpus %d is not valid for %s %s. Allowed: %v", numGPUs, effectiveGPU, effectiveMode, allowedGPUCounts)
+			return req, usageErr("num-gpus %d is not valid for %s %s. Allowed: %v", numGPUs, effectiveGPU, utils.DisplayMode(effectiveMode), allowedGPUCounts)
 		}
 
 		req.NumGPUs = &numGPUs

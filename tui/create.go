@@ -898,7 +898,7 @@ func (m createModel) View() string {
 	switch m.step {
 	case stepMode:
 		s.WriteString("Select instance mode:\n\n")
-		modes := []string{"Prototyping (R&D, single-instance training, fine-tuning)", "Production (Production Inference, multi-instance training)"}
+		modes := []string{"Development (R&D, single-instance training, fine-tuning)", "Production (Production Inference, multi-instance training)"}
 		for i, mode := range modes {
 			cursor := "  "
 			if m.cursor == i {

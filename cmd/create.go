@@ -42,10 +42,10 @@ func init() {
 
 	rootCmd.AddCommand(createCmd)
 
-	createCmd.Flags().StringVar(&mode, "mode", "", "Instance mode: prototyping or production")
-	createCmd.Flags().StringVar(&gpuType, "gpu", "", "GPU type (prototyping: a6000, a100, or h100; production: a100 or h100)")
-	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs: 1-8 (production), 1-2 for A100/H100 (prototyping)")
-	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (prototyping only): options vary by GPU type and count")
+	createCmd.Flags().StringVar(&mode, "mode", "", "Instance mode: development or production")
+	createCmd.Flags().StringVar(&gpuType, "gpu", "", "GPU type (development: a6000, a100, or h100; production: a100 or h100)")
+	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs: 1-8 (production), 1-2 for A100/H100 (development)")
+	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (development only): options vary by GPU type and count")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name (accepts snapshot names too; --snapshot is an alias)")
 	createCmd.Flags().StringVar(&snapshotAlias, "snapshot", "", "Alias for --template; accepts a snapshot name or template key")
 	createCmd.Flags().IntVar(&diskSizeGB, "primary-disk", 100, "Primary disk storage in GB (range depends on GPU config)")
@@ -326,18 +326,18 @@ func runCreate(cmd *cobra.Command) error {
 }
 
 func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntry, snapshots []api.Snapshot, diskSizeWasSet bool, specs *utils.SpecStore) error {
-	config.Mode = strings.ToLower(config.Mode)
+	config.Mode = utils.NormalizeModeInput(config.Mode)
 	config.GPUType = strings.ToLower(config.GPUType)
 
 	if config.Mode != "prototyping" && config.Mode != "production" {
-		return usageErr("mode must be 'prototyping' or 'production'")
+		return usageErr("mode must be 'development' or 'production'")
 	}
 
 	// Normalize GPU type
 	canonical, ok := specs.NormalizeGPUType(config.GPUType, config.Mode)
 	if !ok {
 		availableGPUs := specs.GPUOptionsForMode(config.Mode)
-		return usageErr("%s mode supports GPU types: %s", config.Mode, strings.Join(availableGPUs, ", "))
+		return usageErr("%s mode supports GPU types: %s", utils.DisplayMode(config.Mode), strings.Join(availableGPUs, ", "))
 	}
 	config.GPUType = canonical
 
@@ -349,12 +349,12 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	allowedVCPUs := specs.VCPUOptions(config.GPUType, config.NumGPUs, config.Mode)
 	if allowedVCPUs == nil {
 		allowedCounts := specs.GPUCountsForMode(config.GPUType, config.Mode)
-		return usageErr("GPU count %d is not valid for %s %s. Allowed: %v", config.NumGPUs, config.GPUType, config.Mode, allowedCounts)
+		return usageErr("GPU count %d is not valid for %s %s. Allowed: %v", config.NumGPUs, config.GPUType, utils.DisplayMode(config.Mode), allowedCounts)
 	}
 
 	if config.Mode == "prototyping" {
 		if config.VCPUs == 0 {
-			return usageErr("prototyping mode requires --vcpus flag (options for %s with %d GPU(s): %v)", config.GPUType, config.NumGPUs, allowedVCPUs)
+			return usageErr("development mode requires --vcpus flag (options for %s with %d GPU(s): %v)", config.GPUType, config.NumGPUs, allowedVCPUs)
 		}
 
 		if !slices.Contains(allowedVCPUs, config.VCPUs) {
@@ -366,7 +366,7 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	}
 
 	if !specs.IsSpecAvailable(config.GPUType, config.NumGPUs, config.Mode) {
-		return usageErr("GPU configuration %s x%d in %s mode is currently unavailable", config.GPUType, config.NumGPUs, config.Mode)
+		return usageErr("GPU configuration %s x%d in %s mode is currently unavailable", config.GPUType, config.NumGPUs, utils.DisplayMode(config.Mode))
 	}
 
 	if config.Template == "" {

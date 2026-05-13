@@ -97,7 +97,7 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 			instance:      modifyInstance("prototyping", "a6000", "1", "8", 100),
 			flags:         map[string]string{"mode": "invalid"},
 			expectError:   true,
-			errorContains: "mode must be 'prototyping' or 'production'",
+			errorContains: "mode must be 'development' or 'production'",
 		},
 		{
 			name:          "switch to production without num-gpus",
@@ -111,7 +111,7 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 			instance:      modifyInstance("production", "a100xl", "1", "18", 100),
 			flags:         map[string]string{"mode": "prototyping"},
 			expectError:   true,
-			errorContains: "switching to prototyping requires --vcpus",
+			errorContains: "switching to development requires --vcpus",
 		},
 		{
 			name:     "switch to production with num-gpus",

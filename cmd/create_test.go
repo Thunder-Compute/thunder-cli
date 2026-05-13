@@ -80,7 +80,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				Mode: "invalid",
 			},
 			expectError:   true,
-			errorContains: "mode must be 'prototyping' or 'production'",
+			errorContains: "mode must be 'development' or 'production'",
 		},
 		{
 			name: "invalid GPU type",
@@ -89,7 +89,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				GPUType: "invalid",
 			},
 			expectError:   true,
-			errorContains: "prototyping mode supports GPU types:",
+			errorContains: "development mode supports GPU types:",
 		},
 		{
 			name: "prototyping without vcpus",
@@ -99,7 +99,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				VCPUs:   0,
 			},
 			expectError:   true,
-			errorContains: "prototyping mode requires --vcpus flag",
+			errorContains: "development mode requires --vcpus flag",
 		},
 		{
 			name: "invalid vcpus for prototyping",

@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -30,7 +29,7 @@ func renderPlainStatusTable(instances []api.Instance, verbose bool) {
 			inst.UUID,
 			inst.Status,
 			inst.GetIP(),
-			strings.ToLower(inst.Mode),
+			utils.DisplayMode(inst.Mode),
 			disk,
 			gpu,
 			inst.CPUCores,

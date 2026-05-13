@@ -62,7 +62,7 @@ Match the user's intent to the right action:
 
 1. If no GPU type specified, call `get_specs` and `get_pricing` to help choose
 2. If no template specified, call `list_templates` — suggest `ubuntu22.04-cuda12.4` as default
-3. Call `create_instance` with `gpu_type`, `template`, `mode` ("prototyping" unless user said "production"), `num_gpus` (default 1), `disk_size_gb` (default 100)
+3. Call `create_instance` with `gpu_type`, `template`, `mode` ("development" unless user said "production"), `num_gpus` (default 1), `disk_size_gb` (default 100)
 4. Report the instance UUID; user can connect via `tnr connect` once running
 
 ### Delete
@@ -79,7 +79,7 @@ Match the user's intent to the right action:
 
 ## Defaults
 
-- Mode: `prototyping` (auto-stops when idle, cheaper)
+- Mode: `development` (auto-stops when idle, cheaper)
 - Disk: 100 GB
 - GPUs: 1
 - Template: `ubuntu22.04-cuda12.4`
