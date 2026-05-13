@@ -406,7 +406,14 @@ func (m *statusModel) renderProvisioningSection() string {
 	b.WriteString(primaryStyle.Bold(true).Render("Provisioning Instances:"))
 	b.WriteString("\n\n")
 
-	for gpuType, instances := range instancesByGPU {
+	gpuTypes := make([]string, 0, len(instancesByGPU))
+	for gpuType := range instancesByGPU {
+		gpuTypes = append(gpuTypes, gpuType)
+	}
+	sort.Strings(gpuTypes)
+
+	for _, gpuType := range gpuTypes {
+		instances := instancesByGPU[gpuType]
 		m.ensureProgressBar(gpuType)
 		progressBar := m.progressBars[gpuType]
 
