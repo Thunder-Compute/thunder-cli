@@ -61,6 +61,7 @@ func UpdateSSHConfig(instanceID, ip string, port int, uuid string, tunnelPorts [
 	configLines = append(configLines, "    User ubuntu")
 	configLines = append(configLines, fmt.Sprintf("    IdentityFile \"%s\"", keyFile))
 	configLines = append(configLines, "    IdentitiesOnly yes")
+	configLines = append(configLines, "    IdentityAgent none")
 	configLines = append(configLines, "    StrictHostKeyChecking no")
 	configLines = append(configLines, fmt.Sprintf("    Port %d", port))
 
