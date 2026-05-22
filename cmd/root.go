@@ -131,6 +131,17 @@ func isUserError(err error) bool {
 	if errors.Is(err, utils.ErrSSHUnreachable) {
 		return true
 	}
+	// A persistent auth failure that survived key regeneration means the
+	// instance's sshd genuinely won't serve a freshly added key — a broken-node
+	// condition the user resolves by recreating the instance, not a CLI bug.
+	if errors.Is(err, utils.ErrPersistentAuthFailure) {
+		return true
+	}
+	// Cached SSH key exists but the OS denied the read (Windows NTFS ACLs,
+	// antivirus). A local environment issue on the user's machine, not a CLI bug.
+	if errors.Is(err, utils.ErrKeyUnreadable) {
+		return true
+	}
 	var notExistErr *pflag.NotExistError
 	if errors.As(err, &notExistErr) {
 		return true
