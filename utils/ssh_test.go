@@ -438,10 +438,15 @@ func TestNewSSHConfigErrors(t *testing.T) {
 		assert.Contains(t, err.Error(), "failed to read private key")
 	})
 
-	t.Run("unreadable key path wraps ErrKeyUnreadable", func(t *testing.T) {
+	t.Run("unreadable key file wraps ErrKeyUnreadable", func(t *testing.T) {
+		// A directory can't be read as a file. This exercises the same
+		// read-failure path that Windows ACL/antivirus denials hit (an
+		// open/read error, not a parse error), so it must classify as
+		// ErrKeyUnreadable and stay out of Sentry.
 		_, err := newSSHConfig("ubuntu", t.TempDir())
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrKeyUnreadable)
+		assert.Contains(t, err.Error(), "failed to read private key")
 	})
 
 	t.Run("invalid key contents", func(t *testing.T) {

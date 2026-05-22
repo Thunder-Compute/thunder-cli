@@ -575,7 +575,10 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		retryOpts := &utils.SSHConnectOptions{
 			DetectPersistentAuthFailure: true,
 			PersistentAuthTimeout:       30 * time.Second,
-			PersistentAuthMaxAttempts:   -1,
+			// Disable the 3-strike attempt cap on the retry: a freshly added key
+			// must get the full timeout to take effect rather than being abandoned
+			// after ~3s of fast retries.
+			PersistentAuthMaxAttempts: -1,
 		}
 		sshClient, err = utils.RobustSSHConnectWithOptions(ctx, instance.GetIP(), keyFile, port, 120, retryCallback, retryOpts)
 		if checkCancelled() {

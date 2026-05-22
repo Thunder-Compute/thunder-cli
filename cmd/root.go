@@ -12,6 +12,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/Thunder-Compute/thunder-cli/internal/clierr"
 	"github.com/Thunder-Compute/thunder-cli/internal/tty"
@@ -23,6 +24,7 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/internal/version"
 	"github.com/Thunder-Compute/thunder-cli/tui"
 	helpmenus "github.com/Thunder-Compute/thunder-cli/tui/help-menus"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
 // Global flags for non-interactive / automation mode.
@@ -126,7 +128,48 @@ func isUserError(err error) bool {
 	if clierr.IsUserFacing(err) {
 		return true
 	}
+	if errors.Is(err, utils.ErrSSHUnreachable) {
+		return true
+	}
+	// A persistent auth failure that survived key regeneration means the
+	// instance's sshd genuinely won't serve a freshly added key — a broken-node
+	// condition the user resolves by recreating the instance, not a CLI bug.
+	if errors.Is(err, utils.ErrPersistentAuthFailure) {
+		return true
+	}
+	// Cached SSH key exists but the OS denied the read (Windows NTFS ACLs,
+	// antivirus). A local environment issue on the user's machine, not a CLI bug.
+	if errors.Is(err, utils.ErrKeyUnreadable) {
+		return true
+	}
+	var notExistErr *pflag.NotExistError
+	if errors.As(err, &notExistErr) {
+		return true
+	}
+	var valueReqErr *pflag.ValueRequiredError
+	if errors.As(err, &valueReqErr) {
+		return true
+	}
+	var invalidValErr *pflag.InvalidValueError
+	if errors.As(err, &invalidValErr) {
+		return true
+	}
+	var invalidSyntaxErr *pflag.InvalidSyntaxError
+	if errors.As(err, &invalidSyntaxErr) {
+		return true
+	}
+	// Transport-level HTTP failures (DNS, conn refused, TLS, EOF, reset):
+	// classified at the api.Client boundary. Never a CLI bug.
+	if errors.Is(err, api.ErrTransport) {
+		return true
+	}
 	if isCancellationOrTimeout(err) {
+		return true
+	}
+	// API 4xx responses are always user errors (auth, validation, not found, etc.).
+	// Server errors (5xx) are captured separately in doRequest.
+	var apiErr *api.APIError
+	if errors.As(err, &apiErr) {
 		return true
 	}
 	msg := err.Error()

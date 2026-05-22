@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -23,7 +24,10 @@ var ErrPersistentAuthFailure = clierr.New("persistent SSH authentication failure
 var ErrSSHUnreachable = clierr.New("SSH unreachable")
 
 // ErrKeyUnreadable marks failures to open/read the locally cached SSH private
-// key file. The file exists, but the OS denied or failed the read.
+// key file. The file exists (KeyExists passed) but the OS denied the read —
+// typically NTFS ACLs or antivirus blocking access on Windows. This is a local
+// environment issue, not a CLI bug, so it is filtered out of Sentry reporting
+// and surfaced to the user with actionable guidance.
 var ErrKeyUnreadable = clierr.New("cached SSH key could not be read")
 
 type SSHRetryStatus string
@@ -35,11 +39,17 @@ const (
 	SSHStatusKeyParse   SSHRetryStatus = "key_parse"
 	SSHStatusUnexpected SSHRetryStatus = "unexpected"
 	SSHStatusSuccess    SSHRetryStatus = "success"
-)
 
-const (
 	PersistentAuthMaxAttempts = 3
 	PersistentAuthTimeout     = 10 * time.Second
+
+	sshInitialBackoff     = time.Second
+	sshMaxBackoff         = 10 * time.Second
+	sshInitialAuthBackoff = 500 * time.Millisecond
+	sshMaxAuthBackoff     = 2 * time.Second
+	sshMaxDialTimeout     = 5 * time.Second
+	sshHandshakeTimeout   = 10 * time.Second
+	sshKeepAlive          = 10 * time.Second
 )
 
 type SSHRetryInfo struct {
@@ -59,9 +69,11 @@ type SSHConnectOptions struct {
 	// time for key propagation before declaring failure.
 	PersistentAuthTimeout time.Duration
 	// PersistentAuthMaxAttempts overrides the consecutive-auth-failure count that
-	// trips ErrPersistentAuthFailure. Zero uses the package default; a negative
-	// value disables the attempt-count trigger so PersistentAuthTimeout alone
-	// governs the grace window.
+	// trips ErrPersistentAuthFailure. Zero uses the package default
+	// (PersistentAuthMaxAttempts); a negative value disables the attempt-count
+	// trigger so PersistentAuthTimeout alone governs the grace window. The
+	// post-regeneration retry sets this negative — otherwise the 3-strike cap
+	// fires after ~3s and the freshly added key never gets its full timeout.
 	PersistentAuthMaxAttempts int
 }
 
@@ -83,7 +95,8 @@ func (s *SSHClient) Close() error {
 func newSSHConfig(user, keyFile string) (*ssh.ClientConfig, error) {
 	keyData, err := os.ReadFile(keyFile)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read private key: %w", ErrKeyUnreadable, err)
+		return nil, fmt.Errorf("%w: failed to read private key (%w) — this is usually a file-permission or antivirus issue; "+
+			"delete that file and reconnect, or check that your security software isn't blocking the .thunder folder", ErrKeyUnreadable, err)
 	}
 
 	signer, err := ssh.ParsePrivateKey(keyData)
@@ -118,192 +131,242 @@ func RobustSSHConnectWithProgress(ctx context.Context, ip, keyFile string, port 
 func RobustSSHConnectWithOptions(ctx context.Context, ip, keyFile string, port int, maxWait int, callback SSHProgressCallback, opts *SSHConnectOptions) (*SSHClient, error) {
 	config, err := newSSHConfig("ubuntu", keyFile)
 	if err != nil {
-		if callback != nil {
-			callback(SSHRetryInfo{
-				Status:  SSHStatusKeyParse,
-				Attempt: 0,
-				Error:   err,
-				Message: "Failed to parse SSH private key",
-			})
-		}
+		emitSSHProgress(callback, SSHStatusKeyParse, 0, err, "Failed to parse SSH private key")
 		return nil, err
 	}
 
 	address := net.JoinHostPort(ip, strconv.Itoa(port))
-	deadline := time.Now().Add(time.Duration(maxWait) * time.Second)
-	backoff := time.Second
-	maxBackoff := 10 * time.Second
-	authBackoff := 500 * time.Millisecond
-	maxAuthBackoff := 2 * time.Second
-	attempt := 0
-	var lastErr error
+	connectConfig := normalizeSSHConnectOptions(opts)
+	retryState := newSSHRetryState(maxWait)
 
-	detectPersistentAuth := opts != nil && opts.DetectPersistentAuthFailure
-	persistentAuthTimeout := PersistentAuthTimeout
-	if opts != nil && opts.PersistentAuthTimeout > 0 {
-		persistentAuthTimeout = opts.PersistentAuthTimeout
-	}
-	persistentAuthMaxAttempts := PersistentAuthMaxAttempts
-	if opts != nil && opts.PersistentAuthMaxAttempts != 0 {
-		persistentAuthMaxAttempts = opts.PersistentAuthMaxAttempts
-	}
-	consecutiveAuthFailures := 0
-	var firstAuthFailureTime time.Time
-
-	for {
-		attempt++
+	for attempt := 1; ; attempt++ {
 		if err := ctx.Err(); err != nil {
-			return nil, fmt.Errorf("SSH connection cancelled")
+			return nil, sshConnectionCancelledError()
 		}
-		if time.Now().After(deadline) {
-			return nil, timeoutError(maxWait, lastErr)
+		if retryState.expired() {
+			return nil, timeoutError(maxWait, retryState.lastErr)
 		}
 
-		remaining := time.Until(deadline)
-		dialTimeout := remaining
-		if dialTimeout > 5*time.Second {
-			dialTimeout = 5 * time.Second
-		}
+		dialTimeout := retryState.dialTimeout()
 		if dialTimeout <= 0 {
-			return nil, timeoutError(maxWait, lastErr)
+			return nil, timeoutError(maxWait, retryState.lastErr)
 		}
 
-		dialer := &net.Dialer{
-			Timeout:   dialTimeout,
-			KeepAlive: 10 * time.Second,
-		}
-
-		conn, dialErr := dialer.DialContext(ctx, "tcp", address)
+		conn, dialErr := dialSSH(ctx, address, dialTimeout)
 		if dialErr != nil {
-			lastErr = dialErr
-			consecutiveAuthFailures = 0
-			firstAuthFailureTime = time.Time{}
+			retryState.recordDialError(dialErr)
 
 			if shouldRetryDial(dialErr) {
-				if callback != nil {
-					callback(SSHRetryInfo{
-						Status:  SSHStatusDialing,
-						Attempt: attempt,
-						Error:   dialErr,
-						Message: "Waiting for instance to be ready...",
-					})
+				emitSSHProgress(callback, SSHStatusDialing, attempt, dialErr, "Waiting for instance to be ready...")
+				if err := sleepWithContext(ctx, retryState.backoffFor(SSHStatusDialing)); err != nil {
+					return nil, sshConnectionCancelledError()
 				}
-				if err := sleepWithContext(ctx, backoff); err != nil {
-					return nil, fmt.Errorf("SSH connection cancelled")
-				}
-				backoff = minDuration(backoff*2, maxBackoff)
+				retryState.advanceBackoff(SSHStatusDialing)
 				continue
 			}
 			return nil, fmt.Errorf("SSH dial failed: %w", dialErr)
 		}
 
-		_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
-
-		type connResult struct {
-			cc    ssh.Conn
-			chans <-chan ssh.NewChannel
-			reqs  <-chan *ssh.Request
-			err   error
+		client, sshErr := handshakeSSHClient(ctx, conn, address, config)
+		if errors.Is(sshErr, errSSHConnectionCancelled) {
+			return nil, sshConnectionCancelledError()
+		}
+		if sshErr == nil {
+			emitSSHProgress(callback, SSHStatusSuccess, attempt, nil, "SSH connection established")
+			return client, nil
 		}
 
-		connChan := make(chan connResult, 1)
-		go func() {
-			cc, chans, reqs, err := ssh.NewClientConn(conn, address, config)
-			connChan <- connResult{cc: cc, chans: chans, reqs: reqs, err: err}
-		}()
+		errStatus := ClassifySSHError(sshErr)
+		retryState.recordSSHError(sshErr, errStatus)
 
-		select {
-		case <-ctx.Done():
-			conn.Close()
-			return nil, fmt.Errorf("SSH connection cancelled")
-		case result := <-connChan:
-			if result.err == nil {
-				_ = conn.SetDeadline(time.Time{})
-				if callback != nil {
-					callback(SSHRetryInfo{
-						Status:  SSHStatusSuccess,
-						Attempt: attempt,
-						Message: "SSH connection established",
-					})
-				}
-				return &SSHClient{client: ssh.NewClient(result.cc, result.chans, result.reqs)}, nil
-			}
-
-			conn.Close()
-			lastErr = result.err
-			errStatus := ClassifySSHError(result.err)
-
-			if errStatus == SSHStatusAuth {
-				consecutiveAuthFailures++
-				if firstAuthFailureTime.IsZero() {
-					firstAuthFailureTime = time.Now()
-				}
-
-				if detectPersistentAuth {
-					authFailureDuration := time.Since(firstAuthFailureTime)
-					hitAttemptLimit := persistentAuthMaxAttempts > 0 && consecutiveAuthFailures >= persistentAuthMaxAttempts
-					hitTimeLimit := authFailureDuration >= persistentAuthTimeout
-					if hitAttemptLimit || hitTimeLimit {
-						if callback != nil {
-							callback(SSHRetryInfo{
-								Status:  SSHStatusAuth,
-								Attempt: attempt,
-								Error:   ErrPersistentAuthFailure,
-								Message: "Persistent authentication failure detected",
-							})
-						}
-						return nil, ErrPersistentAuthFailure
-					}
-				}
-			} else {
-				consecutiveAuthFailures = 0
-				firstAuthFailureTime = time.Time{}
-			}
-
-			if shouldRetrySSH(result.err) {
-				if callback != nil {
-					msg := "Retrying SSH connection..."
-					switch errStatus {
-					case SSHStatusAuth:
-						msg = "Authentication failed, retrying..."
-					case SSHStatusHandshake:
-						msg = "SSH handshake failed, retrying..."
-					case SSHStatusDialing:
-						msg = "Connection interrupted, retrying..."
-					}
-					callback(SSHRetryInfo{
-						Status:  errStatus,
-						Attempt: attempt,
-						Error:   result.err,
-						Message: msg,
-					})
-				}
-
-				retryBackoff := backoff
-				if errStatus == SSHStatusAuth {
-					retryBackoff = authBackoff
-				}
-				if err := sleepWithContext(ctx, retryBackoff); err != nil {
-					return nil, fmt.Errorf("SSH connection cancelled")
-				}
-				if errStatus == SSHStatusAuth {
-					authBackoff = minDuration(authBackoff*2, maxAuthBackoff)
-				} else {
-					backoff = minDuration(backoff*2, maxBackoff)
-				}
-				continue
-			}
-
-			if callback != nil {
-				callback(SSHRetryInfo{
-					Status:  errStatus,
-					Attempt: attempt,
-					Error:   result.err,
-					Message: fmt.Sprintf("SSH connection failed: %v", result.err),
-				})
-			}
-			return nil, fmt.Errorf("SSH connection failed: %w", result.err)
+		if errStatus == SSHStatusAuth && retryState.persistentAuthFailed(connectConfig) {
+			emitSSHProgress(callback, SSHStatusAuth, attempt, ErrPersistentAuthFailure, "Persistent authentication failure detected")
+			return nil, ErrPersistentAuthFailure
 		}
+
+		if shouldRetrySSH(sshErr) {
+			emitSSHProgress(callback, errStatus, attempt, sshErr, retryMessageForStatus(errStatus))
+			if err := sleepWithContext(ctx, retryState.backoffFor(errStatus)); err != nil {
+				return nil, sshConnectionCancelledError()
+			}
+			retryState.advanceBackoff(errStatus)
+			continue
+		}
+
+		emitSSHProgress(callback, errStatus, attempt, sshErr, fmt.Sprintf("SSH connection failed: %v", sshErr))
+		return nil, fmt.Errorf("SSH connection failed: %w", sshErr)
+	}
+}
+
+type sshConnectConfig struct {
+	detectPersistentAuthFailure bool
+	persistentAuthTimeout       time.Duration
+	persistentAuthMaxAttempts   int
+}
+
+func normalizeSSHConnectOptions(opts *SSHConnectOptions) sshConnectConfig {
+	config := sshConnectConfig{
+		detectPersistentAuthFailure: false,
+		persistentAuthTimeout:       PersistentAuthTimeout,
+		persistentAuthMaxAttempts:   PersistentAuthMaxAttempts,
+	}
+	if opts == nil {
+		return config
+	}
+
+	config.detectPersistentAuthFailure = opts.DetectPersistentAuthFailure
+	if opts.PersistentAuthTimeout > 0 {
+		config.persistentAuthTimeout = opts.PersistentAuthTimeout
+	}
+	if opts.PersistentAuthMaxAttempts != 0 {
+		config.persistentAuthMaxAttempts = opts.PersistentAuthMaxAttempts
+	}
+	return config
+}
+
+type sshRetryState struct {
+	deadline                time.Time
+	backoff                 time.Duration
+	authBackoff             time.Duration
+	lastErr                 error
+	consecutiveAuthFailures int
+	firstAuthFailureTime    time.Time
+}
+
+func newSSHRetryState(maxWait int) *sshRetryState {
+	return &sshRetryState{
+		deadline:    time.Now().Add(time.Duration(maxWait) * time.Second),
+		backoff:     sshInitialBackoff,
+		authBackoff: sshInitialAuthBackoff,
+	}
+}
+
+func (s *sshRetryState) expired() bool {
+	return time.Now().After(s.deadline)
+}
+
+func (s *sshRetryState) dialTimeout() time.Duration {
+	remaining := time.Until(s.deadline)
+	if remaining > sshMaxDialTimeout {
+		return sshMaxDialTimeout
+	}
+	return remaining
+}
+
+func (s *sshRetryState) recordDialError(err error) {
+	s.lastErr = err
+	s.resetAuthFailures()
+}
+
+func (s *sshRetryState) recordSSHError(err error, status SSHRetryStatus) {
+	s.lastErr = err
+	if status == SSHStatusAuth {
+		s.consecutiveAuthFailures++
+		if s.firstAuthFailureTime.IsZero() {
+			s.firstAuthFailureTime = time.Now()
+		}
+		return
+	}
+	s.resetAuthFailures()
+}
+
+func (s *sshRetryState) resetAuthFailures() {
+	s.consecutiveAuthFailures = 0
+	s.firstAuthFailureTime = time.Time{}
+}
+
+func (s *sshRetryState) persistentAuthFailed(config sshConnectConfig) bool {
+	if !config.detectPersistentAuthFailure {
+		return false
+	}
+
+	authFailureDuration := time.Since(s.firstAuthFailureTime)
+	hitAttemptLimit := config.persistentAuthMaxAttempts > 0 && s.consecutiveAuthFailures >= config.persistentAuthMaxAttempts
+	hitTimeLimit := authFailureDuration >= config.persistentAuthTimeout
+	return hitAttemptLimit || hitTimeLimit
+}
+
+func (s *sshRetryState) backoffFor(status SSHRetryStatus) time.Duration {
+	if status == SSHStatusAuth {
+		return s.authBackoff
+	}
+	return s.backoff
+}
+
+func (s *sshRetryState) advanceBackoff(status SSHRetryStatus) {
+	if status == SSHStatusAuth {
+		s.authBackoff = minDuration(s.authBackoff*2, sshMaxAuthBackoff)
+		return
+	}
+	s.backoff = minDuration(s.backoff*2, sshMaxBackoff)
+}
+
+func emitSSHProgress(callback SSHProgressCallback, status SSHRetryStatus, attempt int, err error, message string) {
+	if callback == nil {
+		return
+	}
+	callback(SSHRetryInfo{
+		Status:  status,
+		Attempt: attempt,
+		Error:   err,
+		Message: message,
+	})
+}
+
+func retryMessageForStatus(status SSHRetryStatus) string {
+	switch status {
+	case SSHStatusAuth:
+		return "Authentication failed, retrying..."
+	case SSHStatusHandshake:
+		return "SSH handshake failed, retrying..."
+	case SSHStatusDialing:
+		return "Connection interrupted, retrying..."
+	default:
+		return "Retrying SSH connection..."
+	}
+}
+
+func dialSSH(ctx context.Context, address string, timeout time.Duration) (net.Conn, error) {
+	dialer := &net.Dialer{
+		Timeout:   timeout,
+		KeepAlive: sshKeepAlive,
+	}
+	return dialer.DialContext(ctx, "tcp", address)
+}
+
+var errSSHConnectionCancelled = errors.New("SSH connection cancelled")
+
+func sshConnectionCancelledError() error {
+	return fmt.Errorf("SSH connection cancelled")
+}
+
+type sshHandshakeResult struct {
+	cc    ssh.Conn
+	chans <-chan ssh.NewChannel
+	reqs  <-chan *ssh.Request
+	err   error
+}
+
+func handshakeSSHClient(ctx context.Context, conn net.Conn, address string, config *ssh.ClientConfig) (*SSHClient, error) {
+	_ = conn.SetDeadline(time.Now().Add(sshHandshakeTimeout))
+
+	connChan := make(chan sshHandshakeResult, 1)
+	go func() {
+		cc, chans, reqs, err := ssh.NewClientConn(conn, address, config)
+		connChan <- sshHandshakeResult{cc: cc, chans: chans, reqs: reqs, err: err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		conn.Close()
+		return nil, errSSHConnectionCancelled
+	case result := <-connChan:
+		if result.err != nil {
+			conn.Close()
+			return nil, result.err
+		}
+		_ = conn.SetDeadline(time.Time{})
+		return &SSHClient{client: ssh.NewClient(result.cc, result.chans, result.reqs)}, nil
 	}
 }
 
