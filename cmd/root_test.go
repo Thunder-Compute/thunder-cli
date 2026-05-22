@@ -1,11 +1,20 @@
 package cmd
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net"
 	"testing"
 
+	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/internal/autoupdate"
 	"github.com/Thunder-Compute/thunder-cli/internal/updatepolicy"
+	"github.com/Thunder-Compute/thunder-cli/tui"
+	"github.com/Thunder-Compute/thunder-cli/utils"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -103,6 +112,141 @@ func TestShouldSkipUpdateCheck(t *testing.T) {
 			assert.Equal(t, tt.want, shouldSkipUpdateCheck(cmd))
 		})
 	}
+}
+
+func TestIsUserError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "usage sentinel",
+			err:  fmt.Errorf("create failed: %w", ErrUsage),
+			want: true,
+		},
+		{
+			name: "tui cancellation sentinel",
+			err:  fmt.Errorf("modify failed: %w", tui.ErrCancelled),
+			want: true,
+		},
+		{
+			name: "transfer user sentinel",
+			err:  fmt.Errorf("scp failed: %w", utils.ErrTransferUser),
+			want: true,
+		},
+		{
+			name: "transfer cancelled sentinel",
+			err:  fmt.Errorf("scp failed: %w", utils.ErrTransferCancelled),
+			want: true,
+		},
+		{
+			name: "ssh unreachable sentinel",
+			err:  fmt.Errorf("connect failed: %w", utils.ErrSSHUnreachable),
+			want: true,
+		},
+		{
+			name: "persistent auth sentinel",
+			err:  fmt.Errorf("connect failed: %w", utils.ErrPersistentAuthFailure),
+			want: true,
+		},
+		{
+			name: "key unreadable sentinel",
+			err:  fmt.Errorf("connect failed: %w", utils.ErrKeyUnreadable),
+			want: true,
+		},
+		{
+			name: "api transport sentinel",
+			err:  fmt.Errorf("status failed: %w", api.ErrTransport),
+			want: true,
+		},
+		{
+			name: "api error",
+			err:  fmt.Errorf("status failed: %w", &api.APIError{StatusCode: 500, Message: "server unavailable"}),
+			want: true,
+		},
+		{
+			name: "pflag missing flag",
+			err:  rootFlagError(t, "--missing"),
+			want: true,
+		},
+		{
+			name: "pflag value required",
+			err:  rootFlagError(t, "--name"),
+			want: true,
+		},
+		{
+			name: "pflag invalid value",
+			err:  rootFlagError(t, "--count=bad"),
+			want: true,
+		},
+		{
+			name: "pflag invalid syntax",
+			err:  rootFlagError(t, "---bad"),
+			want: true,
+		},
+		{
+			name: "context cancelled",
+			err:  fmt.Errorf("operation failed: %w", context.Canceled),
+			want: true,
+		},
+		{
+			name: "context deadline",
+			err:  fmt.Errorf("operation failed: %w", context.DeadlineExceeded),
+			want: true,
+		},
+		{
+			name: "net timeout",
+			err:  fmt.Errorf("operation failed: %w", &net.DNSError{IsTimeout: true}),
+			want: true,
+		},
+		{
+			name: "substring fallback",
+			err:  errors.New("exec failed: executable file not found"),
+			want: true,
+		},
+		{
+			name: "internal error",
+			err:  errors.New("nil pointer while rendering status"),
+			want: false,
+		},
+		{
+			name: "nil",
+			err:  nil,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isUserError(tt.err))
+		})
+	}
+}
+
+func pflagError(t *testing.T, arg string) error {
+	t.Helper()
+
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	flags.String("name", "", "name")
+	flags.Int("count", 0, "count")
+
+	err := flags.Parse([]string{arg})
+	if err == nil {
+		t.Fatalf("expected pflag.Parse(%q) to fail", arg)
+	}
+	return err
+}
+
+func rootFlagError(t *testing.T, arg string) error {
+	t.Helper()
+
+	err := rootCmd.FlagErrorFunc()(nil, pflagError(t, arg))
+	if !errors.Is(err, ErrUsage) {
+		t.Fatalf("root flag error should wrap ErrUsage, got %v", err)
+	}
+	return err
 }
 
 // ── releaseTag ──────────────────────────────────────────────────────────────

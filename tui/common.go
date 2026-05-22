@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"errors"
 	"io"
 	"sync"
 
@@ -9,17 +8,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/clierr"
 	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 )
 
 // ErrCancelled is returned when the user cancels an interactive TUI flow.
-var ErrCancelled = errors.New("operation cancelled")
+var ErrCancelled = clierr.New("operation cancelled")
 
 // ErrNoRunningInstances is returned when no running instances are available.
-var ErrNoRunningInstances = errors.New("no running instances")
+var ErrNoRunningInstances = clierr.New("no running instances")
 
 // ErrNoChanges is returned when a modify operation has no changes to apply.
-var ErrNoChanges = errors.New("no changes")
+var ErrNoChanges = clierr.New("no changes")
 
 var (
 	helpStyleTUI    lipgloss.Style

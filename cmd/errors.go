@@ -1,16 +1,16 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/clierr"
 	"github.com/spf13/cobra"
 )
 
 // ErrUsage is a sentinel error for user-input validation failures
 // (wrong flags, missing args, resource not found, etc.).
 // Errors wrapping ErrUsage are excluded from Sentry reporting.
-var ErrUsage = errors.New("usage error")
+var ErrUsage = clierr.New("usage error")
 
 // usageErr returns an error wrapping ErrUsage. Works like fmt.Errorf
 // but automatically prepends the sentinel so isUserError catches it.

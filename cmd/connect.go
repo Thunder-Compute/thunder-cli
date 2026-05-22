@@ -575,6 +575,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		retryOpts := &utils.SSHConnectOptions{
 			DetectPersistentAuthFailure: true,
 			PersistentAuthTimeout:       30 * time.Second,
+			PersistentAuthMaxAttempts:   -1,
 		}
 		sshClient, err = utils.RobustSSHConnectWithOptions(ctx, instance.GetIP(), keyFile, port, 120, retryCallback, retryOpts)
 		if checkCancelled() {
@@ -592,8 +593,8 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 			})
 			shutdownTUI()
 			if errors.Is(err, utils.ErrPersistentAuthFailure) {
-				return fmt.Errorf("SSH key regeneration succeeded but the instance still rejects connections. "+
-					"The instance may need to be restarted — try 'tnr delete %s' and 'tnr create'", instanceID)
+				return fmt.Errorf("%w: SSH key regeneration succeeded but the instance still rejects connections; "+
+					"it may need to be restarted (try 'tnr delete %s' and 'tnr create')", utils.ErrPersistentAuthFailure, instanceID)
 			}
 			return fmt.Errorf("failed to establish SSH connection after key regeneration: %w", err)
 		}

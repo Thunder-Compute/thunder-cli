@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -11,16 +10,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/clierr"
 	"golang.org/x/crypto/ssh"
 )
 
-var ErrPersistentAuthFailure = errors.New("persistent SSH authentication failure: remote SSH keys may be missing")
+var ErrPersistentAuthFailure = clierr.New("persistent SSH authentication failure")
 
 // ErrSSHUnreachable marks SSH reachability failures (TCP port closed, dial
 // timeout, handshake timeout). These indicate the instance is not ready yet
 // or the user's network/firewall is blocking the connection — not a CLI bug,
 // so they are filtered out of Sentry reporting.
-var ErrSSHUnreachable = errors.New("SSH unreachable")
+var ErrSSHUnreachable = clierr.New("SSH unreachable")
+
+// ErrKeyUnreadable marks failures to open/read the locally cached SSH private
+// key file. The file exists, but the OS denied or failed the read.
+var ErrKeyUnreadable = clierr.New("cached SSH key could not be read")
 
 type SSHRetryStatus string
 
@@ -54,6 +58,11 @@ type SSHConnectOptions struct {
 	// failure detection. Use a longer value after key regeneration to allow
 	// time for key propagation before declaring failure.
 	PersistentAuthTimeout time.Duration
+	// PersistentAuthMaxAttempts overrides the consecutive-auth-failure count that
+	// trips ErrPersistentAuthFailure. Zero uses the package default; a negative
+	// value disables the attempt-count trigger so PersistentAuthTimeout alone
+	// governs the grace window.
+	PersistentAuthMaxAttempts int
 }
 
 type SSHClient struct {
@@ -74,7 +83,7 @@ func (s *SSHClient) Close() error {
 func newSSHConfig(user, keyFile string) (*ssh.ClientConfig, error) {
 	keyData, err := os.ReadFile(keyFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read private key: %w", err)
+		return nil, fmt.Errorf("%w: failed to read private key: %w", ErrKeyUnreadable, err)
 	}
 
 	signer, err := ssh.ParsePrivateKey(keyData)
@@ -133,6 +142,10 @@ func RobustSSHConnectWithOptions(ctx context.Context, ip, keyFile string, port i
 	persistentAuthTimeout := PersistentAuthTimeout
 	if opts != nil && opts.PersistentAuthTimeout > 0 {
 		persistentAuthTimeout = opts.PersistentAuthTimeout
+	}
+	persistentAuthMaxAttempts := PersistentAuthMaxAttempts
+	if opts != nil && opts.PersistentAuthMaxAttempts != 0 {
+		persistentAuthMaxAttempts = opts.PersistentAuthMaxAttempts
 	}
 	consecutiveAuthFailures := 0
 	var firstAuthFailureTime time.Time
@@ -228,7 +241,9 @@ func RobustSSHConnectWithOptions(ctx context.Context, ip, keyFile string, port i
 
 				if detectPersistentAuth {
 					authFailureDuration := time.Since(firstAuthFailureTime)
-					if consecutiveAuthFailures >= PersistentAuthMaxAttempts || authFailureDuration >= persistentAuthTimeout {
+					hitAttemptLimit := persistentAuthMaxAttempts > 0 && consecutiveAuthFailures >= persistentAuthMaxAttempts
+					hitTimeLimit := authFailureDuration >= persistentAuthTimeout
+					if hitAttemptLimit || hitTimeLimit {
 						if callback != nil {
 							callback(SSHRetryInfo{
 								Status:  SSHStatusAuth,

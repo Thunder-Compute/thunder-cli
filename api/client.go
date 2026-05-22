@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/clierr"
 	"github.com/Thunder-Compute/thunder-cli/pkg/types"
 	"github.com/getsentry/sentry-go"
 	sentryhttpclient "github.com/getsentry/sentry-go/httpclient"
@@ -23,7 +24,7 @@ import (
 // reset, TLS handshake error, mid-stream EOF, etc. Callers use errors.Is to
 // classify these uniformly as user/network noise, distinct from *APIError
 // (which means the server did respond with a status >= 400).
-var ErrTransport = errors.New("transport error")
+var ErrTransport = clierr.New("transport error")
 
 // APIError is returned for HTTP responses with status >= 400.
 type APIError struct {
@@ -35,6 +36,10 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	return e.Message
+}
+
+func (e *APIError) UserFacing() bool {
+	return true
 }
 
 type Client struct {

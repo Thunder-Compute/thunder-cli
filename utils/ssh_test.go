@@ -434,7 +434,14 @@ func TestNewSSHConfigErrors(t *testing.T) {
 	t.Run("missing key file", func(t *testing.T) {
 		_, err := newSSHConfig("ubuntu", filepath.Join(t.TempDir(), "missing"))
 		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrKeyUnreadable)
 		assert.Contains(t, err.Error(), "failed to read private key")
+	})
+
+	t.Run("unreadable key path wraps ErrKeyUnreadable", func(t *testing.T) {
+		_, err := newSSHConfig("ubuntu", t.TempDir())
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrKeyUnreadable)
 	})
 
 	t.Run("invalid key contents", func(t *testing.T) {
