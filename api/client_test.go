@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/version"
 	"github.com/Thunder-Compute/thunder-cli/pkg/types"
 )
 
@@ -205,6 +206,29 @@ func TestNewClientWithCustomURL(t *testing.T) {
 	assert.NotNil(t, client)
 	assert.Equal(t, customURL, client.baseURL)
 	assert.Equal(t, token, client.token)
+}
+
+func TestClientSendsAuditContextHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/auth/validate", r.URL.Path)
+		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		assert.Equal(t, "GO-CLI", r.Header.Get("Thunder-Client"))
+		assert.Equal(t, version.BuildVersion, r.Header.Get("Version"))
+		if platform := cliPlatform(); platform != "" {
+			assert.Equal(t, platform, r.Header.Get("Platform"))
+		} else {
+			assert.Empty(t, r.Header.Get("Platform"))
+		}
+		_, _ = w.Write([]byte(`{"valid":true}`))
+	}))
+	defer server.Close()
+
+	client := NewClient("test-token", server.URL)
+	result, err := client.ValidateToken(t.Context())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.Valid)
 }
 
 func TestListInstancesRateLimitIncludesRetryAfterSeconds(t *testing.T) {

@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Thunder-Compute/thunder-cli/internal/clierr"
+	"github.com/Thunder-Compute/thunder-cli/internal/version"
 	"github.com/Thunder-Compute/thunder-cli/pkg/types"
 	"github.com/getsentry/sentry-go"
 	sentryhttpclient "github.com/getsentry/sentry-go/httpclient"
@@ -83,6 +85,10 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body, resul
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Thunder-Client", "GO-CLI")
+	req.Header.Set("Version", version.BuildVersion)
+	if platform := cliPlatform(); platform != "" {
+		req.Header.Set("Platform", platform)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -132,6 +138,17 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body, resul
 		}
 	}
 	return nil
+}
+
+func cliPlatform() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return "mac"
+	case "linux", "windows":
+		return runtime.GOOS
+	default:
+		return ""
+	}
 }
 
 func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
