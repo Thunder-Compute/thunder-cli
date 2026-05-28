@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
 )
@@ -23,6 +24,35 @@ func NewSpecStore(specs map[string]api.GpuSpecConfig) *SpecStore {
 // NewSpecStoreWithAvailability creates a SpecStore with optional per-spec availability.
 func NewSpecStoreWithAvailability(specs map[string]api.GpuSpecConfig, availability map[string]string) *SpecStore {
 	return &SpecStore{specs: specs, availability: availability}
+}
+
+// FetchSpecStore loads GPU specs and availability from the API concurrently and
+// merges them into a SpecStore. Specs are required; availability is best-effort
+// — a failure leaves configurations unmarked rather than aborting.
+func FetchSpecStore(client *api.Client) (*SpecStore, error) {
+	var (
+		specsMap     map[string]api.GpuSpecConfig
+		specsErr     error
+		availability map[string]string
+		wg           sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		specsMap, specsErr = client.GetSpecs()
+	}()
+	go func() {
+		defer wg.Done()
+		if avail, err := client.GetAvailability(); err == nil && avail != nil {
+			availability = avail.Specs
+		}
+	}()
+	wg.Wait()
+
+	if specsErr != nil {
+		return nil, fmt.Errorf("failed to fetch GPU specs: %w", specsErr)
+	}
+	return NewSpecStoreWithAvailability(specsMap, availability), nil
 }
 
 func configKey(gpuType string, gpuCount int, mode string) string {
