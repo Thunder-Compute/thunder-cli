@@ -86,6 +86,7 @@ type createModel struct {
 	snapshotOffset            int  // index of first visible item when browsing snapshots
 	pricing                   *utils.PricingData
 	pricingLoaded             bool
+	pricingErr                error
 	specs                     *utils.SpecStore
 	specsLoaded               bool
 	presets                   *CreatePresets
@@ -504,6 +505,8 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case createPricingMsg:
 		if msg.err == nil && msg.rates != nil {
 			m.pricing = &utils.PricingData{Rates: msg.rates}
+		} else {
+			m.pricingErr = msg.err
 		}
 		m.pricingLoaded = true
 		return m, nil
@@ -1144,13 +1147,21 @@ func (m createModel) View() string {
 
 	// Pricing line (skip on mode step since config is too incomplete). Specs and
 	// pricing both load asynchronously; show a spinner in place until both
-	// arrive, mirroring the per-step loading indicators above.
+	// arrive, mirroring the per-step loading indicators above. If pricing failed
+	// to load, surface the (user-facing) error inline rather than spinning forever.
 	if m.step != stepMode {
 		s.WriteString("\n")
-		if m.pricing != nil && m.specsLoaded {
+		switch {
+		case m.pricing != nil && m.specsLoaded:
 			price := m.computePreviewPrice()
 			s.WriteString(m.styles.Help.Render(fmt.Sprintf("Estimated cost: %s", utils.FormatPrice(price))))
-		} else {
+		case m.pricingLoaded && m.specsLoaded:
+			msg := "Estimated cost: unavailable"
+			if m.pricingErr != nil {
+				msg = fmt.Sprintf("Estimated cost: unavailable (%v)", m.pricingErr)
+			}
+			s.WriteString(m.styles.Help.Render(msg))
+		default:
 			s.WriteString(m.styles.Help.Render(fmt.Sprintf("Estimated cost: %s calculating…", m.spinner.View())))
 		}
 	}
