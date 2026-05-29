@@ -114,7 +114,7 @@ func (m statusModel) Init() tea.Cmd {
 func hasTransitionalInstance(instances []api.Instance) bool {
 	for _, inst := range instances {
 		switch inst.Status {
-		case "PROVISIONING", "RESTORING", "STARTING", "STAGING", "PENDING", "QUEUED", "UNKNOWN":
+		case "PROVISIONING", "RESTORING", "MIGRATING", "STARTING", "STAGING", "PENDING", "QUEUED", "UNKNOWN":
 			return true
 		}
 	}
@@ -322,10 +322,10 @@ func (m statusModel) View() string {
 		b.WriteString(provisioningSection)
 	}
 
-	// Render restoring progress section
-	restoringSection := m.renderRestoringSection()
-	if restoringSection != "" {
-		b.WriteString(restoringSection)
+	// Render storage progress section
+	storageProgressSection := m.renderStorageProgressSection()
+	if storageProgressSection != "" {
+		b.WriteString(storageProgressSection)
 	}
 
 	// Render recent events section
@@ -475,7 +475,7 @@ func (m statusModel) formatStatus(status string, width int) string {
 		style = m.styles.running
 	case "STARTING", "SNAPPING":
 		style = m.styles.starting
-	case "RESTORING":
+	case "RESTORING", "MIGRATING":
 		style = m.styles.restoring
 	case "DELETING":
 		style = m.styles.deleting
@@ -573,37 +573,55 @@ func (m *statusModel) renderProvisioningSection() string {
 	return b.String()
 }
 
-func (m *statusModel) renderRestoringSection() string {
-	// Filter instances with RESTORING status
-	var restoringInstances []api.Instance
+func storageProgressStart(instance api.Instance) time.Time {
+	if !instance.ProgressStartedAt.IsZero() {
+		return instance.ProgressStartedAt
+	}
+	if instance.Status == "RESTORING" {
+		return instance.RestoringTime
+	}
+	return time.Time{}
+}
+
+func storageProgressDuration(instance api.Instance) time.Duration {
+	if !instance.ProgressStartedAt.IsZero() {
+		return utils.EstimateVolumeTransferDurationGB(instance.Storage)
+	}
+	return utils.EstimateInstanceRestorationDuration(instance.SnapshotSize)
+}
+
+func (m *statusModel) renderStorageProgressSection() string {
+	// Filter instances with root-volume restore or migration progress.
+	var progressInstances []api.Instance
 	for _, instance := range m.instances {
-		if instance.Status == "RESTORING" && !instance.RestoringTime.IsZero() {
-			restoringInstances = append(restoringInstances, instance)
+		if (instance.Status == "RESTORING" || instance.Status == "MIGRATING") && !storageProgressStart(instance).IsZero() {
+			progressInstances = append(progressInstances, instance)
 		}
 	}
 
-	if len(restoringInstances) == 0 {
+	if len(progressInstances) == 0 {
 		return ""
 	}
 
 	var b strings.Builder
 	b.WriteString("\n")
-	b.WriteString(primaryStyle.Bold(true).Render("Restoring Instances:"))
+	b.WriteString(primaryStyle.Bold(true).Render("Storage Progress:"))
 	b.WriteString("\n\n")
 
-	for _, instance := range restoringInstances {
-		// Use instance ID for restoring progress bars (each instance gets its own)
-		progressBarKey := "restoring-" + instance.ID
+	for _, instance := range progressInstances {
+		// Use instance ID for storage progress bars (each instance gets its own)
+		progressBarKey := "storage-" + instance.ID
 		m.ensureProgressBar(progressBarKey)
 		progressBar := m.progressBars[progressBarKey]
 
 		// Calculate progress using the GetProgress method
-		restoringExpectedDuration := utils.EstimateInstanceRestorationDuration(instance.SnapshotSize)
-		progressPercent := utils.GetProgress(instance.RestoringTime, restoringExpectedDuration)
+		startTime := storageProgressStart(instance)
+		expectedDuration := storageProgressDuration(instance)
+		progressPercent := utils.GetProgress(startTime, expectedDuration)
 
 		// Calculate time remaining
-		elapsed := time.Since(instance.RestoringTime)
-		remaining := restoringExpectedDuration - elapsed
+		elapsed := time.Since(startTime)
+		remaining := expectedDuration - elapsed
 		if remaining < 0 {
 			remaining = 0
 		}
@@ -619,8 +637,9 @@ func (m *statusModel) renderRestoringSection() string {
 		b.WriteString(fmt.Sprintf("  %s\n", progressBar.ViewAs(progressPercent)))
 
 		// Render message (compressed)
-		message := fmt.Sprintf("  ~%d min total, ~%d min remaining",
-			int(restoringExpectedDuration.Minutes()),
+		message := fmt.Sprintf("  %s - ~%d min total, ~%d min remaining",
+			instance.Status,
+			int(expectedDuration.Minutes()),
 			remainingMinutes,
 		)
 		b.WriteString(m.styles.timestamp.Render(message))

@@ -48,3 +48,10 @@ func EstimateInstanceRestorationDuration(snapshotSize int64) time.Duration {
 	rem := (snapshotSize % bytesPerGiB) * int64(perGiB) / bytesPerGiB
 	return 5*time.Minute + time.Duration(whole+rem)
 }
+
+func EstimateVolumeTransferDurationGB(sizeGB int) time.Duration {
+	if sizeGB <= 0 {
+		return 5 * time.Minute
+	}
+	return 5*time.Minute + time.Duration(sizeGB)*6*time.Second
+}
