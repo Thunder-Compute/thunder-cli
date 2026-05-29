@@ -510,7 +510,7 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case createSpecsMsg:
 		if msg.err != nil {
-			m.err = fmt.Errorf("failed to fetch GPU specs: %w", msg.err)
+			m.err = msg.err
 			return m, tea.Quit
 		}
 		m.specs = msg.specs
