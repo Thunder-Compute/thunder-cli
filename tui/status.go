@@ -322,10 +322,16 @@ func (m statusModel) View() string {
 		b.WriteString(provisioningSection)
 	}
 
-	// Render storage progress section
-	storageProgressSection := m.renderStorageProgressSection()
-	if storageProgressSection != "" {
-		b.WriteString(storageProgressSection)
+	// Render restoring progress section
+	restoringSection := m.renderRestoringSection()
+	if restoringSection != "" {
+		b.WriteString(restoringSection)
+	}
+
+	// Render migrating progress section
+	migratingSection := m.renderMigratingSection()
+	if migratingSection != "" {
+		b.WriteString(migratingSection)
 	}
 
 	// Render recent events section
@@ -573,55 +579,44 @@ func (m *statusModel) renderProvisioningSection() string {
 	return b.String()
 }
 
-func storageProgressStart(instance api.Instance) time.Time {
-	if !instance.ProgressStartedAt.IsZero() {
-		return instance.ProgressStartedAt
+func restorationExpectedDuration(instance api.Instance) time.Duration {
+	if instance.SnapshotSize > 0 {
+		return utils.EstimateInstanceRestorationDuration(instance.SnapshotSize)
 	}
-	if instance.Status == "RESTORING" {
-		return instance.RestoringTime
-	}
-	return time.Time{}
+	return utils.EstimateInstanceRestorationDurationGB(instance.Storage)
 }
 
-func storageProgressDuration(instance api.Instance) time.Duration {
-	if !instance.ProgressStartedAt.IsZero() {
-		return utils.EstimateVolumeTransferDurationGB(instance.Storage)
-	}
-	return utils.EstimateInstanceRestorationDuration(instance.SnapshotSize)
-}
-
-func (m *statusModel) renderStorageProgressSection() string {
-	// Filter instances with root-volume restore or migration progress.
-	var progressInstances []api.Instance
+func (m *statusModel) renderRestoringSection() string {
+	// Filter instances with RESTORING status
+	var restoringInstances []api.Instance
 	for _, instance := range m.instances {
-		if (instance.Status == "RESTORING" || instance.Status == "MIGRATING") && !storageProgressStart(instance).IsZero() {
-			progressInstances = append(progressInstances, instance)
+		if instance.Status == "RESTORING" && !instance.ProgressStartedAt.IsZero() {
+			restoringInstances = append(restoringInstances, instance)
 		}
 	}
 
-	if len(progressInstances) == 0 {
+	if len(restoringInstances) == 0 {
 		return ""
 	}
 
 	var b strings.Builder
 	b.WriteString("\n")
-	b.WriteString(primaryStyle.Bold(true).Render("Storage Progress:"))
+	b.WriteString(primaryStyle.Bold(true).Render("Restoring Instances:"))
 	b.WriteString("\n\n")
 
-	for _, instance := range progressInstances {
-		// Use instance ID for storage progress bars (each instance gets its own)
-		progressBarKey := "storage-" + instance.ID
+	for _, instance := range restoringInstances {
+		// Use instance ID for restoring progress bars (each instance gets its own)
+		progressBarKey := "restoring-" + instance.ID
 		m.ensureProgressBar(progressBarKey)
 		progressBar := m.progressBars[progressBarKey]
 
 		// Calculate progress using the GetProgress method
-		startTime := storageProgressStart(instance)
-		expectedDuration := storageProgressDuration(instance)
-		progressPercent := utils.GetProgress(startTime, expectedDuration)
+		restoringExpectedDuration := restorationExpectedDuration(instance)
+		progressPercent := utils.GetProgress(instance.ProgressStartedAt, restoringExpectedDuration)
 
 		// Calculate time remaining
-		elapsed := time.Since(startTime)
-		remaining := expectedDuration - elapsed
+		elapsed := time.Since(instance.ProgressStartedAt)
+		remaining := restoringExpectedDuration - elapsed
 		if remaining < 0 {
 			remaining = 0
 		}
@@ -637,9 +632,65 @@ func (m *statusModel) renderStorageProgressSection() string {
 		b.WriteString(fmt.Sprintf("  %s\n", progressBar.ViewAs(progressPercent)))
 
 		// Render message (compressed)
-		message := fmt.Sprintf("  %s - ~%d min total, ~%d min remaining",
-			instance.Status,
-			int(expectedDuration.Minutes()),
+		message := fmt.Sprintf("  ~%d min total, ~%d min remaining",
+			int(restoringExpectedDuration.Minutes()),
+			remainingMinutes,
+		)
+		b.WriteString(m.styles.timestamp.Render(message))
+		b.WriteString("\n\n")
+	}
+
+	return b.String()
+}
+
+func (m *statusModel) renderMigratingSection() string {
+	// Filter instances with MIGRATING status
+	var migratingInstances []api.Instance
+	for _, instance := range m.instances {
+		if instance.Status == "MIGRATING" && !instance.ProgressStartedAt.IsZero() {
+			migratingInstances = append(migratingInstances, instance)
+		}
+	}
+
+	if len(migratingInstances) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(primaryStyle.Bold(true).Render("Migrating Instances:"))
+	b.WriteString("\n\n")
+
+	for _, instance := range migratingInstances {
+		// Use instance ID for migrating progress bars (each instance gets its own)
+		progressBarKey := "migrating-" + instance.ID
+		m.ensureProgressBar(progressBarKey)
+		progressBar := m.progressBars[progressBarKey]
+
+		// Calculate progress using the GetProgress method
+		migratingExpectedDuration := utils.EstimateInstanceMigrationDuration(instance.Storage)
+		progressPercent := utils.GetProgress(instance.ProgressStartedAt, migratingExpectedDuration)
+
+		// Calculate time remaining
+		elapsed := time.Since(instance.ProgressStartedAt)
+		remaining := migratingExpectedDuration - elapsed
+		if remaining < 0 {
+			remaining = 0
+		}
+		remainingMinutes := int(remaining.Minutes())
+		if remainingMinutes < 1 {
+			remainingMinutes = 1
+		}
+
+		// Render instance name (grey, unbolded)
+		b.WriteString(fmt.Sprintf("  %s\n", SubtleTextStyle().Render(instance.Name)))
+
+		// Render progress bar
+		b.WriteString(fmt.Sprintf("  %s\n", progressBar.ViewAs(progressPercent)))
+
+		// Render message (compressed)
+		message := fmt.Sprintf("  ~%d min total, ~%d min remaining",
+			int(migratingExpectedDuration.Minutes()),
 			remainingMinutes,
 		)
 		b.WriteString(m.styles.timestamp.Render(message))

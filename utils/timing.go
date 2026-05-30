@@ -49,7 +49,15 @@ func EstimateInstanceRestorationDuration(snapshotSize int64) time.Duration {
 	return 5*time.Minute + time.Duration(whole+rem)
 }
 
-func EstimateVolumeTransferDurationGB(sizeGB int) time.Duration {
+func EstimateInstanceRestorationDurationGB(sizeGB int) time.Duration {
+	return estimateInstanceStorageTransferDurationGB(sizeGB)
+}
+
+func EstimateInstanceMigrationDuration(sizeGB int) time.Duration {
+	return estimateInstanceStorageTransferDurationGB(sizeGB)
+}
+
+func estimateInstanceStorageTransferDurationGB(sizeGB int) time.Duration {
 	if sizeGB <= 0 {
 		return 5 * time.Minute
 	}
