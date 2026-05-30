@@ -68,9 +68,8 @@ type InstanceListItem struct {
 	HTTPPorts         []int            `json:"httpPorts,omitempty"`
 	K8s               bool             `json:"k8s"`
 	ProvisioningTime  time.Time        `json:"provisioningTime,omitempty"`
-	RestoringTime     time.Time        `json:"restoringTime,omitempty"`
 	ProgressStartedAt time.Time        `json:"progressStartedAt,omitempty"`
-	SnapshotSize      int64            `json:"snapshotSize,omitempty"`
+	SnapshotSizeGB    int              `json:"snapshotSizeGB,omitempty"`
 	SSHPublicKeys     []string         `json:"sshPublicKeys,omitempty"`
 	LastRestart       *InstanceRestart `json:"lastRestart,omitempty"`
 }

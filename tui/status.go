@@ -32,6 +32,7 @@ type statusStyles struct {
 	running      lipgloss.Style
 	starting     lipgloss.Style
 	restoring    lipgloss.Style
+	migrating    lipgloss.Style
 	deleting     lipgloss.Style
 	provisioning lipgloss.Style
 	cell         lipgloss.Style
@@ -44,6 +45,7 @@ func newStatusStyles() statusStyles {
 		running:      SuccessStyle(),
 		starting:     WarningStyle(),
 		restoring:    PrimaryStyle().Bold(true),
+		migrating:    PrimaryStyle().Bold(true),
 		deleting:     ErrorStyle(),
 		provisioning: WarningStyle(),
 		cell:         lipgloss.NewStyle().Padding(0, 1),
@@ -481,8 +483,10 @@ func (m statusModel) formatStatus(status string, width int) string {
 		style = m.styles.running
 	case "STARTING", "SNAPPING":
 		style = m.styles.starting
-	case "RESTORING", "MIGRATING":
+	case "RESTORING":
 		style = m.styles.restoring
+	case "MIGRATING":
+		style = m.styles.migrating
 	case "DELETING":
 		style = m.styles.deleting
 	case "PROVISIONING":
@@ -580,8 +584,8 @@ func (m *statusModel) renderProvisioningSection() string {
 }
 
 func restorationExpectedDuration(instance api.Instance) time.Duration {
-	if instance.SnapshotSize > 0 {
-		return utils.EstimateInstanceRestorationDuration(instance.SnapshotSize)
+	if instance.SnapshotSizeGB > 0 {
+		return utils.EstimateInstanceRestorationDurationGB(instance.SnapshotSizeGB)
 	}
 	return utils.EstimateInstanceRestorationDurationGB(instance.Storage)
 }
