@@ -134,3 +134,47 @@ func TestModifyModelChangingGPUClearsStaleGPUCount(t *testing.T) {
 		t.Fatalf("expected stale NumGPUs to be cleared before H100 count selection, got %d", model.config.NumGPUs)
 	}
 }
+
+func TestModifyModelUnavailableGPUCountCannotBeSelected(t *testing.T) {
+	specs := utils.NewSpecStoreWithAvailability(map[string]api.GpuSpecConfig{
+		"a6000_x1_prototyping": {GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8}},
+		"a6000_x4_prototyping": {GpuCount: 4, Mode: "prototyping", VcpuOptions: []int{16, 24}},
+	}, map[string]string{
+		"a6000_x1_prototyping": "available",
+		"a6000_x4_prototyping": "unavailable",
+	})
+	instance := &api.Instance{
+		ID:       "0",
+		Name:     "rqrljt9j",
+		Status:   "RUNNING",
+		Mode:     "prototyping",
+		GPUType:  "a6000",
+		NumGPUs:  "1",
+		CPUCores: "8",
+		Storage:  100,
+	}
+
+	model := NewModifyModel(nil, instance, specs).(modifyModel)
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(modifyModel)
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(modifyModel)
+	if !model.gpuCountPhase {
+		t.Fatal("expected A6000 to show a GPU-count phase")
+	}
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = updated.(modifyModel)
+	if view := model.View(); !strings.Contains(view, "4 GPU(s) (unavailable)") {
+		t.Fatalf("expected unavailable GPU count to render, got:\n%s", view)
+	}
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(modifyModel)
+	if !model.gpuCountPhase {
+		t.Fatal("expected to remain in GPU-count phase after selecting unavailable count")
+	}
+	if model.config.NumGPUs != 0 {
+		t.Fatalf("expected unavailable count not to be selected, got %d", model.config.NumGPUs)
+	}
+}

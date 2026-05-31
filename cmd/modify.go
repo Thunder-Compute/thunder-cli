@@ -51,12 +51,11 @@ func runModify(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Fetch GPU specs from API
-	specsMap, specsErr := client.GetSpecs()
+	// Fetch GPU specs and availability from API.
+	specs, specsErr := utils.FetchSpecStore(client)
 	if specsErr != nil {
-		return fmt.Errorf("failed to fetch GPU specs: %w", specsErr)
+		return specsErr
 	}
-	specs := utils.NewSpecStore(specsMap)
 
 	// Fetch instances
 	var instances []api.Instance
@@ -148,6 +147,9 @@ func runModify(cmd *cobra.Command, args []string) error {
 		// All flags provided -> try fully non-interactive (skip confirmation)
 		modifyReq, err = buildModifyRequestFromFlags(cmd, selectedInstance, specs)
 		if err != nil {
+			if !interactive {
+				return err
+			}
 			// Fall through to hybrid
 			modifyConfig, err = tui.RunModifyHybrid(client, selectedInstance, specs, modifyPresets)
 			if err != nil {
@@ -478,6 +480,9 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 	targetVCPUOptions := specs.VCPUOptions(effectiveGPU, effectiveNumGPUs, effectiveMode)
 	if len(targetVCPUOptions) == 0 {
 		return req, usageErr("unsupported configuration: %s with %d GPU(s) in %s mode", effectiveGPU, effectiveNumGPUs, effectiveMode)
+	}
+	if !specs.IsSpecAvailable(effectiveGPU, effectiveNumGPUs, effectiveMode) {
+		return req, usageErr("GPU configuration %s x%d in %s mode is currently unavailable", effectiveGPU, effectiveNumGPUs, effectiveMode)
 	}
 	if effectiveMode == "production" {
 		targetVCPUs := targetVCPUOptions[0]
