@@ -168,6 +168,8 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 			validate: func(t *testing.T, req api.InstanceModifyRequest) {
 				require.NotNil(t, req.NumGPUs)
 				assert.Equal(t, 2, *req.NumGPUs)
+				require.NotNil(t, req.CPUCores)
+				assert.Equal(t, 36, *req.CPUCores)
 			},
 		},
 		{
@@ -215,6 +217,89 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 					tt.validate(t, req)
 				}
 			}
+		})
+	}
+}
+
+func TestBuildModifyRequestFromFlags_ValidatesVCPUsAgainstRequestedGPUCount(t *testing.T) {
+	specs := utils.NewSpecStore(map[string]api.GpuSpecConfig{
+		"a6000_x1_prototyping": {
+			GpuCount:           1,
+			Mode:               "prototyping",
+			VcpuOptions:        []int{4, 8},
+			StorageGB:          api.StorageRange{Min: 100, Max: 300},
+			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 2000},
+		},
+		"a6000_x4_prototyping": {
+			GpuCount:           4,
+			Mode:               "prototyping",
+			VcpuOptions:        []int{16, 24, 32},
+			StorageGB:          api.StorageRange{Min: 100, Max: 1000},
+			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 2000},
+		},
+	})
+	cmd := newModifyCmd()
+	setFlags(cmd, map[string]string{"num-gpus": "4", "vcpus": "16"})
+
+	req, err := buildModifyRequestFromFlags(cmd, modifyInstance("prototyping", "a6000", "1", "8", 100), specs)
+
+	require.NoError(t, err)
+	require.NotNil(t, req.NumGPUs)
+	assert.Equal(t, 4, *req.NumGPUs)
+	require.NotNil(t, req.CPUCores)
+	assert.Equal(t, 16, *req.CPUCores)
+}
+
+func TestBuildModifyRequestFromFlags_RejectsInvalidTargetSpecValues(t *testing.T) {
+	specs := utils.NewSpecStore(map[string]api.GpuSpecConfig{
+		"a6000_x1_prototyping": {
+			GpuCount:           1,
+			Mode:               "prototyping",
+			VcpuOptions:        []int{4, 8},
+			StorageGB:          api.StorageRange{Min: 100, Max: 300},
+			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 500},
+		},
+		"a6000_x4_prototyping": {
+			GpuCount:           4,
+			Mode:               "prototyping",
+			VcpuOptions:        []int{16, 24, 32},
+			StorageGB:          api.StorageRange{Min: 200, Max: 1000},
+			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 2000},
+		},
+	})
+
+	tests := []struct {
+		name          string
+		flags         map[string]string
+		errorContains string
+	}{
+		{
+			name:          "gpu count change requires vcpu valid for target count",
+			flags:         map[string]string{"num-gpus": "4"},
+			errorContains: "vcpus must be one of [16 24 32]",
+		},
+		{
+			name:          "primary disk validates target spec minimum",
+			flags:         map[string]string{"num-gpus": "4", "vcpus": "16", "primary-disk": "150"},
+			errorContains: "disk size must be between 200 and 1000 GB",
+		},
+		{
+			name:          "ephemeral disk validates target spec range",
+			flags:         map[string]string{"ephemeral-disk": "600"},
+			errorContains: "ephemeral disk size must be between 0 and 500 GB",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := newModifyCmd()
+			cmd.Flags().Int("ephemeral-disk", -1, "")
+			setFlags(cmd, tt.flags)
+
+			_, err := buildModifyRequestFromFlags(cmd, modifyInstance("prototyping", "a6000", "1", "8", 100), specs)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.errorContains)
 		})
 	}
 }
@@ -271,16 +356,47 @@ func TestBuildModifyRequestFromConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "compute change in prototyping sets num-gpus",
+			config: &tui.ModifyConfig{
+				NumGPUs:        4,
+				VCPUs:          8,
+				ComputeChanged: true,
+			},
+			instance: modifyInstance("prototyping", "a6000", "1", "8", 100),
+			validate: func(t *testing.T, req api.InstanceModifyRequest) {
+				require.NotNil(t, req.NumGPUs)
+				assert.Equal(t, 4, *req.NumGPUs)
+				assert.Nil(t, req.CPUCores)
+			},
+		},
+		{
+			name: "compute change in prototyping sets num-gpus and vcpus",
+			config: &tui.ModifyConfig{
+				NumGPUs:        4,
+				VCPUs:          16,
+				ComputeChanged: true,
+			},
+			instance: modifyInstance("prototyping", "a6000", "1", "8", 100),
+			validate: func(t *testing.T, req api.InstanceModifyRequest) {
+				require.NotNil(t, req.NumGPUs)
+				assert.Equal(t, 4, *req.NumGPUs)
+				require.NotNil(t, req.CPUCores)
+				assert.Equal(t, 16, *req.CPUCores)
+			},
+		},
+		{
 			name: "compute change in production sets num-gpus",
 			config: &tui.ModifyConfig{
 				NumGPUs:        2,
+				VCPUs:          36,
 				ComputeChanged: true,
 			},
 			instance: modifyInstance("production", "a100xl", "1", "18", 100),
 			validate: func(t *testing.T, req api.InstanceModifyRequest) {
 				require.NotNil(t, req.NumGPUs)
 				assert.Equal(t, 2, *req.NumGPUs)
-				assert.Nil(t, req.CPUCores)
+				require.NotNil(t, req.CPUCores)
+				assert.Equal(t, 36, *req.CPUCores)
 			},
 		},
 		{
