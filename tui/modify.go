@@ -139,6 +139,7 @@ func NewModifyModelWithPresets(client *api.Client, instance *api.Instance, specs
 func (m *modifyModel) trySkipCurrentStep() {
 	for {
 		skipped := false
+		m.skippedSteps[m.step] = false
 
 		switch m.step {
 		case modifyStepMode:
