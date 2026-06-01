@@ -404,6 +404,10 @@ func (m modifyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diskInput.Focus()
 				m.ephemeralDiskInput.Blur()
 				m.diskInputTouched = false
+			} else if m.step == modifyStepEphemeralDiskSize {
+				m.diskInput.Blur()
+				m.ephemeralDiskInput.Focus()
+				m.ephemeralDiskInputTouched = false
 			} else {
 				m.diskInput.Blur()
 				m.ephemeralDiskInput.Blur()
