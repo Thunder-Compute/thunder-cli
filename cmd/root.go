@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/clierr"
 	"github.com/Thunder-Compute/thunder-cli/internal/tty"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -106,11 +107,7 @@ var userErrorSubstrings = []string{
 	"authentication timeout",
 }
 
-// isTransientNetworkError returns true if err is a network timeout, user
-// cancellation, or other transient transport failure. Used to suppress Sentry
-// noise on paths where the CLI intentionally makes best-effort network calls
-// (e.g. update checks).
-func isTransientNetworkError(err error) bool {
+func isCancellationOrTimeout(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -125,10 +122,24 @@ func isTransientNetworkError(err error) bool {
 }
 
 func isUserError(err error) bool {
-	if errors.Is(err, ErrUsage) || errors.Is(err, tui.ErrCancelled) || errors.Is(err, utils.ErrTransferUser) {
+	if err == nil {
+		return false
+	}
+	if clierr.IsUserFacing(err) {
 		return true
 	}
 	if errors.Is(err, utils.ErrSSHUnreachable) {
+		return true
+	}
+	// A persistent auth failure that survived key regeneration means the
+	// instance's sshd genuinely won't serve a freshly added key — a broken-node
+	// condition the user resolves by recreating the instance, not a CLI bug.
+	if errors.Is(err, utils.ErrPersistentAuthFailure) {
+		return true
+	}
+	// Cached SSH key exists but the OS denied the read (Windows NTFS ACLs,
+	// antivirus). A local environment issue on the user's machine, not a CLI bug.
+	if errors.Is(err, utils.ErrKeyUnreadable) {
 		return true
 	}
 	var notExistErr *pflag.NotExistError
@@ -152,12 +163,7 @@ func isUserError(err error) bool {
 	if errors.Is(err, api.ErrTransport) {
 		return true
 	}
-	// User cancellation (Ctrl-C) and network timeouts - neither is a CLI bug.
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
+	if isCancellationOrTimeout(err) {
 		return true
 	}
 	// API 4xx responses are always user errors (auth, validation, not found, etc.).
@@ -183,7 +189,7 @@ func init() {
 	}
 
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
-		return fmt.Errorf("%w: %s", ErrUsage, err)
+		return fmt.Errorf("%w: %w", ErrUsage, err)
 	})
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {

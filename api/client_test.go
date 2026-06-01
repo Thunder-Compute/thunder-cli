@@ -2,11 +2,16 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/version"
 	"github.com/Thunder-Compute/thunder-cli/pkg/types"
 )
 
@@ -201,4 +206,70 @@ func TestNewClientWithCustomURL(t *testing.T) {
 	assert.NotNil(t, client)
 	assert.Equal(t, customURL, client.baseURL)
 	assert.Equal(t, token, client.token)
+}
+
+func TestClientSendsAuditContextHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/auth/validate", r.URL.Path)
+		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		assert.Equal(t, "GO-CLI", r.Header.Get("Thunder-Client"))
+		assert.Equal(t, version.BuildVersion, r.Header.Get("Version"))
+		if platform := cliPlatform(); platform != "" {
+			assert.Equal(t, platform, r.Header.Get("Platform"))
+		} else {
+			assert.Empty(t, r.Header.Get("Platform"))
+		}
+		_, _ = w.Write([]byte(`{"valid":true}`))
+	}))
+	defer server.Close()
+
+	client := NewClient("test-token", server.URL)
+	result, err := client.ValidateToken(t.Context())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.Valid)
+}
+
+func TestListInstancesRateLimitIncludesRetryAfterSeconds(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/instances/list", r.URL.Path)
+		w.Header().Set("Retry-After", "7")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"message":"Rate limit exceeded"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient("test-token", server.URL)
+	_, err := client.ListInstances()
+	require.Error(t, err)
+
+	var apiErr *APIError
+	require.True(t, errors.As(err, &apiErr))
+	assert.Equal(t, http.StatusTooManyRequests, apiErr.StatusCode)
+	assert.Equal(t, "Rate limit exceeded", apiErr.Message)
+	assert.True(t, apiErr.HasRetryAfter)
+	assert.Equal(t, 7*time.Second, apiErr.RetryAfter)
+}
+
+func TestListInstancesRateLimitIncludesRetryAfterHTTPDate(t *testing.T) {
+	retryAt := time.Now().Add(3 * time.Second).UTC()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1/instances/list", r.URL.Path)
+		w.Header().Set("Retry-After", retryAt.Format(http.TimeFormat))
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"message":"Rate limit exceeded"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient("test-token", server.URL)
+	_, err := client.ListInstances()
+	require.Error(t, err)
+
+	var apiErr *APIError
+	require.True(t, errors.As(err, &apiErr))
+	assert.Equal(t, http.StatusTooManyRequests, apiErr.StatusCode)
+	assert.True(t, apiErr.HasRetryAfter)
+	assert.GreaterOrEqual(t, apiErr.RetryAfter, time.Duration(0))
+	assert.LessOrEqual(t, apiErr.RetryAfter, 3*time.Second)
 }

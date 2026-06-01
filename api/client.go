@@ -8,9 +8,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/clierr"
+	"github.com/Thunder-Compute/thunder-cli/internal/version"
 	"github.com/Thunder-Compute/thunder-cli/pkg/types"
 	"github.com/getsentry/sentry-go"
 	sentryhttpclient "github.com/getsentry/sentry-go/httpclient"
@@ -21,16 +26,22 @@ import (
 // reset, TLS handshake error, mid-stream EOF, etc. Callers use errors.Is to
 // classify these uniformly as user/network noise, distinct from *APIError
 // (which means the server did respond with a status >= 400).
-var ErrTransport = errors.New("transport error")
+var ErrTransport = clierr.New("transport error")
 
-// APIError is returned for HTTP responses with status >= 400 (except 401).
+// APIError is returned for HTTP responses with status >= 400.
 type APIError struct {
-	StatusCode int
-	Message    string
+	StatusCode    int
+	Message       string
+	RetryAfter    time.Duration
+	HasRetryAfter bool
 }
 
 func (e *APIError) Error() string {
 	return e.Message
+}
+
+func (e *APIError) UserFacing() bool {
+	return true
 }
 
 type Client struct {
@@ -74,6 +85,10 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body, resul
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Thunder-Client", "GO-CLI")
+	req.Header.Set("Version", version.BuildVersion)
+	if platform := cliPlatform(); platform != "" {
+		req.Header.Set("Platform", platform)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -100,7 +115,12 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body, resul
 		if resp.StatusCode == 401 {
 			return &APIError{StatusCode: 401, Message: "authentication failed: invalid token"}
 		}
-		apiErr := &APIError{StatusCode: resp.StatusCode}
+		retryAfter, hasRetryAfter := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+		apiErr := &APIError{
+			StatusCode:    resp.StatusCode,
+			RetryAfter:    retryAfter,
+			HasRetryAfter: hasRetryAfter,
+		}
 		var parsed struct {
 			Message string `json:"message"`
 		}
@@ -118,6 +138,37 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body, resul
 		}
 	}
 	return nil
+}
+
+func cliPlatform() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return "mac"
+	case "linux", "windows":
+		return runtime.GOOS
+	default:
+		return ""
+	}
+}
+
+func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+
+	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil && seconds >= 0 {
+		return time.Duration(seconds) * time.Second, true
+	}
+
+	retryAt, err := http.ParseTime(value)
+	if err != nil {
+		return 0, false
+	}
+	if retryAt.Before(now) {
+		return 0, true
+	}
+	return retryAt.Sub(now), true
 }
 
 // sortedInstances converts a map keyed by ID into a sorted slice.

@@ -2,7 +2,9 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"sort"
@@ -20,6 +22,9 @@ import (
 
 const (
 	provisioningExpectedDuration = 10 * time.Minute
+	emptyPollInterval            = 60 * time.Second
+	emptyPollBackoffAfter        = 2 * time.Hour
+	emptyPollBackoffInterval     = 5 * time.Minute
 )
 
 type statusStyles struct {
@@ -27,6 +32,7 @@ type statusStyles struct {
 	running      lipgloss.Style
 	starting     lipgloss.Style
 	restoring    lipgloss.Style
+	migrating    lipgloss.Style
 	deleting     lipgloss.Style
 	provisioning lipgloss.Style
 	cell         lipgloss.Style
@@ -39,6 +45,7 @@ func newStatusStyles() statusStyles {
 		running:      SuccessStyle(),
 		starting:     WarningStyle(),
 		restoring:    PrimaryStyle().Bold(true),
+		migrating:    PrimaryStyle().Bold(true),
 		deleting:     ErrorStyle(),
 		provisioning: WarningStyle(),
 		cell:         lipgloss.NewStyle().Padding(0, 1),
@@ -55,11 +62,14 @@ type statusModel struct {
 	quitting     bool
 	spinner      spinner.Model
 	err          error
+	refreshErr   error
+	nextRetryAt  time.Time
 	done         bool
 	cancelled    bool
 	progressBars map[string]progress.Model
 
 	transitionStartedAt time.Time
+	emptyStartedAt      time.Time
 
 	styles statusStyles
 }
@@ -89,13 +99,16 @@ func newStatusModel(client *api.Client, monitoring bool, instances []api.Instanc
 	if hasTransitionalInstance(instances) {
 		m.transitionStartedAt = time.Now()
 	}
+	if monitoring && len(instances) == 0 {
+		m.emptyStartedAt = time.Now()
+	}
 	return m
 }
 
 func (m statusModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.spinner.Tick}
 	if m.monitoring {
-		cmds = append(cmds, tickCmd(m.transitionStartedAt))
+		cmds = append(cmds, m.tickCmd())
 	}
 	return tea.Batch(cmds...)
 }
@@ -103,7 +116,7 @@ func (m statusModel) Init() tea.Cmd {
 func hasTransitionalInstance(instances []api.Instance) bool {
 	for _, inst := range instances {
 		switch inst.Status {
-		case "PROVISIONING", "RESTORING", "STARTING", "STAGING", "PENDING", "QUEUED", "UNKNOWN":
+		case "PROVISIONING", "RESTORING", "MIGRATING", "STARTING", "STAGING", "PENDING", "QUEUED", "UNKNOWN":
 			return true
 		}
 	}
@@ -125,14 +138,34 @@ func nextInstancePollDelay(transitionAge time.Duration) time.Duration {
 	}
 }
 
-func tickCmd(transitionStartedAt time.Time) tea.Cmd {
-	interval := 60 * time.Second
-	if !transitionStartedAt.IsZero() {
-		interval = nextInstancePollDelay(time.Since(transitionStartedAt))
+func nextEmptyPollDelay(emptyStartedAt time.Time) time.Duration {
+	if emptyStartedAt.IsZero() || time.Since(emptyStartedAt) < emptyPollBackoffAfter {
+		return emptyPollInterval
 	}
-	return tea.Tick(interval, func(t time.Time) tea.Msg {
+	return emptyPollBackoffInterval
+}
+
+func (m statusModel) nextStatusPollDelay() time.Duration {
+	if len(m.instances) == 0 {
+		return nextEmptyPollDelay(m.emptyStartedAt)
+	}
+	if !m.transitionStartedAt.IsZero() {
+		return nextInstancePollDelay(time.Since(m.transitionStartedAt))
+	}
+	return 60 * time.Second
+}
+
+func tickAfter(delay time.Duration) tea.Cmd {
+	if delay < time.Second {
+		delay = time.Second
+	}
+	return tea.Tick(delay, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
+}
+
+func (m statusModel) tickCmd() tea.Cmd {
+	return tickAfter(m.nextStatusPollDelay())
 }
 
 func fetchInstancesCmd(client *api.Client) tea.Cmd {
@@ -144,6 +177,56 @@ func fetchInstancesCmd(client *api.Client) tea.Cmd {
 
 func deferQuit() tea.Cmd {
 	return tea.Tick(1*time.Millisecond, func(time.Time) tea.Msg { return quitNow{} })
+}
+
+func (m statusModel) statusRefreshRetryDelay(err error) (time.Duration, bool) {
+	var apiErr *api.APIError
+	if errors.As(err, &apiErr) {
+		switch {
+		case apiErr.StatusCode == http.StatusTooManyRequests:
+			if apiErr.HasRetryAfter {
+				return apiErr.RetryAfter, true
+			}
+			return 60 * time.Second, true
+		case apiErr.StatusCode >= 500:
+			return m.nextStatusPollDelay(), true
+		default:
+			return 0, false
+		}
+	}
+
+	if errors.Is(err, api.ErrTransport) {
+		return m.nextStatusPollDelay(), true
+	}
+
+	return 0, false
+}
+
+func formatRetryDelay(delay time.Duration) string {
+	if delay <= 0 {
+		return "now"
+	}
+
+	seconds := int((delay + time.Second - 1) / time.Second)
+	if seconds < 60 {
+		return fmt.Sprintf("%ds", seconds)
+	}
+
+	minutes := seconds / 60
+	remainingSeconds := seconds % 60
+	if remainingSeconds == 0 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+	return fmt.Sprintf("%dm %02ds", minutes, remainingSeconds)
+}
+
+func statusRefreshErrorMessage(err error, retryAt time.Time) string {
+	delay := time.Until(retryAt)
+	var apiErr *api.APIError
+	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests {
+		return fmt.Sprintf("Refresh rate-limited. Retrying in %s.", formatRetryDelay(delay))
+	}
+	return fmt.Sprintf("Failed to refresh instances. Retrying in %s.", formatRetryDelay(delay))
 }
 
 func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -165,8 +248,8 @@ func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case tickMsg:
-		if m.monitoring && len(m.instances) > 0 {
-			return m, tea.Batch(tickCmd(m.transitionStartedAt), fetchInstancesCmd(m.client))
+		if m.monitoring {
+			return m, fetchInstancesCmd(m.client)
 		}
 
 	case spinner.TickMsg:
@@ -176,12 +259,35 @@ func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case instancesMsg:
 		if msg.err != nil {
+			if m.monitoring {
+				if delay, ok := m.statusRefreshRetryDelay(msg.err); ok {
+					m.refreshErr = msg.err
+					m.nextRetryAt = time.Now().Add(delay)
+					return m, tickAfter(delay)
+				}
+			}
 			m.err = msg.err
 			m.monitoring = false
 			return m, deferQuit()
 		}
 		m.instances = msg.instances
 		m.lastUpdate = time.Now()
+		m.refreshErr = nil
+		m.nextRetryAt = time.Time{}
+
+		if len(m.instances) == 0 {
+			m.transitionStartedAt = time.Time{}
+			if m.monitoring {
+				if m.emptyStartedAt.IsZero() {
+					m.emptyStartedAt = time.Now()
+				}
+				return m, m.tickCmd()
+			}
+			m.quitting = true
+			return m, deferQuit()
+		}
+
+		m.emptyStartedAt = time.Time{}
 
 		if hasTransitionalInstance(m.instances) {
 			if m.transitionStartedAt.IsZero() {
@@ -191,16 +297,12 @@ func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.transitionStartedAt = time.Time{}
 		}
 
-		if len(m.instances) == 0 {
-			m.monitoring = false
-			m.quitting = true
-			return m, deferQuit()
-		}
-
 		if !m.monitoring {
 			m.quitting = true
 			return m, deferQuit()
 		}
+
+		return m, m.tickCmd()
 	}
 
 	return m, nil
@@ -228,6 +330,12 @@ func (m statusModel) View() string {
 		b.WriteString(restoringSection)
 	}
 
+	// Render migrating progress section
+	migratingSection := m.renderMigratingSection()
+	if migratingSection != "" {
+		b.WriteString(migratingSection)
+	}
+
 	// Render recent events section
 	eventsSection := m.renderEventsSection()
 	if eventsSection != "" {
@@ -241,9 +349,18 @@ func (m statusModel) View() string {
 		return b.String()
 	}
 
+	if m.refreshErr != nil && !m.nextRetryAt.IsZero() {
+		b.WriteString(warningStyleTUI.Render(statusRefreshErrorMessage(m.refreshErr, m.nextRetryAt)))
+		b.WriteString("\n")
+	}
+
 	if m.monitoring {
 		ts := m.lastUpdate.Format("15:04:05")
-		b.WriteString(m.styles.timestamp.Render(fmt.Sprintf("Last updated: %s", ts)))
+		statusText := fmt.Sprintf("Last updated: %s", ts)
+		if len(m.instances) == 0 {
+			statusText = fmt.Sprintf("Last updated: %s; checking every %s", ts, formatRetryDelay(nextEmptyPollDelay(m.emptyStartedAt)))
+		}
+		b.WriteString(m.styles.timestamp.Render(statusText))
 		b.WriteString("  ")
 		b.WriteString(m.spinner.View())
 		b.WriteString("\n")
@@ -368,6 +485,8 @@ func (m statusModel) formatStatus(status string, width int) string {
 		style = m.styles.starting
 	case "RESTORING":
 		style = m.styles.restoring
+	case "MIGRATING":
+		style = m.styles.migrating
 	case "DELETING":
 		style = m.styles.deleting
 	case "PROVISIONING":
@@ -406,7 +525,14 @@ func (m *statusModel) renderProvisioningSection() string {
 	b.WriteString(primaryStyle.Bold(true).Render("Provisioning Instances:"))
 	b.WriteString("\n\n")
 
-	for gpuType, instances := range instancesByGPU {
+	gpuTypes := make([]string, 0, len(instancesByGPU))
+	for gpuType := range instancesByGPU {
+		gpuTypes = append(gpuTypes, gpuType)
+	}
+	sort.Strings(gpuTypes)
+
+	for _, gpuType := range gpuTypes {
+		instances := instancesByGPU[gpuType]
 		m.ensureProgressBar(gpuType)
 		progressBar := m.progressBars[gpuType]
 
@@ -457,11 +583,18 @@ func (m *statusModel) renderProvisioningSection() string {
 	return b.String()
 }
 
+func restorationExpectedDuration(instance api.Instance) time.Duration {
+	if instance.SnapshotSizeGB > 0 {
+		return utils.EstimateInstanceRestorationDurationGB(instance.SnapshotSizeGB)
+	}
+	return utils.EstimateInstanceRestorationDurationGB(instance.Storage)
+}
+
 func (m *statusModel) renderRestoringSection() string {
 	// Filter instances with RESTORING status
 	var restoringInstances []api.Instance
 	for _, instance := range m.instances {
-		if instance.Status == "RESTORING" && !instance.RestoringTime.IsZero() {
+		if instance.Status == "RESTORING" && !instance.ProgressStartedAt.IsZero() {
 			restoringInstances = append(restoringInstances, instance)
 		}
 	}
@@ -482,11 +615,11 @@ func (m *statusModel) renderRestoringSection() string {
 		progressBar := m.progressBars[progressBarKey]
 
 		// Calculate progress using the GetProgress method
-		restoringExpectedDuration := utils.EstimateInstanceRestorationDuration(instance.SnapshotSize)
-		progressPercent := utils.GetProgress(instance.RestoringTime, restoringExpectedDuration)
+		restoringExpectedDuration := restorationExpectedDuration(instance)
+		progressPercent := utils.GetProgress(instance.ProgressStartedAt, restoringExpectedDuration)
 
 		// Calculate time remaining
-		elapsed := time.Since(instance.RestoringTime)
+		elapsed := time.Since(instance.ProgressStartedAt)
 		remaining := restoringExpectedDuration - elapsed
 		if remaining < 0 {
 			remaining = 0
@@ -505,6 +638,63 @@ func (m *statusModel) renderRestoringSection() string {
 		// Render message (compressed)
 		message := fmt.Sprintf("  ~%d min total, ~%d min remaining",
 			int(restoringExpectedDuration.Minutes()),
+			remainingMinutes,
+		)
+		b.WriteString(m.styles.timestamp.Render(message))
+		b.WriteString("\n\n")
+	}
+
+	return b.String()
+}
+
+func (m *statusModel) renderMigratingSection() string {
+	// Filter instances with MIGRATING status
+	var migratingInstances []api.Instance
+	for _, instance := range m.instances {
+		if instance.Status == "MIGRATING" && !instance.ProgressStartedAt.IsZero() {
+			migratingInstances = append(migratingInstances, instance)
+		}
+	}
+
+	if len(migratingInstances) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(primaryStyle.Bold(true).Render("Migrating Instances:"))
+	b.WriteString("\n\n")
+
+	for _, instance := range migratingInstances {
+		// Use instance ID for migrating progress bars (each instance gets its own)
+		progressBarKey := "migrating-" + instance.ID
+		m.ensureProgressBar(progressBarKey)
+		progressBar := m.progressBars[progressBarKey]
+
+		// Calculate progress using the GetProgress method
+		migratingExpectedDuration := utils.EstimateInstanceMigrationDuration(instance.Storage)
+		progressPercent := utils.GetProgress(instance.ProgressStartedAt, migratingExpectedDuration)
+
+		// Calculate time remaining
+		elapsed := time.Since(instance.ProgressStartedAt)
+		remaining := migratingExpectedDuration - elapsed
+		if remaining < 0 {
+			remaining = 0
+		}
+		remainingMinutes := int(remaining.Minutes())
+		if remainingMinutes < 1 {
+			remainingMinutes = 1
+		}
+
+		// Render instance name (grey, unbolded)
+		b.WriteString(fmt.Sprintf("  %s\n", SubtleTextStyle().Render(instance.Name)))
+
+		// Render progress bar
+		b.WriteString(fmt.Sprintf("  %s\n", progressBar.ViewAs(progressPercent)))
+
+		// Render message (compressed)
+		message := fmt.Sprintf("  ~%d min total, ~%d min remaining",
+			int(migratingExpectedDuration.Minutes()),
 			remainingMinutes,
 		)
 		b.WriteString(m.styles.timestamp.Render(message))

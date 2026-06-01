@@ -8,15 +8,17 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/Thunder-Compute/thunder-cli/internal/clierr"
 )
 
 // ErrTransferCancelled is returned when a transfer process is killed by a
 // signal (e.g. user pressed Ctrl+C).
-var ErrTransferCancelled = errors.New("transfer cancelled")
+var ErrTransferCancelled = clierr.New("transfer cancelled")
 
 // ErrTransferUser is a sentinel for transfer errors caused by bad user input
 // (wrong path, missing file, etc.). Callers can check errors.Is(err, ErrTransferUser).
-var ErrTransferUser = errors.New("transfer user error")
+var ErrTransferUser = clierr.New("transfer user error")
 
 type transferUserError struct {
 	msg string

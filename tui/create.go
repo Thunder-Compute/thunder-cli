@@ -86,6 +86,7 @@ type createModel struct {
 	snapshotOffset            int  // index of first visible item when browsing snapshots
 	pricing                   *utils.PricingData
 	pricingLoaded             bool
+	pricingErr                error
 	specs                     *utils.SpecStore
 	specsLoaded               bool
 	presets                   *CreatePresets
@@ -449,16 +450,11 @@ func fetchCreatePricingCmd(client *api.Client) tea.Cmd {
 
 func fetchCreateSpecsCmd(client *api.Client) tea.Cmd {
 	return func() tea.Msg {
-		specsMap, err := client.GetSpecs()
+		specs, err := utils.FetchSpecStore(client)
 		if err != nil {
 			return createSpecsMsg{err: err}
 		}
-		availability, availabilityErr := client.GetAvailability()
-		var specAvailability map[string]string
-		if availabilityErr == nil && availability != nil {
-			specAvailability = availability.Specs
-		}
-		return createSpecsMsg{specs: utils.NewSpecStoreWithAvailability(specsMap, specAvailability)}
+		return createSpecsMsg{specs: specs}
 	}
 }
 
@@ -509,13 +505,15 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case createPricingMsg:
 		if msg.err == nil && msg.rates != nil {
 			m.pricing = &utils.PricingData{Rates: msg.rates}
+		} else {
+			m.pricingErr = msg.err
 		}
 		m.pricingLoaded = true
 		return m, nil
 
 	case createSpecsMsg:
 		if msg.err != nil {
-			m.err = fmt.Errorf("failed to fetch GPU specs: %w", msg.err)
+			m.err = msg.err
 			return m, tea.Quit
 		}
 		m.specs = msg.specs
@@ -524,13 +522,20 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.presets != nil {
 			return m, m.trySkipCurrentStep()
 		}
+		// Flagless flow: the user may have already advanced to a specs-dependent
+		// step while specs were loading. Initialize its cursor now that options
+		// are known (otherwise it stays at the default 0).
+		if m.step == stepGPU || m.step == stepCompute {
+			m.initStep()
+		}
 		return m, nil
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		// Keep spinning if async data hasn't loaded yet
-		if !m.templatesLoaded || !m.snapshotsLoaded || !m.specsLoaded {
+		// Keep spinning if async data hasn't loaded yet (including pricing, which
+		// drives the "calculating…" indicator on the estimated-cost line).
+		if !m.templatesLoaded || !m.snapshotsLoaded || !m.specsLoaded || !m.pricingLoaded {
 			return m, tea.Batch(cmd, m.spinner.Tick)
 		}
 		return m, cmd
@@ -807,6 +812,9 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 }
 
 func (m createModel) getGPUOptions() []string {
+	if m.specs == nil {
+		return nil
+	}
 	return m.specs.GPUOptionsForMode(m.config.Mode)
 }
 
@@ -1137,11 +1145,25 @@ func (m createModel) View() string {
 		}
 	}
 
-	// Pricing line (skip on mode step since config is too incomplete)
-	if m.pricing != nil && m.step != stepMode {
-		price := m.computePreviewPrice()
+	// Pricing line (skip on mode step since config is too incomplete). Specs and
+	// pricing both load asynchronously; show a spinner in place until both
+	// arrive, mirroring the per-step loading indicators above. If pricing failed
+	// to load, surface the (user-facing) error inline rather than spinning forever.
+	if m.step != stepMode {
 		s.WriteString("\n")
-		s.WriteString(m.styles.Help.Render(fmt.Sprintf("Estimated cost: %s", utils.FormatPrice(price))))
+		switch {
+		case m.pricing != nil && m.specsLoaded:
+			price := m.computePreviewPrice()
+			s.WriteString(m.styles.Help.Render(fmt.Sprintf("Estimated cost: %s", utils.FormatPrice(price))))
+		case m.pricingLoaded && m.specsLoaded:
+			msg := "Estimated cost: unavailable"
+			if m.pricingErr != nil {
+				msg = fmt.Sprintf("Estimated cost: unavailable (%v)", m.pricingErr)
+			}
+			s.WriteString(m.styles.Help.Render(msg))
+		default:
+			s.WriteString(m.styles.Help.Render(fmt.Sprintf("Estimated cost: %s calculating…", m.spinner.View())))
+		}
 	}
 
 	s.WriteString("\n")
@@ -1196,7 +1218,9 @@ func (m createModel) computePreviewPrice() float64 {
 		vcpus = m.specs.IncludedVCPUs(gpuType, numGPUs, mode)
 	case stepGPU:
 		gpus := m.getGPUOptions()
-		gpuType = gpus[m.cursor]
+		if m.cursor < len(gpus) {
+			gpuType = gpus[m.cursor]
+		}
 		if numGPUs == 0 {
 			numGPUs = 1
 		}
@@ -1204,11 +1228,15 @@ func (m createModel) computePreviewPrice() float64 {
 	case stepCompute:
 		if m.gpuCountPhase {
 			gpuCounts := m.specs.GPUCountsForMode(gpuType, mode)
-			numGPUs = gpuCounts[m.cursor]
+			if m.cursor < len(gpuCounts) {
+				numGPUs = gpuCounts[m.cursor]
+			}
 			vcpus = m.specs.IncludedVCPUs(gpuType, numGPUs, mode)
 		} else {
 			vcpuOpts := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, mode)
-			vcpus = vcpuOpts[m.cursor]
+			if m.cursor < len(vcpuOpts) {
+				vcpus = vcpuOpts[m.cursor]
+			}
 		}
 	case stepDiskSize:
 		if v, err := strconv.Atoi(m.diskInput.Value()); err == nil && v >= 10 {

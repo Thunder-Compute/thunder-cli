@@ -49,29 +49,29 @@ type InstanceListResponse map[string]InstanceListItem
 
 // InstanceListItem represents a single instance in the list response.
 type InstanceListItem struct {
-	ID               string           `json:"id,omitempty"`
-	IP               *string          `json:"ip,omitempty"`
-	Name             string           `json:"name"`
-	Status           string           `json:"status"`
-	CreatedAt        string           `json:"createdAt"`
-	UUID             string           `json:"uuid"`
-	Storage          int              `json:"storage"`
-	EphemeralDiskGB  int              `json:"ephemeralDiskGB,omitempty"`
-	CPUCores         string           `json:"cpuCores"`
-	Template         string           `json:"template"`
-	GPUType          string           `json:"gpuType"`
-	NumGPUs          string           `json:"numGpus"`
-	Memory           string           `json:"memory"`
-	Promoted         bool             `json:"promoted"`
-	Mode             string           `json:"mode"`
-	Port             int              `json:"port"`
-	HTTPPorts        []int            `json:"httpPorts,omitempty"`
-	K8s              bool             `json:"k8s"`
-	ProvisioningTime time.Time        `json:"provisioningTime,omitempty"`
-	RestoringTime    time.Time        `json:"restoringTime,omitempty"`
-	SnapshotSize     int64            `json:"snapshotSize,omitempty"`
-	SSHPublicKeys    []string         `json:"sshPublicKeys,omitempty"`
-	LastRestart      *InstanceRestart `json:"lastRestart,omitempty"`
+	ID                string           `json:"id,omitempty"`
+	IP                *string          `json:"ip,omitempty"`
+	Name              string           `json:"name"`
+	Status            string           `json:"status"`
+	CreatedAt         string           `json:"createdAt"`
+	UUID              string           `json:"uuid"`
+	Storage           int              `json:"storage"`
+	EphemeralDiskGB   int              `json:"ephemeralDiskGB,omitempty"`
+	CPUCores          string           `json:"cpuCores"`
+	Template          string           `json:"template"`
+	GPUType           string           `json:"gpuType"`
+	NumGPUs           string           `json:"numGpus"`
+	Memory            string           `json:"memory"`
+	Promoted          bool             `json:"promoted"`
+	Mode              string           `json:"mode"`
+	Port              int              `json:"port"`
+	HTTPPorts         []int            `json:"httpPorts,omitempty"`
+	K8s               bool             `json:"k8s"`
+	ProvisioningTime  time.Time        `json:"provisioningTime,omitempty"`
+	ProgressStartedAt time.Time        `json:"progressStartedAt,omitempty"`
+	SnapshotSizeGB    int              `json:"snapshotSizeGB,omitempty"`
+	SSHPublicKeys     []string         `json:"sshPublicKeys,omitempty"`
+	LastRestart       *InstanceRestart `json:"lastRestart,omitempty"`
 }
 
 // InstanceRestart represents the most recent container restart event.

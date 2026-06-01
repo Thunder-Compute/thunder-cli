@@ -169,23 +169,19 @@ func runCreate(cmd *cobra.Command) error {
 		return err
 	}
 
-	// Fetch GPU specs from API
-	specsMap, specsErr := client.GetSpecs()
-	if specsErr != nil {
-		return fmt.Errorf("failed to fetch GPU specs: %w", specsErr)
-	}
-	availability, availabilityErr := client.GetAvailability()
-	var specAvailability map[string]string
-	if availabilityErr == nil && availability != nil {
-		specAvailability = availability.Specs
-	}
-	specs := utils.NewSpecStoreWithAvailability(specsMap, specAvailability)
-
 	presets := buildCreatePresets(cmd)
+	interactive := tui.IsInteractive() && !JSONOutput
 
 	var createConfig *tui.CreateConfig
 
-	interactive := tui.IsInteractive() && !JSONOutput
+	deferSpecsToTUI := presets.IsEmpty() && interactive
+	var specs *utils.SpecStore
+	if !deferSpecsToTUI {
+		specs, err = utils.FetchSpecStore(client)
+		if err != nil {
+			return err
+		}
+	}
 
 	if presets.IsEmpty() {
 		if !interactive {
