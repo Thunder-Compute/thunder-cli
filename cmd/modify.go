@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -51,20 +52,33 @@ func runModify(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Fetch GPU specs and availability from API.
-	specs, specsErr := utils.FetchSpecStore(client)
-	if specsErr != nil {
-		return specsErr
-	}
-
-	// Fetch instances
-	var instances []api.Instance
+	var (
+		specs     *utils.SpecStore
+		specsErr  error
+		instances []api.Instance
+		instErr   error
+	)
 	if err := tui.RunWithBusySpinner("Fetching instances...", os.Stdout, func() error {
-		var e error
-		instances, e = client.ListInstances()
-		return e
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			specs, specsErr = utils.FetchSpecStore(client)
+		}()
+		go func() {
+			defer wg.Done()
+			instances, instErr = client.ListInstances()
+		}()
+		wg.Wait()
+		if specsErr != nil {
+			return specsErr
+		}
+		if instErr != nil {
+			return fmt.Errorf("failed to fetch instances: %w", instErr)
+		}
+		return nil
 	}); err != nil {
-		return fmt.Errorf("failed to fetch instances: %w", err)
+		return err
 	}
 
 	if len(instances) == 0 {
