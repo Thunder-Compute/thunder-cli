@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -51,21 +52,33 @@ func runModify(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Fetch GPU specs from API
-	specsMap, specsErr := client.GetSpecs()
-	if specsErr != nil {
-		return fmt.Errorf("failed to fetch GPU specs: %w", specsErr)
-	}
-	specs := utils.NewSpecStore(specsMap)
-
-	// Fetch instances
-	var instances []api.Instance
+	var (
+		specs     *utils.SpecStore
+		specsErr  error
+		instances []api.Instance
+		instErr   error
+	)
 	if err := tui.RunWithBusySpinner("Fetching instances...", os.Stdout, func() error {
-		var e error
-		instances, e = client.ListInstances()
-		return e
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			specs, specsErr = utils.FetchSpecStore(client)
+		}()
+		go func() {
+			defer wg.Done()
+			instances, instErr = client.ListInstances()
+		}()
+		wg.Wait()
+		if specsErr != nil {
+			return specsErr
+		}
+		if instErr != nil {
+			return fmt.Errorf("failed to fetch instances: %w", instErr)
+		}
+		return nil
 	}); err != nil {
-		return fmt.Errorf("failed to fetch instances: %w", err)
+		return err
 	}
 
 	if len(instances) == 0 {
@@ -148,6 +161,9 @@ func runModify(cmd *cobra.Command, args []string) error {
 		// All flags provided -> try fully non-interactive (skip confirmation)
 		modifyReq, err = buildModifyRequestFromFlags(cmd, selectedInstance, specs)
 		if err != nil {
+			if !interactive {
+				return err
+			}
 			// Fall through to hybrid
 			modifyConfig, err = tui.RunModifyHybrid(client, selectedInstance, specs, modifyPresets)
 			if err != nil {
@@ -335,15 +351,14 @@ func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api
 	}
 
 	if config.ComputeChanged {
-		effectiveMode := currentInstance.Mode
-		if config.ModeChanged {
-			effectiveMode = config.Mode
-		}
+		currentNumGPUs, _ := strconv.Atoi(currentInstance.NumGPUs)
+		currentVCPUs, _ := strconv.Atoi(currentInstance.CPUCores)
 
-		if effectiveMode == "prototyping" {
-			req.CPUCores = &config.VCPUs
-		} else {
+		if config.NumGPUs > 0 && config.NumGPUs != currentNumGPUs {
 			req.NumGPUs = &config.NumGPUs
+		}
+		if config.VCPUs > 0 && config.VCPUs != currentVCPUs {
+			req.CPUCores = &config.VCPUs
 		}
 	}
 
@@ -356,7 +371,7 @@ func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api
 	}
 
 	// Check if any changes were made
-	if !config.ModeChanged && !config.GPUChanged && !config.ComputeChanged && !config.DiskChanged && !config.EphemeralDiskChanged {
+	if req.Mode == nil && req.GPUType == nil && req.CPUCores == nil && req.NumGPUs == nil && req.DiskSizeGB == nil && req.EphemeralDiskGB == nil {
 		return req, fmt.Errorf("no changes specified")
 	}
 
@@ -430,8 +445,8 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 			effectiveGPU = *req.GPUType
 		}
 		effectiveNumGPUs := 1
-		if req.NumGPUs != nil {
-			effectiveNumGPUs = *req.NumGPUs
+		if presets.NumGPUs != nil {
+			effectiveNumGPUs = *presets.NumGPUs
 		} else if currentInstance.NumGPUs != "" {
 			if n, err := fmt.Sscanf(currentInstance.NumGPUs, "%d", &effectiveNumGPUs); n != 1 || err != nil {
 				effectiveNumGPUs = 1
@@ -464,6 +479,44 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 		hasChanges = true
 	}
 
+	effectiveGPU := currentInstance.GPUType
+	if req.GPUType != nil {
+		effectiveGPU = *req.GPUType
+	}
+	effectiveNumGPUs := 1
+	if req.NumGPUs != nil {
+		effectiveNumGPUs = *req.NumGPUs
+	} else if currentInstance.NumGPUs != "" {
+		if n, parseErr := fmt.Sscanf(currentInstance.NumGPUs, "%d", &effectiveNumGPUs); n != 1 || parseErr != nil {
+			effectiveNumGPUs = 1
+		}
+	}
+	targetVCPUOptions := specs.VCPUOptions(effectiveGPU, effectiveNumGPUs, effectiveMode)
+	if len(targetVCPUOptions) == 0 {
+		return req, usageErr("unsupported configuration: %s with %d GPU(s) in %s mode", effectiveGPU, effectiveNumGPUs, effectiveMode)
+	}
+	if !specs.IsSpecAvailable(effectiveGPU, effectiveNumGPUs, effectiveMode) {
+		return req, usageErr("GPU configuration %s x%d in %s mode is currently unavailable", effectiveGPU, effectiveNumGPUs, effectiveMode)
+	}
+	if effectiveMode == "production" {
+		targetVCPUs := targetVCPUOptions[0]
+		currentVCPUs, _ := strconv.Atoi(currentInstance.CPUCores)
+		if targetVCPUs != currentVCPUs {
+			req.CPUCores = &targetVCPUs
+			hasChanges = true
+		}
+	} else {
+		targetVCPUs := 0
+		if req.CPUCores != nil {
+			targetVCPUs = *req.CPUCores
+		} else {
+			targetVCPUs, _ = strconv.Atoi(currentInstance.CPUCores)
+		}
+		if !slices.Contains(targetVCPUOptions, targetVCPUs) {
+			return req, usageErr("vcpus must be one of %v for %s with %d GPU(s)", targetVCPUOptions, effectiveGPU, effectiveNumGPUs)
+		}
+	}
+
 	// Disk size validation
 	if presets.DiskSizeGB != nil {
 		diskSize := *presets.DiskSizeGB
@@ -471,22 +524,10 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 			return req, usageErr("disk size cannot be smaller than current size (%d GB)", currentInstance.Storage)
 		}
 
-		// Determine effective GPU type and count for storage range lookup
-		effectiveGPU := currentInstance.GPUType
-		if req.GPUType != nil {
-			effectiveGPU = *req.GPUType
-		}
-		effectiveNumGPUs := 1
-		if req.NumGPUs != nil {
-			effectiveNumGPUs = *req.NumGPUs
-		} else if currentInstance.NumGPUs != "" {
-			if n, parseErr := fmt.Sscanf(currentInstance.NumGPUs, "%d", &effectiveNumGPUs); n != 1 || parseErr != nil {
-				effectiveNumGPUs = 1
-			}
-		}
-		_, maxDisk := specs.StorageRange(effectiveGPU, effectiveNumGPUs, effectiveMode)
-		if diskSize > maxDisk {
-			return req, usageErr("disk size must be between %d and %d GB", currentInstance.Storage, maxDisk)
+		minDisk, maxDisk := specs.StorageRange(effectiveGPU, effectiveNumGPUs, effectiveMode)
+		minAllowedDisk := max(currentInstance.Storage, minDisk)
+		if diskSize < minAllowedDisk || diskSize > maxDisk {
+			return req, usageErr("disk size must be between %d and %d GB", minAllowedDisk, maxDisk)
 		}
 		req.DiskSizeGB = &diskSize
 		hasChanges = true
@@ -495,8 +536,9 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 	// Ephemeral disk size validation
 	if presets.EphemeralDiskGB != nil {
 		ephemeralSize := *presets.EphemeralDiskGB
-		if ephemeralSize < 0 {
-			return req, usageErr("ephemeral disk size cannot be negative")
+		minEphemeral, maxEphemeral := specs.EphemeralStorageRange(effectiveGPU, effectiveNumGPUs, effectiveMode)
+		if ephemeralSize < minEphemeral || ephemeralSize > maxEphemeral {
+			return req, usageErr("ephemeral disk size must be between %d and %d GB", minEphemeral, maxEphemeral)
 		}
 		req.EphemeralDiskGB = &ephemeralSize
 		hasChanges = true
