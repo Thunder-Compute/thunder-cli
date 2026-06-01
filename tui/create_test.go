@@ -60,3 +60,29 @@ func TestCreateModelSurvivesInputBeforeSpecsLoad(t *testing.T) {
 		t.Fatalf("expected an estimated cost line after specs load, got:\n%s", view)
 	}
 }
+
+// TestCreateHybridSkipsModeStepForDevelopmentAlias guards the hybrid (flag +
+// TUI) flow against the "development" user-facing alias. The preset value is the
+// raw flag string, so the skip logic must normalize it the same way
+// validateCreateConfig does; otherwise --mode development silently fails to
+// pre-fill the mode step and forces the user to re-select it interactively.
+func TestCreateHybridSkipsModeStepForDevelopmentAlias(t *testing.T) {
+	for _, input := range []string{"development", "Development", "prototyping", "production"} {
+		t.Run(input, func(t *testing.T) {
+			in := input
+			m := NewCreateModelWithPresets(nil, nil, &CreatePresets{Mode: &in})
+
+			if !m.skippedSteps[stepMode] {
+				t.Fatalf("expected stepMode to be auto-skipped for --mode %q", input)
+			}
+			if m.step == stepMode {
+				t.Fatalf("expected to advance past stepMode for --mode %q", input)
+			}
+
+			want := utils.NormalizeModeInput(input)
+			if m.config.Mode != want {
+				t.Fatalf("expected wire mode %q for --mode %q, got %q", want, input, m.config.Mode)
+			}
+		})
+	}
+}

@@ -143,7 +143,7 @@ func (m *modifyModel) trySkipCurrentStep() {
 		switch m.step {
 		case modifyStepMode:
 			if m.presets != nil && m.presets.Mode != nil {
-				mode := strings.ToLower(*m.presets.Mode)
+				mode := utils.NormalizeModeInput(*m.presets.Mode)
 				if mode == "prototyping" || mode == "production" {
 					m.config.Mode = mode
 					m.config.ModeChanged = !strings.EqualFold(mode, m.currentInstance.Mode)

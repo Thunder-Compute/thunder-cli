@@ -165,7 +165,7 @@ func (m *createModel) trySkipCurrentStep() tea.Cmd {
 		switch m.step {
 		case stepMode:
 			if m.presets != nil && m.presets.Mode != nil {
-				mode := strings.ToLower(*m.presets.Mode)
+				mode := utils.NormalizeModeInput(*m.presets.Mode)
 				if mode == "prototyping" || mode == "production" {
 					m.config.Mode = mode
 					m.skippedSteps[stepMode] = true
