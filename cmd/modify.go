@@ -536,6 +536,10 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 	// Ephemeral disk size validation
 	if presets.EphemeralDiskGB != nil {
 		ephemeralSize := *presets.EphemeralDiskGB
+		if ephemeralSize < currentInstance.EphemeralDiskGB {
+			return req, usageErr("ephemeral disk size cannot be smaller than current size (%d GB)", currentInstance.EphemeralDiskGB)
+		}
+
 		minEphemeral, maxEphemeral := specs.EphemeralStorageRange(effectiveGPU, effectiveNumGPUs, effectiveMode)
 		if ephemeralSize < minEphemeral || ephemeralSize > maxEphemeral {
 			return req, usageErr("ephemeral disk size must be between %d and %d GB", minEphemeral, maxEphemeral)

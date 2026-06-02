@@ -583,6 +583,11 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if ephemeralSize < m.currentInstance.EphemeralDiskGB {
+			m.validationErr = fmt.Errorf("ephemeral storage cannot be smaller than current size (%d GB)", m.currentInstance.EphemeralDiskGB)
+			return m, nil
+		}
+
 		m.config.DiskSizeGB = diskSize
 		m.config.DiskChanged = (diskSize != m.currentInstance.Storage)
 		m.config.EphemeralDiskGB = ephemeralSize
