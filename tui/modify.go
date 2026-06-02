@@ -189,7 +189,7 @@ func (m *modifyModel) trySkipCurrentStep() {
 				v := *m.presets.EphemeralDiskGB
 				m.ephemeralDiskInput.SetValue(fmt.Sprintf("%d", v))
 				minEphemeral, maxEphemeral := m.specs.EphemeralStorageRange(m.config.GPUType, m.config.NumGPUs, m.getEffectiveMode())
-				if v >= minEphemeral && v <= maxEphemeral {
+				if v >= max(m.currentInstance.EphemeralDiskGB, minEphemeral) && v <= maxEphemeral {
 					m.config.EphemeralDiskGB = v
 					m.config.EphemeralDiskChanged = v != m.currentInstance.EphemeralDiskGB
 					m.skippedSteps[modifyStepEphemeralDiskSize] = true

@@ -37,6 +37,7 @@ func newModifyCmd() *cobra.Command {
 	cmd.Flags().Int("num-gpus", 0, "")
 	cmd.Flags().Int("vcpus", 0, "")
 	cmd.Flags().Int("primary-disk", 0, "")
+	cmd.Flags().Int("ephemeral-disk", -1, "")
 	return cmd
 }
 
@@ -84,6 +85,17 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 			flags:         map[string]string{"primary-disk": "150"},
 			expectError:   true,
 			errorContains: "cannot be smaller than current size (200 GB)",
+		},
+		{
+			name: "ephemeral disk shrink rejected",
+			instance: func() *api.Instance {
+				inst := modifyInstance("prototyping", "a6000", "1", "8", 100)
+				inst.EphemeralDiskGB = 200
+				return inst
+			}(),
+			flags:         map[string]string{"ephemeral-disk": "100"},
+			expectError:   true,
+			errorContains: "ephemeral disk size cannot be smaller than current size (200 GB)",
 		},
 		{
 			name:          "disk exceeds max",
@@ -293,7 +305,6 @@ func TestBuildModifyRequestFromFlags_RejectsInvalidTargetSpecValues(t *testing.T
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := newModifyCmd()
-			cmd.Flags().Int("ephemeral-disk", -1, "")
 			setFlags(cmd, tt.flags)
 
 			_, err := buildModifyRequestFromFlags(cmd, modifyInstance("prototyping", "a6000", "1", "8", 100), specs)
