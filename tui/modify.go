@@ -196,8 +196,12 @@ func (m *modifyModel) trySkipCurrentStep() {
 					skipped = true
 				}
 			} else {
-				m.skippedSteps[modifyStepEphemeralDiskSize] = true
-				skipped = true
+				minEphemeral, maxEphemeral := m.specs.EphemeralStorageRange(m.config.GPUType, m.config.NumGPUs, m.getEffectiveMode())
+				currentEphemeral := m.currentInstance.EphemeralDiskGB
+				if currentEphemeral >= minEphemeral && currentEphemeral <= maxEphemeral {
+					m.skippedSteps[modifyStepEphemeralDiskSize] = true
+					skipped = true
+				}
 			}
 
 		case modifyStepConfirmation:

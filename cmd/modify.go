@@ -161,7 +161,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 		// All flags provided -> try fully non-interactive (skip confirmation)
 		modifyReq, err = buildModifyRequestFromFlags(cmd, selectedInstance, specs)
 		if err != nil {
-			if !interactive {
+			if !interactive || YesFlag {
 				return err
 			}
 			// Fall through to hybrid
@@ -498,6 +498,10 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 	if !specs.IsSpecAvailable(effectiveGPU, effectiveNumGPUs, effectiveMode) {
 		return req, usageErr("GPU configuration %s x%d in %s mode is currently unavailable", effectiveGPU, effectiveNumGPUs, effectiveMode)
 	}
+	minEphemeral, maxEphemeral := specs.EphemeralStorageRange(effectiveGPU, effectiveNumGPUs, effectiveMode)
+	if presets.EphemeralDiskGB == nil && (currentInstance.EphemeralDiskGB < minEphemeral || currentInstance.EphemeralDiskGB > maxEphemeral) {
+		return req, usageErr("current ephemeral disk size (%d GB) is outside the allowed range %d-%d GB for %s x%d in %s mode", currentInstance.EphemeralDiskGB, minEphemeral, maxEphemeral, effectiveGPU, effectiveNumGPUs, utils.DisplayMode(effectiveMode))
+	}
 	if effectiveMode == "production" {
 		targetVCPUs := targetVCPUOptions[0]
 		currentVCPUs, _ := strconv.Atoi(currentInstance.CPUCores)
@@ -540,7 +544,6 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 			return req, usageErr("ephemeral disk size cannot be smaller than current size (%d GB)", currentInstance.EphemeralDiskGB)
 		}
 
-		minEphemeral, maxEphemeral := specs.EphemeralStorageRange(effectiveGPU, effectiveNumGPUs, effectiveMode)
 		if ephemeralSize < minEphemeral || ephemeralSize > maxEphemeral {
 			return req, usageErr("ephemeral disk size must be between %d and %d GB", minEphemeral, maxEphemeral)
 		}

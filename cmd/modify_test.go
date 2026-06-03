@@ -315,6 +315,27 @@ func TestBuildModifyRequestFromFlags_RejectsInvalidTargetSpecValues(t *testing.T
 	}
 }
 
+func TestBuildModifyRequestFromFlags_RejectsCurrentEphemeralOutsideTargetSpec(t *testing.T) {
+	specs := utils.NewSpecStore(map[string]api.GpuSpecConfig{
+		"a6000_x1_prototyping": {
+			GpuCount:           1,
+			Mode:               "prototyping",
+			VcpuOptions:        []int{4, 8},
+			StorageGB:          api.StorageRange{Min: 100, Max: 300},
+			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 500},
+		},
+	})
+	cmd := newModifyCmd()
+	setFlags(cmd, map[string]string{"vcpus": "4"})
+	instance := modifyInstance("prototyping", "a6000", "1", "8", 100)
+	instance.EphemeralDiskGB = 600
+
+	_, err := buildModifyRequestFromFlags(cmd, instance, specs)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "current ephemeral disk size (600 GB) is outside the allowed range 0-500 GB")
+}
+
 func TestBuildModifyRequestFromFlags_RejectsUnavailableTargetSpec(t *testing.T) {
 	specs := utils.NewSpecStoreWithAvailability(map[string]api.GpuSpecConfig{
 		"a6000_x1_prototyping": {
