@@ -15,7 +15,7 @@ func gpuPricingKey(mode, gpuType string, numGPUs int) string {
 
 // CalculateHourlyPrice computes the estimated hourly cost based on the configuration.
 // includedVCPUs is the minimum (included) vCPU count from specs (vcpuOptions[0]).
-func CalculateHourlyPrice(p *PricingData, mode, gpuType string, numGPUs, vcpus, diskSizeGB, ephemeralDiskGB, includedVCPUs int) float64 {
+func CalculateHourlyPrice(p *PricingData, mode, gpuType string, numGPUs, vcpus, diskSizeGB, includedVCPUs int) float64 {
 	if p == nil || p.Rates == nil {
 		return 0
 	}
@@ -38,9 +38,7 @@ func CalculateHourlyPrice(p *PricingData, mode, gpuType string, numGPUs, vcpus, 
 		diskCost = float64(diskSizeGB-100) * p.Rates["disk_gb"]
 	}
 
-	ephemeralCost := float64(ephemeralDiskGB) * p.Rates["ephemeral_disk_gb"]
-
-	return gpuCost + vcpuCost + diskCost + ephemeralCost
+	return gpuCost + vcpuCost + diskCost
 }
 
 // FormatPrice returns a display string like "$1.38/hr".

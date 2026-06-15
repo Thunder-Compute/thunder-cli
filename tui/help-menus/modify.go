@@ -82,12 +82,6 @@ func RenderModifyHelp(cmd *cobra.Command) {
 	output.WriteString(DescStyle.Render("Primary disk storage in GB"))
 	output.WriteString("\n")
 
-	output.WriteString("  ")
-	output.WriteString(FlagStyle.Render("--ephemeral-disk"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Ephemeral storage in GB, mounted at /ephemeral (0 to disable)"))
-	output.WriteString("\n")
-
 	// Important Notes Section
 	output.WriteString(SectionStyle.Render("● IMPORTANT NOTES"))
 	output.WriteString("\n\n")

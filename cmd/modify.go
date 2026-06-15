@@ -39,7 +39,6 @@ func init() {
 	modifyCmd.Flags().Int("primary-disk", 0, "Primary disk size in GB (cannot shrink, max depends on config)")
 	modifyCmd.Flags().Int("disk-size-gb", 0, "Disk size in GB (cannot shrink, max depends on config)")
 	_ = modifyCmd.Flags().MarkHidden("disk-size-gb")
-	modifyCmd.Flags().Int("ephemeral-disk", -1, "Ephemeral storage in GB, mounted at /ephemeral (0 to disable)")
 
 	modifyCmd.SetHelpFunc(wrapHelp(helpmenus.RenderModifyHelp))
 
@@ -239,13 +238,8 @@ func runModify(cmd *cobra.Command, args []string) error {
 			resultVCPUs = vcpuOpts[0]
 		}
 
-		resultEphemeral := selectedInstance.EphemeralDiskGB
-		if modifyReq.EphemeralDiskGB != nil {
-			resultEphemeral = *modifyReq.EphemeralDiskGB
-		}
-
 		included := specs.IncludedVCPUs(resultGPU, resultNumGPUs, resultMode)
-		price := utils.CalculateHourlyPrice(pd, resultMode, resultGPU, resultNumGPUs, resultVCPUs, resultDisk, resultEphemeral, included)
+		price := utils.CalculateHourlyPrice(pd, resultMode, resultGPU, resultNumGPUs, resultVCPUs, resultDisk, included)
 		fmt.Printf("\nEstimated cost: %s\n", utils.FormatPrice(price))
 	}
 
@@ -325,17 +319,13 @@ func buildModifyPresets(cmd *cobra.Command) *tui.ModifyPresets {
 		v, _ := cmd.Flags().GetInt("disk-size-gb")
 		p.DiskSizeGB = &v
 	}
-	if cmd.Flags().Changed("ephemeral-disk") {
-		v, _ := cmd.Flags().GetInt("ephemeral-disk")
-		p.EphemeralDiskGB = &v
-	}
 	return p
 }
 
 func hasAllModifyFlags(cmd *cobra.Command) bool {
 	return cmd.Flags().Changed("mode") || cmd.Flags().Changed("gpu") ||
 		cmd.Flags().Changed("num-gpus") || cmd.Flags().Changed("vcpus") ||
-		cmd.Flags().Changed("primary-disk") || cmd.Flags().Changed("disk-size-gb") || cmd.Flags().Changed("ephemeral-disk")
+		cmd.Flags().Changed("primary-disk") || cmd.Flags().Changed("disk-size-gb")
 }
 
 func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api.Instance) (api.InstanceModifyRequest, error) {
@@ -366,12 +356,8 @@ func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api
 		req.DiskSizeGB = &config.DiskSizeGB
 	}
 
-	if config.EphemeralDiskChanged {
-		req.EphemeralDiskGB = &config.EphemeralDiskGB
-	}
-
 	// Check if any changes were made
-	if req.Mode == nil && req.GPUType == nil && req.CPUCores == nil && req.NumGPUs == nil && req.DiskSizeGB == nil && req.EphemeralDiskGB == nil {
+	if req.Mode == nil && req.GPUType == nil && req.CPUCores == nil && req.NumGPUs == nil && req.DiskSizeGB == nil {
 		return req, fmt.Errorf("no changes specified")
 	}
 
@@ -498,10 +484,6 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 	if !specs.IsSpecAvailable(effectiveGPU, effectiveNumGPUs, effectiveMode) {
 		return req, usageErr("GPU configuration %s x%d in %s mode is currently unavailable", effectiveGPU, effectiveNumGPUs, effectiveMode)
 	}
-	minEphemeral, maxEphemeral := specs.EphemeralStorageRange(effectiveGPU, effectiveNumGPUs, effectiveMode)
-	if presets.EphemeralDiskGB == nil && (currentInstance.EphemeralDiskGB < minEphemeral || currentInstance.EphemeralDiskGB > maxEphemeral) {
-		return req, usageErr("current ephemeral disk size (%d GB) is outside the allowed range %d-%d GB for %s x%d in %s mode", currentInstance.EphemeralDiskGB, minEphemeral, maxEphemeral, effectiveGPU, effectiveNumGPUs, utils.DisplayMode(effectiveMode))
-	}
 	if effectiveMode == "production" {
 		targetVCPUs := targetVCPUOptions[0]
 		currentVCPUs, _ := strconv.Atoi(currentInstance.CPUCores)
@@ -534,20 +516,6 @@ func validateAndBuildModifyRequest(presets *tui.ModifyPresets, currentInstance *
 			return req, usageErr("disk size must be between %d and %d GB", minAllowedDisk, maxDisk)
 		}
 		req.DiskSizeGB = &diskSize
-		hasChanges = true
-	}
-
-	// Ephemeral disk size validation
-	if presets.EphemeralDiskGB != nil {
-		ephemeralSize := *presets.EphemeralDiskGB
-		if ephemeralSize < currentInstance.EphemeralDiskGB {
-			return req, usageErr("ephemeral disk size cannot be smaller than current size (%d GB)", currentInstance.EphemeralDiskGB)
-		}
-
-		if ephemeralSize < minEphemeral || ephemeralSize > maxEphemeral {
-			return req, usageErr("ephemeral disk size must be between %d and %d GB", minEphemeral, maxEphemeral)
-		}
-		req.EphemeralDiskGB = &ephemeralSize
 		hasChanges = true
 	}
 

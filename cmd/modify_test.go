@@ -37,7 +37,6 @@ func newModifyCmd() *cobra.Command {
 	cmd.Flags().Int("num-gpus", 0, "")
 	cmd.Flags().Int("vcpus", 0, "")
 	cmd.Flags().Int("primary-disk", 0, "")
-	cmd.Flags().Int("ephemeral-disk", -1, "")
 	return cmd
 }
 
@@ -85,17 +84,6 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 			flags:         map[string]string{"primary-disk": "150"},
 			expectError:   true,
 			errorContains: "cannot be smaller than current size (200 GB)",
-		},
-		{
-			name: "ephemeral disk shrink rejected",
-			instance: func() *api.Instance {
-				inst := modifyInstance("prototyping", "a6000", "1", "8", 100)
-				inst.EphemeralDiskGB = 200
-				return inst
-			}(),
-			flags:         map[string]string{"ephemeral-disk": "100"},
-			expectError:   true,
-			errorContains: "ephemeral disk size cannot be smaller than current size (200 GB)",
 		},
 		{
 			name:          "disk exceeds max",
@@ -236,18 +224,16 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 func TestBuildModifyRequestFromFlags_ValidatesVCPUsAgainstRequestedGPUCount(t *testing.T) {
 	specs := utils.NewSpecStore(map[string]api.GpuSpecConfig{
 		"a6000_x1_prototyping": {
-			GpuCount:           1,
-			Mode:               "prototyping",
-			VcpuOptions:        []int{4, 8},
-			StorageGB:          api.StorageRange{Min: 100, Max: 300},
-			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 2000},
+			GpuCount:    1,
+			Mode:        "prototyping",
+			VcpuOptions: []int{4, 8},
+			StorageGB:   api.StorageRange{Min: 100, Max: 300},
 		},
 		"a6000_x4_prototyping": {
-			GpuCount:           4,
-			Mode:               "prototyping",
-			VcpuOptions:        []int{16, 24, 32},
-			StorageGB:          api.StorageRange{Min: 100, Max: 1000},
-			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 2000},
+			GpuCount:    4,
+			Mode:        "prototyping",
+			VcpuOptions: []int{16, 24, 32},
+			StorageGB:   api.StorageRange{Min: 100, Max: 1000},
 		},
 	})
 	cmd := newModifyCmd()
@@ -265,18 +251,16 @@ func TestBuildModifyRequestFromFlags_ValidatesVCPUsAgainstRequestedGPUCount(t *t
 func TestBuildModifyRequestFromFlags_RejectsInvalidTargetSpecValues(t *testing.T) {
 	specs := utils.NewSpecStore(map[string]api.GpuSpecConfig{
 		"a6000_x1_prototyping": {
-			GpuCount:           1,
-			Mode:               "prototyping",
-			VcpuOptions:        []int{4, 8},
-			StorageGB:          api.StorageRange{Min: 100, Max: 300},
-			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 500},
+			GpuCount:    1,
+			Mode:        "prototyping",
+			VcpuOptions: []int{4, 8},
+			StorageGB:   api.StorageRange{Min: 100, Max: 300},
 		},
 		"a6000_x4_prototyping": {
-			GpuCount:           4,
-			Mode:               "prototyping",
-			VcpuOptions:        []int{16, 24, 32},
-			StorageGB:          api.StorageRange{Min: 200, Max: 1000},
-			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 2000},
+			GpuCount:    4,
+			Mode:        "prototyping",
+			VcpuOptions: []int{16, 24, 32},
+			StorageGB:   api.StorageRange{Min: 200, Max: 1000},
 		},
 	})
 
@@ -295,11 +279,6 @@ func TestBuildModifyRequestFromFlags_RejectsInvalidTargetSpecValues(t *testing.T
 			flags:         map[string]string{"num-gpus": "4", "vcpus": "16", "primary-disk": "150"},
 			errorContains: "disk size must be between 200 and 1000 GB",
 		},
-		{
-			name:          "ephemeral disk validates target spec range",
-			flags:         map[string]string{"ephemeral-disk": "600"},
-			errorContains: "ephemeral disk size must be between 0 and 500 GB",
-		},
 	}
 
 	for _, tt := range tests {
@@ -315,35 +294,13 @@ func TestBuildModifyRequestFromFlags_RejectsInvalidTargetSpecValues(t *testing.T
 	}
 }
 
-func TestBuildModifyRequestFromFlags_RejectsCurrentEphemeralOutsideTargetSpec(t *testing.T) {
-	specs := utils.NewSpecStore(map[string]api.GpuSpecConfig{
-		"a6000_x1_prototyping": {
-			GpuCount:           1,
-			Mode:               "prototyping",
-			VcpuOptions:        []int{4, 8},
-			StorageGB:          api.StorageRange{Min: 100, Max: 300},
-			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 500},
-		},
-	})
-	cmd := newModifyCmd()
-	setFlags(cmd, map[string]string{"vcpus": "4"})
-	instance := modifyInstance("prototyping", "a6000", "1", "8", 100)
-	instance.EphemeralDiskGB = 600
-
-	_, err := buildModifyRequestFromFlags(cmd, instance, specs)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "current ephemeral disk size (600 GB) is outside the allowed range 0-500 GB")
-}
-
 func TestBuildModifyRequestFromFlags_RejectsUnavailableTargetSpec(t *testing.T) {
 	specs := utils.NewSpecStoreWithAvailability(map[string]api.GpuSpecConfig{
 		"a6000_x1_prototyping": {
-			GpuCount:           1,
-			Mode:               "prototyping",
-			VcpuOptions:        []int{4, 8},
-			StorageGB:          api.StorageRange{Min: 100, Max: 300},
-			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 500},
+			GpuCount:    1,
+			Mode:        "prototyping",
+			VcpuOptions: []int{4, 8},
+			StorageGB:   api.StorageRange{Min: 100, Max: 300},
 		},
 	}, map[string]string{
 		"a6000_x1_prototyping": "unavailable",

@@ -19,14 +19,13 @@ import (
 )
 
 var (
-	mode            string
-	gpuType         string
-	numGPUs         int
-	vcpus           int
-	template        string
-	snapshotAlias   string
-	diskSizeGB      int
-	ephemeralDiskGB int
+	mode          string
+	gpuType       string
+	numGPUs       int
+	vcpus         int
+	template      string
+	snapshotAlias string
+	diskSizeGB    int
 )
 
 var createCmd = &cobra.Command{
@@ -51,7 +50,6 @@ func init() {
 	createCmd.Flags().IntVar(&diskSizeGB, "primary-disk", 100, "Primary disk storage in GB (range depends on GPU config)")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (range depends on GPU config)")
 	_ = createCmd.Flags().MarkHidden("disk-size-gb")
-	createCmd.Flags().IntVar(&ephemeralDiskGB, "ephemeral-disk", 0, "Ephemeral storage in GB, mounted at /ephemeral (default: 0)")
 }
 
 func createInstanceCmd(client *api.Client, req api.CreateInstanceRequest, resp **api.CreateInstanceResponse) tea.Cmd {
@@ -109,9 +107,6 @@ func buildCreatePresets(cmd *cobra.Command) *tui.CreatePresets {
 	}
 	if cmd.Flags().Changed("primary-disk") || cmd.Flags().Changed("disk-size-gb") {
 		p.DiskSizeGB = &diskSizeGB
-	}
-	if cmd.Flags().Changed("ephemeral-disk") {
-		p.EphemeralDiskGB = &ephemeralDiskGB
 	}
 	return p
 }
@@ -225,13 +220,12 @@ func runCreate(cmd *cobra.Command) error {
 
 		diskSizeWasSet := cmd.Flags().Changed("primary-disk") || cmd.Flags().Changed("disk-size-gb")
 		createConfig = &tui.CreateConfig{
-			Mode:            mode,
-			GPUType:         gpuType,
-			NumGPUs:         numGPUs,
-			VCPUs:           vcpus,
-			Template:        template,
-			DiskSizeGB:      diskSizeGB,
-			EphemeralDiskGB: ephemeralDiskGB,
+			Mode:       mode,
+			GPUType:    gpuType,
+			NumGPUs:    numGPUs,
+			VCPUs:      vcpus,
+			Template:   template,
+			DiskSizeGB: diskSizeGB,
 		}
 
 		if valErr := validateCreateConfig(createConfig, templates, snapshots, diskSizeWasSet, specs); valErr != nil {
@@ -252,7 +246,7 @@ func runCreate(cmd *cobra.Command) error {
 			if pricing, pErr := client.FetchPricing(); pErr == nil {
 				pd := &utils.PricingData{Rates: pricing}
 				included := specs.IncludedVCPUs(createConfig.GPUType, createConfig.NumGPUs, createConfig.Mode)
-				price := utils.CalculateHourlyPrice(pd, createConfig.Mode, createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB, createConfig.EphemeralDiskGB, included)
+				price := utils.CalculateHourlyPrice(pd, createConfig.Mode, createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB, included)
 				fmt.Fprintf(os.Stderr, "\nEstimated cost: %s\n", utils.FormatPrice(price))
 			}
 		}
@@ -272,13 +266,12 @@ func runCreate(cmd *cobra.Command) error {
 	}
 
 	req := api.CreateInstanceRequest{
-		Mode:            api.InstanceMode(createConfig.Mode),
-		GPUType:         createConfig.GPUType,
-		NumGPUs:         createConfig.NumGPUs,
-		CPUCores:        createConfig.VCPUs,
-		Template:        createConfig.Template,
-		DiskSizeGB:      createConfig.DiskSizeGB,
-		EphemeralDiskGB: createConfig.EphemeralDiskGB,
+		Mode:       api.InstanceMode(createConfig.Mode),
+		GPUType:    createConfig.GPUType,
+		NumGPUs:    createConfig.NumGPUs,
+		CPUCores:   createConfig.VCPUs,
+		Template:   createConfig.Template,
+		DiskSizeGB: createConfig.DiskSizeGB,
 	}
 
 	var resp *api.CreateInstanceResponse

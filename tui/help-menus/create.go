@@ -95,11 +95,5 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString(DescStyle.Render("Disk storage in GB"))
 	output.WriteString("\n")
 
-	output.WriteString("  ")
-	output.WriteString(FlagStyle.Render("--ephemeral-disk"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Ephemeral storage in GB, mounted at /ephemeral (default: 0)"))
-	output.WriteString("\n")
-
 	fmt.Fprint(os.Stdout, output.String())
 }

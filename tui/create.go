@@ -26,72 +26,67 @@ const (
 	stepCompute
 	stepTemplate
 	stepDiskSize
-	stepEphemeralDiskSize
 	stepConfirmation
 	stepComplete
 )
 
 // CreateConfig holds the configuration for creating an instance
 type CreateConfig struct {
-	Mode            string
-	GPUType         string
-	NumGPUs         int
-	VCPUs           int
-	Template        string
-	DiskSizeGB      int
-	EphemeralDiskGB int
-	Confirmed       bool
+	Mode       string
+	GPUType    string
+	NumGPUs    int
+	VCPUs      int
+	Template   string
+	DiskSizeGB int
+	Confirmed  bool
 }
 
 // CreatePresets holds flag values provided on the command line for hybrid mode.
 // nil pointer means the flag was not set.
 type CreatePresets struct {
-	Mode            *string
-	GPUType         *string
-	NumGPUs         *int
-	VCPUs           *int
-	Template        *string
-	DiskSizeGB      *int
-	EphemeralDiskGB *int
+	Mode       *string
+	GPUType    *string
+	NumGPUs    *int
+	VCPUs      *int
+	Template   *string
+	DiskSizeGB *int
 }
 
 // IsEmpty returns true if no preset flags were set.
 func (p *CreatePresets) IsEmpty() bool {
 	return p.Mode == nil && p.GPUType == nil && p.NumGPUs == nil &&
-		p.VCPUs == nil && p.Template == nil && p.DiskSizeGB == nil && p.EphemeralDiskGB == nil
+		p.VCPUs == nil && p.Template == nil && p.DiskSizeGB == nil
 }
 
 type createModel struct {
-	step                      createStep
-	cursor                    int
-	config                    CreateConfig
-	templates                 []api.TemplateEntry
-	snapshots                 []api.Snapshot
-	templatesLoaded           bool
-	snapshotsLoaded           bool
-	diskInput                 textinput.Model
-	diskInputTouched          bool
-	ephemeralDiskInput        textinput.Model
-	ephemeralDiskInputTouched bool
-	err                       error
-	validationErr             error
-	quitting                  bool
-	client                    *api.Client
-	spinner                   spinner.Model
-	selectedSnapshot          *api.Snapshot
-	gpuCountPhase             bool // when true, stepCompute shows GPU count selection before vCPU selection
-	templateBrowse            bool // when true, stepTemplate shows full template list
-	templateOffset            int  // index of first visible item when browsing templates
-	snapshotBrowse            bool // when true, stepTemplate shows snapshot list
-	snapshotOffset            int  // index of first visible item when browsing snapshots
-	pricing                   *utils.PricingData
-	pricingLoaded             bool
-	pricingErr                error
-	specs                     *utils.SpecStore
-	specsLoaded               bool
-	presets                   *CreatePresets
-	skippedSteps              map[createStep]bool // records which steps were auto-filled
-	styles                    PanelStyles
+	step             createStep
+	cursor           int
+	config           CreateConfig
+	templates        []api.TemplateEntry
+	snapshots        []api.Snapshot
+	templatesLoaded  bool
+	snapshotsLoaded  bool
+	diskInput        textinput.Model
+	diskInputTouched bool
+	err              error
+	validationErr    error
+	quitting         bool
+	client           *api.Client
+	spinner          spinner.Model
+	selectedSnapshot *api.Snapshot
+	gpuCountPhase    bool // when true, stepCompute shows GPU count selection before vCPU selection
+	templateBrowse   bool // when true, stepTemplate shows full template list
+	templateOffset   int  // index of first visible item when browsing templates
+	snapshotBrowse   bool // when true, stepTemplate shows snapshot list
+	snapshotOffset   int  // index of first visible item when browsing snapshots
+	pricing          *utils.PricingData
+	pricingLoaded    bool
+	pricingErr       error
+	specs            *utils.SpecStore
+	specsLoaded      bool
+	presets          *CreatePresets
+	skippedSteps     map[createStep]bool // records which steps were auto-filled
+	styles           PanelStyles
 }
 
 func NewCreateModel(client *api.Client, specs *utils.SpecStore) createModel {
@@ -105,24 +100,15 @@ func NewCreateModel(client *api.Client, specs *utils.SpecStore) createModel {
 	ti.Width = 20
 	ti.Prompt = "▶ "
 
-	sti := textinput.New()
-	sti.Placeholder = "0"
-	sti.SetValue("0")
-	sti.CharLimit = 4
-	sti.Width = 20
-	sti.Prompt = "▶ "
-
 	m := createModel{
-		step:               stepMode,
-		client:             client,
-		spinner:            s,
-		styles:             styles,
-		skippedSteps:       make(map[createStep]bool),
-		diskInput:          ti,
-		ephemeralDiskInput: sti,
+		step:         stepMode,
+		client:       client,
+		spinner:      s,
+		styles:       styles,
+		skippedSteps: make(map[createStep]bool),
+		diskInput:    ti,
 		config: CreateConfig{
-			DiskSizeGB:      100,
-			EphemeralDiskGB: 0,
+			DiskSizeGB: 100,
 		},
 	}
 	if specs != nil {
@@ -199,21 +185,6 @@ func (m *createModel) trySkipCurrentStep() tea.Cmd {
 					skipped = true
 				}
 			}
-
-		case stepEphemeralDiskSize:
-			// Ephemeral disk is configured inline within the disk size step
-			// (Tab switches focus). Apply preset if provided, then mark as
-			// skipped so back-nav from confirmation lands on the unified disk step.
-			if m.presets != nil && m.presets.EphemeralDiskGB != nil {
-				v := *m.presets.EphemeralDiskGB
-				minEphemeral, maxEphemeral := m.specs.EphemeralStorageRange(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
-				if v >= minEphemeral && v <= maxEphemeral {
-					m.config.EphemeralDiskGB = v
-					m.ephemeralDiskInput.SetValue(fmt.Sprintf("%d", v))
-				}
-			}
-			m.skippedSteps[stepEphemeralDiskSize] = true
-			skipped = true
 
 		case stepConfirmation:
 			m.initStep()
@@ -368,10 +339,6 @@ func (m *createModel) initStep() {
 		m.diskInput.SetValue(fmt.Sprintf("%d", m.config.DiskSizeGB))
 		m.diskInput.Focus()
 		m.diskInputTouched = false
-	case stepEphemeralDiskSize:
-		m.ephemeralDiskInput.SetValue(fmt.Sprintf("%d", m.config.EphemeralDiskGB))
-		m.ephemeralDiskInput.Focus()
-		m.ephemeralDiskInputTouched = false
 	}
 }
 
@@ -541,8 +508,8 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyMsg:
-		// Forward key messages to text inputs on disk/ephemeral steps
-		if m.step == stepDiskSize || m.step == stepEphemeralDiskSize {
+		// Forward key messages to text inputs on disk steps
+		if m.step == stepDiskSize {
 			switch msg.String() {
 			case "q", "ctrl+c":
 				m.quitting = true
@@ -557,50 +524,16 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.gpuCountPhase = false
 				m.templateBrowse = false
 				m.diskInput.Blur()
-				m.ephemeralDiskInput.Blur()
 				m.initStep()
-			case "up":
-				if m.step == stepEphemeralDiskSize {
-					m.ephemeralDiskInput.Blur()
-					m.step = stepDiskSize
-					m.diskInput.Focus()
-					m.diskInputTouched = false
-				}
-				return m, nil
-			case "down":
-				if m.step == stepDiskSize {
-					m.diskInput.Blur()
-					m.step = stepEphemeralDiskSize
-					m.ephemeralDiskInput.Focus()
-					m.ephemeralDiskInputTouched = false
-				}
-				return m, nil
 			case "enter":
-				if m.step == stepDiskSize {
-					// Enter on primary moves to ephemeral
-					m.diskInput.Blur()
-					m.step = stepEphemeralDiskSize
-					m.ephemeralDiskInput.Focus()
-					m.ephemeralDiskInputTouched = false
-					return m, nil
-				}
 				return m.handleEnter()
 			default:
-				if m.step == stepDiskSize {
-					if !m.diskInputTouched {
-						m.diskInput.SetValue("")
-						m.diskInputTouched = true
-					}
-					var cmd tea.Cmd
-					m.diskInput, cmd = m.diskInput.Update(msg)
-					return m, cmd
-				}
-				if !m.ephemeralDiskInputTouched {
-					m.ephemeralDiskInput.SetValue("")
-					m.ephemeralDiskInputTouched = true
+				if !m.diskInputTouched {
+					m.diskInput.SetValue("")
+					m.diskInputTouched = true
 				}
 				var cmd tea.Cmd
-				m.ephemeralDiskInput, cmd = m.ephemeralDiskInput.Update(msg)
+				m.diskInput, cmd = m.diskInput.Update(msg)
 				return m, cmd
 			}
 			return m, nil
@@ -767,7 +700,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case stepDiskSize, stepEphemeralDiskSize:
+	case stepDiskSize:
 		minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
 		if m.selectedSnapshot != nil {
 			if m.selectedSnapshot.MinimumDiskSizeGB > minDisk {
@@ -783,18 +716,9 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		minEphemeral, maxEphemeral := m.specs.EphemeralStorageRange(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
-		ephemeralSize, err := strconv.Atoi(m.ephemeralDiskInput.Value())
-		if err != nil || ephemeralSize < minEphemeral || ephemeralSize > maxEphemeral {
-			m.validationErr = fmt.Errorf("ephemeral storage for this instance type must be between %d and %d GB. Check storage limits at https://www.thundercompute.com/pricing", minEphemeral, maxEphemeral)
-			return m, nil
-		}
-
 		m.config.DiskSizeGB = diskSize
-		m.config.EphemeralDiskGB = ephemeralSize
 		m.validationErr = nil
 		m.diskInput.Blur()
-		m.ephemeralDiskInput.Blur()
 		m.step = stepConfirmation
 		return m, m.trySkipCurrentStep()
 
@@ -874,7 +798,7 @@ func (m createModel) View() string {
 		{"GPU", []createStep{stepGPU}},
 		{"Size", []createStep{stepCompute}},
 		{"Template", []createStep{stepTemplate}},
-		{"Disk", []createStep{stepDiskSize, stepEphemeralDiskSize}},
+		{"Disk", []createStep{stepDiskSize}},
 		{"Confirm", []createStep{stepConfirmation}},
 	}
 	for i, entry := range progressSteps {
@@ -1089,25 +1013,10 @@ func (m createModel) View() string {
 			}
 		}
 
-	case stepDiskSize, stepEphemeralDiskSize:
-		primaryLabel := "  Primary"
-		ephemeralLabel := "  Ephemeral Storage (fast, temporary storage, 0 to disable)"
-		if m.step == stepDiskSize {
-			primaryLabel = m.styles.Selected.Render("▶ Primary")
-		} else {
-			ephemeralLabel = m.styles.Selected.Render("▶ Ephemeral Storage (fast, temporary storage, 0 to disable)")
-		}
-
+	case stepDiskSize:
 		s.WriteString("Configure storage:\n\n")
-		s.WriteString(primaryLabel + "\n")
-		s.WriteString("  " + m.diskInput.View() + "\n\n")
-		s.WriteString(ephemeralLabel + "\n")
-		s.WriteString("  " + m.ephemeralDiskInput.View() + "\n")
-		if m.step == stepEphemeralDiskSize {
-			s.WriteString("\n")
-			s.WriteString(warningStyleTUI.Render("Fast, temporary storage mounted at /ephemeral. Use for large model files or caches that require maximum performance. This will be lost if the instance restarts or is modified. More detail: https://www.thundercompute.com/docs"))
-			s.WriteString("\n")
-		}
+		s.WriteString(m.styles.Selected.Render("▶ Primary") + "\n")
+		s.WriteString("  " + m.diskInput.View() + "\n")
 		if m.validationErr != nil {
 			s.WriteString(fmt.Sprintf("\n%s\n", errorStyleTUI.Render(fmt.Sprintf("✗ %v", m.validationErr))))
 		}
@@ -1123,8 +1032,7 @@ func (m createModel) View() string {
 		panel.WriteString(m.styles.Label.Render("vCPUs:      ") + strconv.Itoa(m.config.VCPUs) + "\n")
 		confirmRamPerVCPU := m.specs.RamPerVCPU(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
 		panel.WriteString(m.styles.Label.Render("RAM:        ") + strconv.Itoa(m.config.VCPUs*confirmRamPerVCPU) + " GB\n")
-		panel.WriteString(m.styles.Label.Render("Disk Size:  ") + strconv.Itoa(m.config.DiskSizeGB) + " GB\n")
-		panel.WriteString(m.styles.Label.Render("Ephemeral:  ") + strconv.Itoa(m.config.EphemeralDiskGB) + " GB")
+		panel.WriteString(m.styles.Label.Render("Disk Size:  ") + strconv.Itoa(m.config.DiskSizeGB) + " GB")
 
 		s.WriteString(m.styles.Panel.Render(panel.String()))
 		s.WriteString("\n")
@@ -1244,10 +1152,8 @@ func (m createModel) computePreviewPrice() float64 {
 		}
 	}
 
-	ephemeralDiskGB := m.config.EphemeralDiskGB
-
 	included := m.specs.IncludedVCPUs(gpuType, numGPUs, mode)
-	return utils.CalculateHourlyPrice(m.pricing, mode, gpuType, numGPUs, vcpus, diskSizeGB, ephemeralDiskGB, included)
+	return utils.CalculateHourlyPrice(m.pricing, mode, gpuType, numGPUs, vcpus, diskSizeGB, included)
 }
 
 func runCreateModel(m createModel) (*CreateConfig, error) {

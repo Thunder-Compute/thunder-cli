@@ -13,20 +13,18 @@ import (
 func TestModifyModelSingleCountProductionGPUInitializesNumGPUs(t *testing.T) {
 	specs := utils.NewSpecStore(map[string]api.GpuSpecConfig{
 		"a6000_x1_prototyping": {
-			GpuCount:           1,
-			Mode:               "prototyping",
-			VcpuOptions:        []int{4, 8},
-			RamPerVCPUGiB:      8,
-			StorageGB:          api.StorageRange{Min: 100, Max: 300},
-			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 2000},
+			GpuCount:      1,
+			Mode:          "prototyping",
+			VcpuOptions:   []int{4, 8},
+			RamPerVCPUGiB: 8,
+			StorageGB:     api.StorageRange{Min: 100, Max: 300},
 		},
 		"a6000_x1_production": {
-			GpuCount:           1,
-			Mode:               "production",
-			VcpuOptions:        []int{18},
-			RamPerVCPUGiB:      5,
-			StorageGB:          api.StorageRange{Min: 100, Max: 1000},
-			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 2000},
+			GpuCount:      1,
+			Mode:          "production",
+			VcpuOptions:   []int{18},
+			RamPerVCPUGiB: 5,
+			StorageGB:     api.StorageRange{Min: 100, Max: 1000},
 		},
 	})
 	instance := &api.Instance{
@@ -176,96 +174,5 @@ func TestModifyModelUnavailableGPUCountCannotBeSelected(t *testing.T) {
 	}
 	if model.config.NumGPUs != 0 {
 		t.Fatalf("expected unavailable count not to be selected, got %d", model.config.NumGPUs)
-	}
-}
-
-func TestModifyModelPresetsDoNotSkipEphemeralDiskShrink(t *testing.T) {
-	specs := utils.NewSpecStore(map[string]api.GpuSpecConfig{
-		"a6000_x1_prototyping": {
-			GpuCount:           1,
-			Mode:               "prototyping",
-			VcpuOptions:        []int{4, 8},
-			RamPerVCPUGiB:      8,
-			StorageGB:          api.StorageRange{Min: 100, Max: 300},
-			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 2000},
-		},
-	})
-	instance := &api.Instance{
-		ID:              "0",
-		Name:            "rqrljt9j",
-		Status:          "RUNNING",
-		Mode:            "prototyping",
-		GPUType:         "a6000",
-		NumGPUs:         "1",
-		CPUCores:        "8",
-		Storage:         100,
-		EphemeralDiskGB: 200,
-	}
-	mode := "prototyping"
-	gpu := "a6000"
-	vcpus := 8
-	diskGB := 100
-	ephemeralGB := 100
-	presets := &ModifyPresets{
-		Mode:            &mode,
-		GPUType:         &gpu,
-		VCPUs:           &vcpus,
-		DiskSizeGB:      &diskGB,
-		EphemeralDiskGB: &ephemeralGB,
-	}
-
-	model := NewModifyModelWithPresets(nil, instance, specs, presets)
-
-	if model.step != modifyStepEphemeralDiskSize {
-		t.Fatalf("expected invalid ephemeral preset to stop at ephemeral step, got %v", model.step)
-	}
-	if model.skippedSteps[modifyStepEphemeralDiskSize] {
-		t.Fatal("ephemeral shrink preset should not be marked skipped")
-	}
-	if model.config.EphemeralDiskChanged {
-		t.Fatal("ephemeral shrink preset should not be accepted into config")
-	}
-}
-
-func TestModifyModelPresetsDoNotSkipCurrentEphemeralOutsideTargetSpec(t *testing.T) {
-	specs := utils.NewSpecStore(map[string]api.GpuSpecConfig{
-		"a6000_x1_prototyping": {
-			GpuCount:           1,
-			Mode:               "prototyping",
-			VcpuOptions:        []int{4, 8},
-			RamPerVCPUGiB:      8,
-			StorageGB:          api.StorageRange{Min: 100, Max: 300},
-			EphemeralStorageGB: api.StorageRange{Min: 0, Max: 500},
-		},
-	})
-	instance := &api.Instance{
-		ID:              "0",
-		Name:            "rqrljt9j",
-		Status:          "RUNNING",
-		Mode:            "prototyping",
-		GPUType:         "a6000",
-		NumGPUs:         "1",
-		CPUCores:        "8",
-		Storage:         100,
-		EphemeralDiskGB: 600,
-	}
-	mode := "prototyping"
-	gpu := "a6000"
-	vcpus := 8
-	diskGB := 100
-	presets := &ModifyPresets{
-		Mode:       &mode,
-		GPUType:    &gpu,
-		VCPUs:      &vcpus,
-		DiskSizeGB: &diskGB,
-	}
-
-	model := NewModifyModelWithPresets(nil, instance, specs, presets)
-
-	if model.step != modifyStepEphemeralDiskSize {
-		t.Fatalf("expected current ephemeral outside target spec to stop at ephemeral step, got %v", model.step)
-	}
-	if model.skippedSteps[modifyStepEphemeralDiskSize] {
-		t.Fatal("ephemeral step should not be marked skipped")
 	}
 }

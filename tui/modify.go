@@ -22,63 +22,57 @@ const (
 	modifyStepGPU
 	modifyStepCompute
 	modifyStepDiskSize
-	modifyStepEphemeralDiskSize
 	modifyStepConfirmation
 	modifyStepComplete
 )
 
 // ModifyConfig holds the configuration for modifying an instance
 type ModifyConfig struct {
-	Mode                 string
-	GPUType              string
-	NumGPUs              int
-	VCPUs                int
-	DiskSizeGB           int
-	EphemeralDiskGB      int
-	Confirmed            bool
-	ModeChanged          bool
-	GPUChanged           bool
-	ComputeChanged       bool
-	DiskChanged          bool
-	EphemeralDiskChanged bool
+	Mode           string
+	GPUType        string
+	NumGPUs        int
+	VCPUs          int
+	DiskSizeGB     int
+	Confirmed      bool
+	ModeChanged    bool
+	GPUChanged     bool
+	ComputeChanged bool
+	DiskChanged    bool
 }
 
 // ModifyPresets holds flag values provided on the command line for hybrid mode.
 type ModifyPresets struct {
-	Mode            *string
-	GPUType         *string
-	NumGPUs         *int
-	VCPUs           *int
-	DiskSizeGB      *int
-	EphemeralDiskGB *int
+	Mode       *string
+	GPUType    *string
+	NumGPUs    *int
+	VCPUs      *int
+	DiskSizeGB *int
 }
 
 // IsEmpty returns true if no preset flags were set.
 func (p *ModifyPresets) IsEmpty() bool {
 	return p.Mode == nil && p.GPUType == nil && p.NumGPUs == nil &&
-		p.VCPUs == nil && p.DiskSizeGB == nil && p.EphemeralDiskGB == nil
+		p.VCPUs == nil && p.DiskSizeGB == nil
 }
 
 type modifyModel struct {
-	step                      modifyStep
-	cursor                    int
-	config                    ModifyConfig
-	currentInstance           *api.Instance
-	client                    *api.Client
-	diskInput                 textinput.Model
-	diskInputTouched          bool
-	ephemeralDiskInput        textinput.Model
-	ephemeralDiskInputTouched bool
-	err                       error
-	validationErr             error
-	quitting                  bool
-	cancelled                 bool
-	gpuCountPhase             bool // when true, modifyStepCompute shows GPU count selection before vCPU selection
-	pricing                   *utils.PricingData
-	pricingLoaded             bool
-	specs                     *utils.SpecStore
-	presets                   *ModifyPresets
-	skippedSteps              map[modifyStep]bool
+	step             modifyStep
+	cursor           int
+	config           ModifyConfig
+	currentInstance  *api.Instance
+	client           *api.Client
+	diskInput        textinput.Model
+	diskInputTouched bool
+	err              error
+	validationErr    error
+	quitting         bool
+	cancelled        bool
+	gpuCountPhase    bool // when true, modifyStepCompute shows GPU count selection before vCPU selection
+	pricing          *utils.PricingData
+	pricingLoaded    bool
+	specs            *utils.SpecStore
+	presets          *ModifyPresets
+	skippedSteps     map[modifyStep]bool
 
 	styles PanelStyles
 }
@@ -93,27 +87,17 @@ func NewModifyModel(client *api.Client, instance *api.Instance, specs *utils.Spe
 	ti.Width = 20
 	ti.Prompt = "▶ "
 
-	sti := textinput.New()
-	currentEphemeral := instance.EphemeralDiskGB
-	sti.Placeholder = fmt.Sprintf("%d", currentEphemeral)
-	sti.SetValue(fmt.Sprintf("%d", currentEphemeral))
-	sti.CharLimit = 4
-	sti.Width = 20
-	sti.Prompt = "▶ "
-
 	m := modifyModel{
-		step:                      modifyStepMode,
-		cursor:                    0,
-		config:                    ModifyConfig{},
-		currentInstance:           instance,
-		client:                    client,
-		diskInput:                 ti,
-		diskInputTouched:          false,
-		ephemeralDiskInput:        sti,
-		ephemeralDiskInputTouched: false,
-		skippedSteps:              make(map[modifyStep]bool),
-		styles:                    styles,
-		specs:                     specs,
+		step:             modifyStepMode,
+		cursor:           0,
+		config:           ModifyConfig{},
+		currentInstance:  instance,
+		client:           client,
+		diskInput:        ti,
+		diskInputTouched: false,
+		skippedSteps:     make(map[modifyStep]bool),
+		styles:           styles,
+		specs:            specs,
 	}
 
 	// Set initial cursor to current mode position (case-insensitive)
@@ -177,29 +161,6 @@ func (m *modifyModel) trySkipCurrentStep() {
 					m.config.DiskSizeGB = v
 					m.config.DiskChanged = v != m.currentInstance.Storage
 					m.skippedSteps[modifyStepDiskSize] = true
-					skipped = true
-				}
-			}
-
-		case modifyStepEphemeralDiskSize:
-			// Ephemeral disk is configured inline within the disk size step
-			// (Tab switches focus). Apply preset if provided, then mark as
-			// skipped so back-nav from confirmation lands on the unified disk step.
-			if m.presets != nil && m.presets.EphemeralDiskGB != nil {
-				v := *m.presets.EphemeralDiskGB
-				m.ephemeralDiskInput.SetValue(fmt.Sprintf("%d", v))
-				minEphemeral, maxEphemeral := m.specs.EphemeralStorageRange(m.config.GPUType, m.config.NumGPUs, m.getEffectiveMode())
-				if v >= max(m.currentInstance.EphemeralDiskGB, minEphemeral) && v <= maxEphemeral {
-					m.config.EphemeralDiskGB = v
-					m.config.EphemeralDiskChanged = v != m.currentInstance.EphemeralDiskGB
-					m.skippedSteps[modifyStepEphemeralDiskSize] = true
-					skipped = true
-				}
-			} else {
-				minEphemeral, maxEphemeral := m.specs.EphemeralStorageRange(m.config.GPUType, m.config.NumGPUs, m.getEffectiveMode())
-				currentEphemeral := m.currentInstance.EphemeralDiskGB
-				if currentEphemeral >= minEphemeral && currentEphemeral <= maxEphemeral {
-					m.skippedSteps[modifyStepEphemeralDiskSize] = true
 					skipped = true
 				}
 			}
@@ -324,12 +285,8 @@ func (m *modifyModel) initModifyStep() {
 	case modifyStepDiskSize:
 		m.diskInput.Focus()
 		m.diskInputTouched = false
-	case modifyStepEphemeralDiskSize:
-		m.ephemeralDiskInput.Focus()
-		m.ephemeralDiskInputTouched = false
 	default:
 		m.diskInput.Blur()
-		m.ephemeralDiskInput.Blur()
 	}
 }
 
@@ -406,26 +363,13 @@ func (m modifyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.validationErr = nil
 			if m.step == modifyStepDiskSize {
 				m.diskInput.Focus()
-				m.ephemeralDiskInput.Blur()
 				m.diskInputTouched = false
-			} else if m.step == modifyStepEphemeralDiskSize {
-				m.diskInput.Blur()
-				m.ephemeralDiskInput.Focus()
-				m.ephemeralDiskInputTouched = false
 			} else {
 				m.diskInput.Blur()
-				m.ephemeralDiskInput.Blur()
 			}
 			return m, nil
 
 		case "up", "k":
-			if m.step == modifyStepEphemeralDiskSize {
-				m.ephemeralDiskInput.Blur()
-				m.step = modifyStepDiskSize
-				m.diskInput.Focus()
-				m.diskInputTouched = false
-				return m, nil
-			}
 			if m.step != modifyStepDiskSize {
 				if m.cursor > 0 {
 					m.cursor--
@@ -433,14 +377,7 @@ func (m modifyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "down", "j":
-			if m.step == modifyStepDiskSize {
-				m.diskInput.Blur()
-				m.step = modifyStepEphemeralDiskSize
-				m.ephemeralDiskInput.Focus()
-				m.ephemeralDiskInputTouched = false
-				return m, nil
-			}
-			if m.step != modifyStepEphemeralDiskSize {
+			if m.step != modifyStepDiskSize {
 				maxCursor := m.getMaxCursor()
 				if m.cursor < maxCursor {
 					m.cursor++
@@ -448,17 +385,10 @@ func (m modifyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "enter":
-			if m.step == modifyStepDiskSize {
-				m.diskInput.Blur()
-				m.step = modifyStepEphemeralDiskSize
-				m.ephemeralDiskInput.Focus()
-				m.ephemeralDiskInputTouched = false
-				return m, nil
-			}
 			return m.handleEnter()
 		}
 
-		// Handle text input for disk size and ephemeral disk steps
+		// Handle text input for disk size steps
 		if m.step == modifyStepDiskSize {
 			if len(msg.String()) == 1 && msg.Type == tea.KeyRunes {
 				if !m.diskInputTouched {
@@ -468,17 +398,6 @@ func (m modifyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			var cmd tea.Cmd
 			m.diskInput, cmd = m.diskInput.Update(msg)
-			return m, cmd
-		}
-		if m.step == modifyStepEphemeralDiskSize {
-			if len(msg.String()) == 1 && msg.Type == tea.KeyRunes {
-				if !m.ephemeralDiskInputTouched {
-					m.ephemeralDiskInput.SetValue("")
-					m.ephemeralDiskInputTouched = true
-				}
-			}
-			var cmd tea.Cmd
-			m.ephemeralDiskInput, cmd = m.ephemeralDiskInput.Update(msg)
 			return m, cmd
 		}
 	}
@@ -566,7 +485,7 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case modifyStepDiskSize, modifyStepEphemeralDiskSize:
+	case modifyStepDiskSize:
 		effectiveMode := m.getEffectiveMode()
 		minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs, effectiveMode)
 		diskSize, err := strconv.Atoi(m.diskInput.Value())
@@ -580,32 +499,17 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		minEphemeral, maxEphemeral := m.specs.EphemeralStorageRange(m.config.GPUType, m.config.NumGPUs, effectiveMode)
-		ephemeralSize, err := strconv.Atoi(m.ephemeralDiskInput.Value())
-		if err != nil || ephemeralSize < minEphemeral || ephemeralSize > maxEphemeral {
-			m.validationErr = fmt.Errorf("ephemeral storage for this instance type must be between %d and %d GB. Check storage limits at https://www.thundercompute.com/pricing", minEphemeral, maxEphemeral)
-			return m, nil
-		}
-
-		if ephemeralSize < m.currentInstance.EphemeralDiskGB {
-			m.validationErr = fmt.Errorf("ephemeral storage cannot be smaller than current size (%d GB)", m.currentInstance.EphemeralDiskGB)
-			return m, nil
-		}
-
 		m.config.DiskSizeGB = diskSize
 		m.config.DiskChanged = (diskSize != m.currentInstance.Storage)
-		m.config.EphemeralDiskGB = ephemeralSize
-		m.config.EphemeralDiskChanged = (ephemeralSize != m.currentInstance.EphemeralDiskGB)
 		m.validationErr = nil
 
-		if !m.config.ModeChanged && !m.config.GPUChanged && !m.config.ComputeChanged && !m.config.DiskChanged && !m.config.EphemeralDiskChanged {
+		if !m.config.ModeChanged && !m.config.GPUChanged && !m.config.ComputeChanged && !m.config.DiskChanged {
 			m.err = ErrNoChanges
 			m.quitting = true
 			return m, tea.Quit
 		}
 
 		m.diskInput.Blur()
-		m.ephemeralDiskInput.Blur()
 		m.step = modifyStepConfirmation
 		m.trySkipCurrentStep()
 		if m.quitting {
@@ -728,7 +632,7 @@ func (m modifyModel) View() string {
 		s.WriteString(m.renderGPUStep())
 	case modifyStepCompute:
 		s.WriteString(m.renderComputeStep())
-	case modifyStepDiskSize, modifyStepEphemeralDiskSize:
+	case modifyStepDiskSize:
 		s.WriteString(m.renderDiskSizeStep())
 	case modifyStepConfirmation:
 		s.WriteString(m.renderConfirmationStep())
@@ -746,7 +650,7 @@ func (m modifyModel) View() string {
 	switch m.step {
 	case modifyStepConfirmation:
 		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Confirm  Esc: Back  Q: Quit"))
-	case modifyStepDiskSize, modifyStepEphemeralDiskSize:
+	case modifyStepDiskSize:
 		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Quit"))
 	default:
 		s.WriteString(m.styles.Help.Render("↑/↓: Navigate  Enter: Select  Esc: Back  Q: Quit"))
@@ -813,24 +717,14 @@ func (m modifyModel) computePreviewPrice() float64 {
 			vcpuOptions := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, effectiveMode)
 			vcpus = vcpuOptions[m.cursor]
 		}
-	case modifyStepDiskSize, modifyStepEphemeralDiskSize:
+	case modifyStepDiskSize:
 		if v, err := strconv.Atoi(m.diskInput.Value()); err == nil && v >= 100 {
 			diskSizeGB = v
 		}
 	}
 
-	ephemeralDiskGB := m.currentInstance.EphemeralDiskGB
-	if m.config.EphemeralDiskChanged {
-		ephemeralDiskGB = m.config.EphemeralDiskGB
-	}
-	if m.step == modifyStepDiskSize || m.step == modifyStepEphemeralDiskSize {
-		if v, err := strconv.Atoi(m.ephemeralDiskInput.Value()); err == nil && v >= 0 {
-			ephemeralDiskGB = v
-		}
-	}
-
 	included := m.specs.IncludedVCPUs(gpuType, numGPUs, mode)
-	return utils.CalculateHourlyPrice(m.pricing, mode, gpuType, numGPUs, vcpus, diskSizeGB, ephemeralDiskGB, included)
+	return utils.CalculateHourlyPrice(m.pricing, mode, gpuType, numGPUs, vcpus, diskSizeGB, included)
 }
 
 func (m modifyModel) renderModeStep() string {
@@ -966,24 +860,9 @@ func (m modifyModel) renderComputeStep() string {
 func (m modifyModel) renderDiskSizeStep() string {
 	var s strings.Builder
 
-	primaryLabel := "  Primary"
-	ephemeralLabel := "  Ephemeral Storage (fast, temporary storage, 0 to disable)"
-	if m.step == modifyStepDiskSize {
-		primaryLabel = m.styles.Selected.Render("▶ Primary")
-	} else {
-		ephemeralLabel = m.styles.Selected.Render("▶ Ephemeral Storage (fast, temporary storage, 0 to disable)")
-	}
-
 	s.WriteString("Configure storage:\n\n")
-	s.WriteString(primaryLabel + fmt.Sprintf(" [current: %d GB]\n", m.currentInstance.Storage))
-	s.WriteString("  " + m.diskInput.View() + "\n\n")
-	s.WriteString(ephemeralLabel + fmt.Sprintf(" [current: %d GB]\n", m.currentInstance.EphemeralDiskGB))
-	s.WriteString("  " + m.ephemeralDiskInput.View() + "\n")
-	if m.step == modifyStepEphemeralDiskSize {
-		s.WriteString("\n")
-		s.WriteString(warningStyleTUI.Render("Fast, temporary storage mounted at /ephemeral. Use for large model files or caches that require maximum performance. This will be lost if the instance restarts or is modified. More detail: https://www.thundercompute.com/docs"))
-		s.WriteString("\n")
-	}
+	s.WriteString(m.styles.Selected.Render("▶ Primary") + fmt.Sprintf(" [current: %d GB]\n", m.currentInstance.Storage))
+	s.WriteString("  " + m.diskInput.View() + "\n")
 
 	if m.validationErr != nil {
 		s.WriteString("\n")
@@ -1033,10 +912,6 @@ func (m modifyModel) renderConfirmationStep() string {
 
 	if m.config.DiskChanged {
 		panel.WriteString(m.styles.Label.Render("Disk Size:  ") + fmt.Sprintf("%d GB → %d GB", m.currentInstance.Storage, m.config.DiskSizeGB) + "\n")
-	}
-
-	if m.config.EphemeralDiskChanged {
-		panel.WriteString(m.styles.Label.Render("Ephemeral:  ") + fmt.Sprintf("%d GB → %d GB", m.currentInstance.EphemeralDiskGB, m.config.EphemeralDiskGB) + "\n")
 	}
 
 	panelStr := panel.String()
