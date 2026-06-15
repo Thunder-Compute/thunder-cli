@@ -47,7 +47,7 @@ func init() {
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (development only): options vary by GPU type and count")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name (accepts snapshot names too; --snapshot is an alias)")
 	createCmd.Flags().StringVar(&snapshotAlias, "snapshot", "", "Alias for --template; accepts a snapshot name or template key")
-	createCmd.Flags().IntVar(&diskSizeGB, "primary-disk", 100, "Primary disk storage in GB (range depends on GPU config)")
+	createCmd.Flags().IntVar(&diskSizeGB, "disk", 100, "Disk storage in GB (range depends on GPU config)")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (range depends on GPU config)")
 	_ = createCmd.Flags().MarkHidden("disk-size-gb")
 }
@@ -105,7 +105,7 @@ func buildCreatePresets(cmd *cobra.Command) *tui.CreatePresets {
 	if templateFlagChanged(cmd) {
 		p.Template = &template
 	}
-	if cmd.Flags().Changed("primary-disk") || cmd.Flags().Changed("disk-size-gb") {
+	if cmd.Flags().Changed("disk") || cmd.Flags().Changed("disk-size-gb") {
 		p.DiskSizeGB = &diskSizeGB
 	}
 	return p
@@ -145,8 +145,8 @@ func missingCreateFlags(cmd *cobra.Command) []string {
 	if !templateFlagChanged(cmd) {
 		missing = append(missing, "--template/--snapshot")
 	}
-	if !(cmd.Flags().Changed("primary-disk") || cmd.Flags().Changed("disk-size-gb")) {
-		missing = append(missing, "--primary-disk")
+	if !(cmd.Flags().Changed("disk") || cmd.Flags().Changed("disk-size-gb")) {
+		missing = append(missing, "--disk")
 	}
 	if !(cmd.Flags().Changed("num-gpus") || cmd.Flags().Changed("vcpus")) {
 		missing = append(missing, "--num-gpus or --vcpus")
@@ -218,7 +218,7 @@ func runCreate(cmd *cobra.Command) error {
 			return usageErr("no templates available")
 		}
 
-		diskSizeWasSet := cmd.Flags().Changed("primary-disk") || cmd.Flags().Changed("disk-size-gb")
+		diskSizeWasSet := cmd.Flags().Changed("disk") || cmd.Flags().Changed("disk-size-gb")
 		createConfig = &tui.CreateConfig{
 			Mode:       mode,
 			GPUType:    gpuType,

@@ -36,7 +36,7 @@ func init() {
 	modifyCmd.Flags().String("gpu", "", "GPU type (a6000, a100, h100)")
 	modifyCmd.Flags().Int("num-gpus", 0, "Number of GPUs (production mode: 1, 2, or 4)")
 	modifyCmd.Flags().Int("vcpus", 0, "CPU cores (development only): options vary by GPU type and count")
-	modifyCmd.Flags().Int("primary-disk", 0, "Primary disk size in GB (cannot shrink, max depends on config)")
+	modifyCmd.Flags().Int("disk", 0, "Disk size in GB (cannot shrink, max depends on config)")
 	modifyCmd.Flags().Int("disk-size-gb", 0, "Disk size in GB (cannot shrink, max depends on config)")
 	_ = modifyCmd.Flags().MarkHidden("disk-size-gb")
 
@@ -136,7 +136,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 
 	if modifyPresets.IsEmpty() {
 		if !interactive {
-			return usageErr("modification flags required in non-interactive mode (--mode, --gpu, --num-gpus, --vcpus, --primary-disk)")
+			return usageErr("modification flags required in non-interactive mode (--mode, --gpu, --num-gpus, --vcpus, --disk)")
 		}
 		// No flags set — full interactive mode
 		modifyConfig, err = tui.RunModifyInteractive(client, selectedInstance, specs)
@@ -312,8 +312,8 @@ func buildModifyPresets(cmd *cobra.Command) *tui.ModifyPresets {
 		v, _ := cmd.Flags().GetInt("vcpus")
 		p.VCPUs = &v
 	}
-	if cmd.Flags().Changed("primary-disk") {
-		v, _ := cmd.Flags().GetInt("primary-disk")
+	if cmd.Flags().Changed("disk") {
+		v, _ := cmd.Flags().GetInt("disk")
 		p.DiskSizeGB = &v
 	} else if cmd.Flags().Changed("disk-size-gb") {
 		v, _ := cmd.Flags().GetInt("disk-size-gb")
@@ -325,7 +325,7 @@ func buildModifyPresets(cmd *cobra.Command) *tui.ModifyPresets {
 func hasAllModifyFlags(cmd *cobra.Command) bool {
 	return cmd.Flags().Changed("mode") || cmd.Flags().Changed("gpu") ||
 		cmd.Flags().Changed("num-gpus") || cmd.Flags().Changed("vcpus") ||
-		cmd.Flags().Changed("primary-disk") || cmd.Flags().Changed("disk-size-gb")
+		cmd.Flags().Changed("disk") || cmd.Flags().Changed("disk-size-gb")
 }
 
 func buildModifyRequestFromConfig(config *tui.ModifyConfig, currentInstance *api.Instance) (api.InstanceModifyRequest, error) {

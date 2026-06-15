@@ -36,7 +36,7 @@ func newModifyCmd() *cobra.Command {
 	cmd.Flags().String("gpu", "", "")
 	cmd.Flags().Int("num-gpus", 0, "")
 	cmd.Flags().Int("vcpus", 0, "")
-	cmd.Flags().Int("primary-disk", 0, "")
+	cmd.Flags().Int("disk", 0, "")
 	return cmd
 }
 
@@ -72,7 +72,7 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 		{
 			name:     "change disk size",
 			instance: modifyInstance("prototyping", "a6000", "1", "8", 100),
-			flags:    map[string]string{"primary-disk": "200"},
+			flags:    map[string]string{"disk": "200"},
 			validate: func(t *testing.T, req api.InstanceModifyRequest) {
 				require.NotNil(t, req.DiskSizeGB)
 				assert.Equal(t, 200, *req.DiskSizeGB)
@@ -81,14 +81,14 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 		{
 			name:          "disk shrink rejected",
 			instance:      modifyInstance("prototyping", "a6000", "1", "8", 200),
-			flags:         map[string]string{"primary-disk": "150"},
+			flags:         map[string]string{"disk": "150"},
 			expectError:   true,
 			errorContains: "cannot be smaller than current size (200 GB)",
 		},
 		{
 			name:          "disk exceeds max",
 			instance:      modifyInstance("prototyping", "a6000", "1", "8", 100),
-			flags:         map[string]string{"primary-disk": "500"},
+			flags:         map[string]string{"disk": "500"},
 			expectError:   true,
 			errorContains: "disk size must be between",
 		},
@@ -275,8 +275,8 @@ func TestBuildModifyRequestFromFlags_RejectsInvalidTargetSpecValues(t *testing.T
 			errorContains: "vcpus must be one of [16 24 32]",
 		},
 		{
-			name:          "primary disk validates target spec minimum",
-			flags:         map[string]string{"num-gpus": "4", "vcpus": "16", "primary-disk": "150"},
+			name:          "disk validates target spec minimum",
+			flags:         map[string]string{"num-gpus": "4", "vcpus": "16", "disk": "150"},
 			errorContains: "disk size must be between 200 and 1000 GB",
 		},
 	}
@@ -307,7 +307,7 @@ func TestBuildModifyRequestFromFlags_RejectsUnavailableTargetSpec(t *testing.T) 
 	})
 
 	cmd := newModifyCmd()
-	setFlags(cmd, map[string]string{"primary-disk": "150"})
+	setFlags(cmd, map[string]string{"disk": "150"})
 
 	_, err := buildModifyRequestFromFlags(cmd, modifyInstance("prototyping", "a6000", "1", "8", 100), specs)
 
@@ -528,7 +528,7 @@ func TestBuildModifyPresets(t *testing.T) {
 		_ = cmd.Flags().Set("gpu", "h100")
 		_ = cmd.Flags().Set("num-gpus", "2")
 		_ = cmd.Flags().Set("vcpus", "8")
-		_ = cmd.Flags().Set("primary-disk", "200")
+		_ = cmd.Flags().Set("disk", "200")
 
 		p := buildModifyPresets(cmd)
 		assert.False(t, p.IsEmpty())

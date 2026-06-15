@@ -39,14 +39,14 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString(ExampleStyle.Render("# Create a development instance"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr create --mode development --gpu a6000 --vcpus 8 --template base --primary-disk 100"))
+	output.WriteString(CommandTextStyle.Render("tnr create --mode development --gpu a6000 --vcpus 8 --template base --disk 100"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
 	output.WriteString(ExampleStyle.Render("# Create a production instance"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr create --mode production --gpu a100 --num-gpus 2 --template base --primary-disk 500"))
+	output.WriteString(CommandTextStyle.Render("tnr create --mode production --gpu a100 --num-gpus 2 --template base --disk 500"))
 	output.WriteString("\n\n")
 
 	// Flags Section
@@ -90,7 +90,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("\n")
 
 	output.WriteString("  ")
-	output.WriteString(FlagStyle.Render("--primary-disk"))
+	output.WriteString(FlagStyle.Render("--disk"))
 	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("Disk storage in GB"))
 	output.WriteString("\n")
