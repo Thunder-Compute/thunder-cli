@@ -13,19 +13,25 @@ import (
 
 func testSpecStore() *utils.SpecStore {
 	return utils.NewSpecStore(map[string]api.GpuSpecConfig{
-		"a6000_x1_prototyping":  {DisplayName: "RTX A6000", VramGB: 48, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 300}},
-		"a100xl_x1_prototyping": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8, 12}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
-		"a100xl_x2_prototyping": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16, 20, 24}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"h100_x1_prototyping":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8, 12, 16}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
-		"h100_x2_prototyping":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16, 20, 24}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"a100xl_x1_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 1, Mode: "production", VcpuOptions: []int{18}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"a100xl_x2_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 2, Mode: "production", VcpuOptions: []int{36}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"a100xl_x4_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 4, Mode: "production", VcpuOptions: []int{72}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"a100xl_x8_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 8, Mode: "production", VcpuOptions: []int{144}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"h100_x1_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 1, Mode: "production", VcpuOptions: []int{18}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"h100_x2_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 2, Mode: "production", VcpuOptions: []int{36}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"h100_x4_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 4, Mode: "production", VcpuOptions: []int{72}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"h100_x8_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 8, Mode: "production", VcpuOptions: []int{144}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"a100xl_x1_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 1, Mode: "production", VcpuOptions: []int{15}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"a100xl_x1_prototyping": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8, 12}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"a100xl_x2_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 2, Mode: "production", VcpuOptions: []int{30}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"a100xl_x2_prototyping": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16, 20, 24}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"a100xl_x4_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 4, Mode: "production", VcpuOptions: []int{60}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 2000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"a100xl_x8_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 8, Mode: "production", VcpuOptions: []int{120}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 4000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"a6000_x1_prototyping":  {DisplayName: "RTX A6000", VramGB: 48, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 6}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"h100_x1_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 1, Mode: "production", VcpuOptions: []int{15}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"h100_x1_prototyping":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8, 12, 16}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"h100_x2_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 2, Mode: "production", VcpuOptions: []int{30}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"h100_x2_prototyping":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16, 20, 24}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"h100_x4_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 4, Mode: "production", VcpuOptions: []int{60}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 2000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"h100_x8_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 8, Mode: "production", VcpuOptions: []int{120}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 4000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"l40_x1_production":     {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 1, Mode: "production", VcpuOptions: []int{10}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"l40_x1_prototyping":    {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"l40_x2_production":     {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 2, Mode: "production", VcpuOptions: []int{20}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"l40_x2_prototyping":    {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"l40_x4_production":     {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 4, Mode: "production", VcpuOptions: []int{40}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 2000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"l40_x8_production":     {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 8, Mode: "production", VcpuOptions: []int{80}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 4000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
 	})
 }
 
@@ -50,7 +56,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				Mode:       "prototyping",
 				GPUType:    "a6000",
 				NumGPUs:    1,
-				VCPUs:      8,
+				VCPUs:      6,
 				Template:   "ubuntu-22.04",
 				DiskSizeGB: 100,
 			},
@@ -65,7 +71,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				Mode:       "production",
 				GPUType:    "a100",
 				NumGPUs:    2,
-				VCPUs:      36,
+				VCPUs:      30,
 				Template:   "pytorch",
 				DiskSizeGB: 500,
 			},
@@ -106,10 +112,10 @@ func TestValidateCreateConfig(t *testing.T) {
 			config: &tui.CreateConfig{
 				Mode:    "prototyping",
 				GPUType: "a6000",
-				VCPUs:   6,
+				VCPUs:   8,
 			},
 			expectError:   true,
-			errorContains: "vcpus must be one of [4 8] for a6000 with 1 GPU(s)",
+			errorContains: "vcpus must be one of [4 6] for a6000 with 1 GPU(s)",
 		},
 		{
 			name: "production with invalid GPU type",
@@ -151,7 +157,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				Mode:       "production",
 				GPUType:    "a100",
 				NumGPUs:    8,
-				VCPUs:      144,
+				VCPUs:      120,
 				Template:   "pytorch",
 				DiskSizeGB: 500,
 			},
@@ -165,7 +171,7 @@ func TestValidateCreateConfig(t *testing.T) {
 			config: &tui.CreateConfig{
 				Mode:       "prototyping",
 				GPUType:    "a6000",
-				VCPUs:      8,
+				VCPUs:      6,
 				Template:   "ubuntu-22.04",
 				DiskSizeGB: 50,
 			},
@@ -173,14 +179,14 @@ func TestValidateCreateConfig(t *testing.T) {
 				tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 			},
 			expectError:   true,
-			errorContains: "disk size must be between 100 and 300 GB",
+			errorContains: "disk size must be between 100 and 500 GB",
 		},
 		{
 			name: "empty template is required error",
 			config: &tui.CreateConfig{
 				Mode:       "prototyping",
 				GPUType:    "a6000",
-				VCPUs:      8,
+				VCPUs:      6,
 				DiskSizeGB: 100,
 			},
 			templates: []api.TemplateEntry{
@@ -194,7 +200,7 @@ func TestValidateCreateConfig(t *testing.T) {
 			config: &tui.CreateConfig{
 				Mode:       "prototyping",
 				GPUType:    "a6000",
-				VCPUs:      8,
+				VCPUs:      6,
 				Template:   "nonexistent",
 				DiskSizeGB: 100,
 			},
@@ -227,7 +233,7 @@ func TestCreateInstanceRequest(t *testing.T) {
 		Mode:       "prototyping",
 		GPUType:    "a6000",
 		NumGPUs:    1,
-		VCPUs:      8,
+		VCPUs:      6,
 		Template:   "ubuntu-22.04",
 		DiskSizeGB: 100,
 	}
@@ -250,7 +256,7 @@ func TestCreateInstanceRequest(t *testing.T) {
 	assert.Equal(t, api.InstanceMode("prototyping"), req.Mode)
 	assert.Equal(t, "a6000", req.GPUType)
 	assert.Equal(t, 1, req.NumGPUs)
-	assert.Equal(t, 8, req.CPUCores)
+	assert.Equal(t, 6, req.CPUCores)
 	assert.Equal(t, "ubuntu-22.04", req.Template)
 	assert.Equal(t, 100, req.DiskSizeGB)
 }
@@ -303,7 +309,7 @@ func TestCreateConfigVCPUsAutoSet(t *testing.T) {
 	err := validateCreateConfig(config, templates, []api.Snapshot{}, false, testSpecStore())
 	require.NoError(t, err)
 
-	assert.Equal(t, 36, config.VCPUs)
+	assert.Equal(t, 30, config.VCPUs)
 }
 
 // TestCreateConfigGPUTypeCaseInsensitive verifies that GPU type validation
@@ -312,7 +318,7 @@ func TestCreateConfigGPUTypeCaseInsensitive(t *testing.T) {
 	config := &tui.CreateConfig{
 		Mode:       "prototyping",
 		GPUType:    "A6000",
-		VCPUs:      8,
+		VCPUs:      6,
 		Template:   "ubuntu-22.04",
 		DiskSizeGB: 100,
 	}
@@ -352,7 +358,7 @@ func TestCreateConfigTemplateCaseInsensitive(t *testing.T) {
 	config := &tui.CreateConfig{
 		Mode:       "prototyping",
 		GPUType:    "a6000",
-		VCPUs:      8,
+		VCPUs:      6,
 		Template:   "UBUNTU 22.04",
 		DiskSizeGB: 100,
 	}
@@ -373,7 +379,7 @@ func TestCreateConfigTemplateByDisplayName(t *testing.T) {
 	config := &tui.CreateConfig{
 		Mode:       "prototyping",
 		GPUType:    "a6000",
-		VCPUs:      8,
+		VCPUs:      6,
 		Template:   "Ubuntu 22.04",
 		DiskSizeGB: 100,
 	}
@@ -390,7 +396,7 @@ func TestCreateConfigTemplateByDisplayName(t *testing.T) {
 
 // TestCreateConfigDiskSizeBoundaries verifies that disk size validation
 // correctly enforces the storage range from the GPU spec.
-// The a6000 prototyping spec has StorageGB: {Min: 100, Max: 300}.
+// The a6000 prototyping spec has StorageGB: {Min: 100, Max: 500}.
 func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -404,7 +410,7 @@ func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 		},
 		{
 			name:        "maximum valid disk size",
-			diskSizeGB:  300,
+			diskSizeGB:  500,
 			expectError: false,
 		},
 		{
@@ -414,7 +420,7 @@ func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 		},
 		{
 			name:        "disk size too large",
-			diskSizeGB:  301,
+			diskSizeGB:  501,
 			expectError: true,
 		},
 	}
@@ -424,7 +430,7 @@ func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 			config := &tui.CreateConfig{
 				Mode:       "prototyping",
 				GPUType:    "a6000",
-				VCPUs:      8,
+				VCPUs:      6,
 				Template:   "ubuntu-22.04",
 				DiskSizeGB: tt.diskSizeGB,
 			}
@@ -437,7 +443,7 @@ func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "disk size must be between 100 and 300 GB")
+				assert.Contains(t, err.Error(), "disk size must be between 100 and 500 GB")
 			} else {
 				assert.NoError(t, err)
 			}

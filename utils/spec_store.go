@@ -165,9 +165,6 @@ func (s *SpecStore) IncludedVCPUs(gpuType string, numGPUs int, mode string) int 
 func (s *SpecStore) RamPerVCPU(gpuType string, numGPUs int, mode string) int {
 	spec := s.Lookup(gpuType, numGPUs, mode)
 	if spec == nil {
-		if mode == "production" {
-			return 5
-		}
 		return 8
 	}
 	return spec.RamPerVCPUGiB

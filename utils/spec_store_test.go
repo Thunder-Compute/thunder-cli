@@ -9,14 +9,25 @@ import (
 
 func testSpecStore() *SpecStore {
 	return NewSpecStore(map[string]api.GpuSpecConfig{
-		"a6000_x1_prototyping":  {DisplayName: "RTX A6000", VramGB: 48, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 300}},
-		"a100xl_x1_prototyping": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8, 12}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
-		"a100xl_x2_prototyping": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16, 20, 24}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"h100_x1_prototyping":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8, 12, 16}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
-		"h100_x2_prototyping":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16, 20, 24}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"a100xl_x1_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 1, Mode: "production", VcpuOptions: []int{18}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"a100xl_x2_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 2, Mode: "production", VcpuOptions: []int{36}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"h100_x1_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 1, Mode: "production", VcpuOptions: []int{18}, RamPerVCPUGiB: 5, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"a100xl_x1_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 1, Mode: "production", VcpuOptions: []int{15}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"a100xl_x1_prototyping": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8, 12}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"a100xl_x2_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 2, Mode: "production", VcpuOptions: []int{30}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"a100xl_x2_prototyping": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16, 20, 24}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"a100xl_x4_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 4, Mode: "production", VcpuOptions: []int{60}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 2000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"a100xl_x8_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 8, Mode: "production", VcpuOptions: []int{120}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 4000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"a6000_x1_prototyping":  {DisplayName: "RTX A6000", VramGB: 48, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 6}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"h100_x1_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 1, Mode: "production", VcpuOptions: []int{15}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"h100_x1_prototyping":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8, 12, 16}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"h100_x2_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 2, Mode: "production", VcpuOptions: []int{30}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"h100_x2_prototyping":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16, 20, 24}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"h100_x4_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 4, Mode: "production", VcpuOptions: []int{60}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 2000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"h100_x8_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 8, Mode: "production", VcpuOptions: []int{120}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 4000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"l40_x1_production":     {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 1, Mode: "production", VcpuOptions: []int{10}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"l40_x1_prototyping":    {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"l40_x2_production":     {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 2, Mode: "production", VcpuOptions: []int{20}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"l40_x2_prototyping":    {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"l40_x4_production":     {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 4, Mode: "production", VcpuOptions: []int{40}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 2000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
+		"l40_x8_production":     {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 8, Mode: "production", VcpuOptions: []int{80}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 4000}, EphemeralStorageGB: api.StorageRange{Min: 0, Max: 0}},
 	})
 }
 
@@ -29,14 +40,14 @@ func TestGPUOptionsForMode(t *testing.T) {
 		expected []string
 	}{
 		{
-			name:     "prototyping includes a6000, a100xl, h100 in order",
+			name:     "prototyping includes a6000, a100xl, l40, h100 in order",
 			mode:     "prototyping",
-			expected: []string{"a6000", "a100xl", "h100"},
+			expected: []string{"a6000", "a100xl", "l40", "h100"},
 		},
 		{
 			name:     "production excludes a6000",
 			mode:     "production",
-			expected: []string{"a100xl", "h100"},
+			expected: []string{"a100xl", "l40", "h100"},
 		},
 		{
 			name:     "unknown mode returns empty",
@@ -87,10 +98,10 @@ func TestGPUCountsForMode(t *testing.T) {
 			expected: []int{1, 2},
 		},
 		{
-			name:     "a100xl production has 1 and 2 GPUs",
+			name:     "a100xl production has 1, 2, 4, and 8 GPUs",
 			gpuType:  "a100xl",
 			mode:     "production",
-			expected: []int{1, 2},
+			expected: []int{1, 2, 4, 8},
 		},
 		{
 			name:     "unknown GPU returns nil",
@@ -119,8 +130,8 @@ func TestNeedsGPUCountPhase(t *testing.T) {
 func TestVCPUOptions(t *testing.T) {
 	s := testSpecStore()
 
-	assert.Equal(t, []int{4, 8}, s.VCPUOptions("a6000", 1, "prototyping"))
-	assert.Equal(t, []int{18}, s.VCPUOptions("a100xl", 1, "production"))
+	assert.Equal(t, []int{4, 6}, s.VCPUOptions("a6000", 1, "prototyping"))
+	assert.Equal(t, []int{15}, s.VCPUOptions("a100xl", 1, "production"))
 	assert.Nil(t, s.VCPUOptions("unknown", 1, "prototyping"))
 }
 
@@ -136,26 +147,26 @@ func TestRamPerVCPU(t *testing.T) {
 	s := testSpecStore()
 
 	assert.Equal(t, 8, s.RamPerVCPU("a6000", 1, "prototyping"))
-	assert.Equal(t, 5, s.RamPerVCPU("a100xl", 1, "production"))
+	assert.Equal(t, 8, s.RamPerVCPU("a100xl", 1, "production"))
 	assert.Equal(t, 8, s.RamPerVCPU("unknown", 1, "prototyping"), "prototyping fallback")
-	assert.Equal(t, 5, s.RamPerVCPU("unknown", 1, "production"), "production fallback")
+	assert.Equal(t, 8, s.RamPerVCPU("unknown", 1, "production"), "production fallback")
 }
 
 func TestStorageRange(t *testing.T) {
 	s := testSpecStore()
 
 	tests := []struct {
-		name           string
-		gpuType        string
-		numGPUs        int
-		mode           string
-		expectedMin    int
-		expectedMax    int
+		name        string
+		gpuType     string
+		numGPUs     int
+		mode        string
+		expectedMin int
+		expectedMax int
 	}{
-		{"a6000 prototyping", "a6000", 1, "prototyping", 100, 300},
+		{"a6000 prototyping", "a6000", 1, "prototyping", 100, 500},
 		{"a100xl x1 prototyping", "a100xl", 1, "prototyping", 100, 500},
 		{"a100xl x2 prototyping", "a100xl", 2, "prototyping", 100, 1000},
-		{"production", "a100xl", 1, "production", 100, 1000},
+		{"production", "a100xl", 1, "production", 100, 500},
 		{"unknown falls back to 100-1000", "unknown", 1, "prototyping", 100, 1000},
 	}
 
@@ -168,16 +179,15 @@ func TestStorageRange(t *testing.T) {
 	}
 }
 
-
 func TestNormalizeGPUType(t *testing.T) {
 	s := testSpecStore()
 
 	tests := []struct {
-		name     string
-		input    string
-		mode     string
-		wantGPU  string
-		wantOK   bool
+		name    string
+		input   string
+		mode    string
+		wantGPU string
+		wantOK  bool
 	}{
 		{"exact match", "a6000", "prototyping", "a6000", true},
 		{"a100 alias", "a100", "prototyping", "a100xl", true},
