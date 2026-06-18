@@ -71,7 +71,7 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 		},
 		{
 			name:     "change disk size",
-			instance: modifyInstance("prototyping", "a6000", "1", "8", 100),
+			instance: modifyInstance("prototyping", "a6000", "1", "4", 100),
 			flags:    map[string]string{"disk": "200"},
 			validate: func(t *testing.T, req api.InstanceModifyRequest) {
 				require.NotNil(t, req.DiskSizeGB)
@@ -80,15 +80,15 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 		},
 		{
 			name:          "disk shrink rejected",
-			instance:      modifyInstance("prototyping", "a6000", "1", "8", 200),
+			instance:      modifyInstance("prototyping", "a6000", "1", "4", 200),
 			flags:         map[string]string{"disk": "150"},
 			expectError:   true,
 			errorContains: "cannot be smaller than current size (200 GB)",
 		},
 		{
 			name:          "disk exceeds max",
-			instance:      modifyInstance("prototyping", "a6000", "1", "8", 100),
-			flags:         map[string]string{"disk": "500"},
+			instance:      modifyInstance("prototyping", "a6000", "1", "4", 100),
+			flags:         map[string]string{"disk": "501"},
 			expectError:   true,
 			errorContains: "disk size must be between",
 		},
@@ -141,10 +141,10 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 		{
 			name:     "valid vcpus for GPU",
 			instance: modifyInstance("prototyping", "a6000", "1", "4", 100),
-			flags:    map[string]string{"vcpus": "8"},
+			flags:    map[string]string{"vcpus": "6"},
 			validate: func(t *testing.T, req api.InstanceModifyRequest) {
 				require.NotNil(t, req.CPUCores)
-				assert.Equal(t, 8, *req.CPUCores)
+				assert.Equal(t, 6, *req.CPUCores)
 			},
 		},
 		{
@@ -169,19 +169,19 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 				require.NotNil(t, req.NumGPUs)
 				assert.Equal(t, 2, *req.NumGPUs)
 				require.NotNil(t, req.CPUCores)
-				assert.Equal(t, 36, *req.CPUCores)
+				assert.Equal(t, 30, *req.CPUCores)
 			},
 		},
 		{
 			name:          "no flags set returns error",
-			instance:      modifyInstance("prototyping", "a6000", "1", "8", 100),
+			instance:      modifyInstance("prototyping", "a6000", "1", "4", 100),
 			flags:         map[string]string{},
 			expectError:   true,
 			errorContains: "no changes specified",
 		},
 		{
 			name:     "gpu type case insensitive",
-			instance: modifyInstance("prototyping", "a6000", "1", "8", 100),
+			instance: modifyInstance("prototyping", "a6000", "1", "4", 100),
 			flags:    map[string]string{"gpu": "H100"},
 			validate: func(t *testing.T, req api.InstanceModifyRequest) {
 				require.NotNil(t, req.GPUType)
@@ -190,7 +190,7 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 		},
 		{
 			name:     "same mode does not require dependent flags",
-			instance: modifyInstance("prototyping", "a6000", "1", "8", 100),
+			instance: modifyInstance("prototyping", "a6000", "1", "4", 100),
 			flags:    map[string]string{"mode": "prototyping"},
 			validate: func(t *testing.T, req api.InstanceModifyRequest) {
 				require.NotNil(t, req.Mode)
