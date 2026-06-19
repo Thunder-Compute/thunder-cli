@@ -79,7 +79,7 @@ Match the user's intent to the right action:
 
 ## Defaults
 
-- Mode: `development` (auto-stops when idle, cheaper)
+- Mode: `development` (cheaper, CUDA-level optimizations, best for most ML/dev workloads)
 - Disk: 100 GB
 - GPUs: 1
 - Template: `ubuntu22.04-cuda12.4`
@@ -87,7 +87,7 @@ Match the user's intent to the right action:
 ## Safety Rules
 
 - **Never delete without explicit user confirmation**
-- **Warn about production mode** — it runs 24/7 and bills continuously
+- **Cost reminder** — instances bill while running in both modes (no idle auto-stop); billing ends only on delete
 - If auth fails, tell the user to re-authenticate
 - If the requested GPU type isn't available, show alternatives from `get_specs`
 
