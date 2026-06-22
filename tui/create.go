@@ -1198,7 +1198,7 @@ func (m createModel) computePreviewPrice() float64 {
 	}
 
 	if (m.presets == nil || m.presets.DiskSizeGB == nil) && m.step != stepDiskSize && m.step != stepConfirmation {
-		diskSizeGB = defaultCreateDiskSizeForGPUCount(numGPUs)
+		diskSizeGB = max(diskSizeGB, defaultCreateDiskSizeForGPUCount(numGPUs))
 	}
 
 	included := m.specs.IncludedVCPUs(gpuType, numGPUs, mode)
