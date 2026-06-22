@@ -16,7 +16,10 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
-const templateWindowSize = 10
+const (
+	templateWindowSize   = 10
+	includedDiskGBPerGPU = 100
+)
 
 type createStep int
 
@@ -126,6 +129,42 @@ func NewCreateModelWithPresets(client *api.Client, specs *utils.SpecStore, prese
 	return m
 }
 
+func defaultCreateDiskSizeForGPUCount(numGPUs int) int {
+	if numGPUs <= 0 {
+		numGPUs = 1
+	}
+	return numGPUs * includedDiskGBPerGPU
+}
+
+func (m createModel) defaultDiskSizeGB() int {
+	diskSizeGB := defaultCreateDiskSizeForGPUCount(m.config.NumGPUs)
+	if m.selectedSnapshot != nil && m.selectedSnapshot.MinimumDiskSizeGB > diskSizeGB {
+		diskSizeGB = m.selectedSnapshot.MinimumDiskSizeGB
+	}
+	if m.specs == nil || m.config.GPUType == "" || m.config.Mode == "" {
+		return diskSizeGB
+	}
+
+	minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
+	if m.selectedSnapshot != nil && m.selectedSnapshot.MinimumDiskSizeGB > maxDisk {
+		maxDisk = m.selectedSnapshot.MinimumDiskSizeGB
+	}
+	if diskSizeGB < minDisk {
+		return minDisk
+	}
+	if diskSizeGB > maxDisk {
+		return maxDisk
+	}
+	return diskSizeGB
+}
+
+func (m *createModel) setDefaultDiskSize() {
+	if m.presets != nil && m.presets.DiskSizeGB != nil {
+		return
+	}
+	m.config.DiskSizeGB = m.defaultDiskSizeGB()
+}
+
 // resolveGPUForMode normalizes a user-provided GPU string and validates it
 // against the given mode. Returns the canonical GPU type and true if valid.
 func resolveGPUForMode(raw, mode string) (string, bool) {
@@ -213,6 +252,7 @@ func (m *createModel) trySkipCompute() bool {
 	if !needsCount {
 		// Single-GPU type: numGPUs is always 1
 		m.config.NumGPUs = 1
+		m.setDefaultDiskSize()
 		if !m.specs.IsSpecAvailable(gpuType, 1, mode) {
 			return false
 		}
@@ -233,11 +273,13 @@ func (m *createModel) trySkipCompute() bool {
 			if len(vcpuOpts) == 1 {
 				// Single vCPU option (e.g. production) — auto-select
 				m.config.NumGPUs = *m.presets.NumGPUs
+				m.setDefaultDiskSize()
 				m.config.VCPUs = vcpuOpts[0]
 				return true
 			}
 			if slices.Contains(vcpuOpts, *m.presets.VCPUs) {
 				m.config.NumGPUs = *m.presets.NumGPUs
+				m.setDefaultDiskSize()
 				m.config.VCPUs = *m.presets.VCPUs
 				return true
 			}
@@ -249,6 +291,7 @@ func (m *createModel) trySkipCompute() bool {
 	if m.presets.NumGPUs != nil {
 		if slices.Contains(m.specs.GPUCountsForMode(gpuType, mode), *m.presets.NumGPUs) && m.specs.IsSpecAvailable(gpuType, *m.presets.NumGPUs, mode) {
 			m.config.NumGPUs = *m.presets.NumGPUs
+			m.setDefaultDiskSize()
 			// If single vCPU option, auto-select it too
 			vcpuOpts := m.specs.VCPUOptions(gpuType, *m.presets.NumGPUs, mode)
 			if len(vcpuOpts) == 1 {
@@ -284,7 +327,7 @@ func (m *createModel) trySkipTemplate() tea.Cmd {
 			m.selectedSnapshot = nil
 			m.skippedSteps[stepTemplate] = true
 			if m.presets.DiskSizeGB == nil {
-				m.config.DiskSizeGB = 100
+				m.config.DiskSizeGB = m.defaultDiskSizeGB()
 			}
 			m.step++
 			return m.trySkipCurrentStep() // continue the skip chain
@@ -298,7 +341,7 @@ func (m *createModel) trySkipTemplate() tea.Cmd {
 			m.selectedSnapshot = &m.snapshots[i]
 			m.skippedSteps[stepTemplate] = true
 			if m.presets.DiskSizeGB == nil {
-				m.config.DiskSizeGB = s.MinimumDiskSizeGB
+				m.config.DiskSizeGB = m.defaultDiskSizeGB()
 			}
 			m.step++
 			return m.trySkipCurrentStep()
@@ -333,6 +376,7 @@ func (m *createModel) initStep() {
 			}
 		} else if !m.specs.NeedsGPUCountPhase(m.config.GPUType, m.config.Mode) {
 			m.config.NumGPUs = 1
+			m.setDefaultDiskSize()
 			m.gpuCountPhase = false
 		}
 	case stepDiskSize:
@@ -628,6 +672,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.config.NumGPUs = gpuCounts[m.cursor]
+			m.setDefaultDiskSize()
 			m.gpuCountPhase = false
 			m.cursor = 0
 			// Check if vCPUs preset can now be applied
@@ -658,7 +703,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 				m.config.Template = m.templates[m.cursor].Key
 				m.selectedSnapshot = nil
 				if m.presets == nil || m.presets.DiskSizeGB == nil {
-					m.config.DiskSizeGB = 100
+					m.config.DiskSizeGB = m.defaultDiskSizeGB()
 				}
 				m.step = stepDiskSize
 				return m, m.trySkipCurrentStep()
@@ -670,7 +715,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 				m.config.Template = snapshot.Name
 				m.selectedSnapshot = &snapshot
 				if m.presets == nil || m.presets.DiskSizeGB == nil {
-					m.config.DiskSizeGB = snapshot.MinimumDiskSizeGB
+					m.config.DiskSizeGB = m.defaultDiskSizeGB()
 				}
 				m.step = stepDiskSize
 				return m, m.trySkipCurrentStep()
@@ -683,7 +728,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 				m.config.Template = "base"
 				m.selectedSnapshot = nil
 				if m.presets == nil || m.presets.DiskSizeGB == nil {
-					m.config.DiskSizeGB = 100
+					m.config.DiskSizeGB = m.defaultDiskSizeGB()
 				}
 				m.step = stepDiskSize
 				return m, m.trySkipCurrentStep()
@@ -1110,7 +1155,7 @@ func (m createModel) computePreviewPrice() float64 {
 		vcpus = m.specs.IncludedVCPUs(gpuType, numGPUs, mode)
 	}
 	if diskSizeGB == 0 {
-		diskSizeGB = 100
+		diskSizeGB = defaultCreateDiskSizeForGPUCount(numGPUs)
 	}
 
 	// Override with hovered option for current step
@@ -1150,6 +1195,10 @@ func (m createModel) computePreviewPrice() float64 {
 		if v, err := strconv.Atoi(m.diskInput.Value()); err == nil && v >= 10 {
 			diskSizeGB = v
 		}
+	}
+
+	if (m.presets == nil || m.presets.DiskSizeGB == nil) && m.step != stepDiskSize && m.step != stepConfirmation {
+		diskSizeGB = defaultCreateDiskSizeForGPUCount(numGPUs)
 	}
 
 	included := m.specs.IncludedVCPUs(gpuType, numGPUs, mode)

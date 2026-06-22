@@ -6,8 +6,57 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/utils"
 )
+
+func createTestSpecStore() *utils.SpecStore {
+	return utils.NewSpecStore(map[string]api.GpuSpecConfig{
+		"h100_x1_production": {GpuCount: 1, Mode: "production", VcpuOptions: []int{15}, StorageGB: api.StorageRange{Min: 100, Max: 500}},
+		"h100_x2_production": {GpuCount: 2, Mode: "production", VcpuOptions: []int{30}, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"h100_x4_production": {GpuCount: 4, Mode: "production", VcpuOptions: []int{60}, StorageGB: api.StorageRange{Min: 100, Max: 2000}},
+	})
+}
+
+func TestCreateDefaultDiskSizeUsesFreeStoragePerGPU(t *testing.T) {
+	m := NewCreateModel(nil, createTestSpecStore())
+	m.config.Mode = "production"
+	m.config.GPUType = "h100"
+	m.config.NumGPUs = 4
+
+	if got := m.defaultDiskSizeGB(); got != 400 {
+		t.Fatalf("expected default disk size 400GB for 4 GPUs, got %dGB", got)
+	}
+}
+
+func TestCreateDefaultDiskSizeRespectsSnapshotMinimum(t *testing.T) {
+	m := NewCreateModel(nil, createTestSpecStore())
+	m.config.Mode = "production"
+	m.config.GPUType = "h100"
+	m.config.NumGPUs = 4
+	m.selectedSnapshot = &api.Snapshot{MinimumDiskSizeGB: 550}
+
+	if got := m.defaultDiskSizeGB(); got != 550 {
+		t.Fatalf("expected snapshot minimum disk size 550GB, got %dGB", got)
+	}
+}
+
+func TestCreateDiskInputSeedsFromGPUCount(t *testing.T) {
+	m := NewCreateModel(nil, createTestSpecStore())
+	m.config.Mode = "production"
+	m.config.GPUType = "h100"
+	m.config.NumGPUs = 4
+	m.setDefaultDiskSize()
+	m.step = stepDiskSize
+	m.initStep()
+
+	if got := m.config.DiskSizeGB; got != 400 {
+		t.Fatalf("expected config disk size 400GB, got %dGB", got)
+	}
+	if got := m.diskInput.Value(); got != "400" {
+		t.Fatalf("expected disk input value 400, got %q", got)
+	}
+}
 
 // TestCreateModelSurvivesInputBeforeSpecsLoad guards the flagless interactive
 // flow, where GPU specs load asynchronously after the TUI opens. The user can
