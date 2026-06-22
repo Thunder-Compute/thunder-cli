@@ -18,6 +18,8 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
+const includedDiskGBPerGPU = 100
+
 var (
 	mode          string
 	gpuType       string
@@ -47,8 +49,8 @@ func init() {
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores (development only): options vary by GPU type and count")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name (accepts snapshot names too; --snapshot is an alias)")
 	createCmd.Flags().StringVar(&snapshotAlias, "snapshot", "", "Alias for --template; accepts a snapshot name or template key")
-	createCmd.Flags().IntVar(&diskSizeGB, "disk", 100, "Disk storage in GB (range depends on GPU config)")
-	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (range depends on GPU config)")
+	createCmd.Flags().IntVar(&diskSizeGB, "disk", 0, "Disk storage in GB (defaults to 100GB per GPU; range depends on GPU config)")
+	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 0, "Disk storage in GB (defaults to 100GB per GPU; range depends on GPU config)")
 	_ = createCmd.Flags().MarkHidden("disk-size-gb")
 }
 
@@ -145,13 +147,17 @@ func missingCreateFlags(cmd *cobra.Command) []string {
 	if !templateFlagChanged(cmd) {
 		missing = append(missing, "--template/--snapshot")
 	}
-	if !(cmd.Flags().Changed("disk") || cmd.Flags().Changed("disk-size-gb")) {
-		missing = append(missing, "--disk")
-	}
 	if !(cmd.Flags().Changed("num-gpus") || cmd.Flags().Changed("vcpus")) {
 		missing = append(missing, "--num-gpus or --vcpus")
 	}
 	return missing
+}
+
+func defaultCreateDiskSizeGB(numGPUs int) int {
+	if numGPUs <= 0 {
+		numGPUs = 1
+	}
+	return numGPUs * includedDiskGBPerGPU
 }
 
 func runCreate(cmd *cobra.Command) error {
@@ -390,9 +396,13 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 		return usageErr("template or snapshot '%s' not found. Run 'tnr templates' to list available templates and 'tnr snapshots' for snapshots", config.Template)
 	}
 
-	// Default disk size to the snapshot's size when unspecified.
-	if selectedSnapshot != nil && !diskSizeWasSet {
-		config.DiskSizeGB = selectedSnapshot.MinimumDiskSizeGB
+	// Default disk size to the included persistent storage for the selected GPU count.
+	// Snapshot restores must use at least the snapshot's minimum disk size.
+	if !diskSizeWasSet {
+		config.DiskSizeGB = defaultCreateDiskSizeGB(config.NumGPUs)
+		if selectedSnapshot != nil && selectedSnapshot.MinimumDiskSizeGB > config.DiskSizeGB {
+			config.DiskSizeGB = selectedSnapshot.MinimumDiskSizeGB
+		}
 	}
 
 	// Validate disk size. With a snapshot the range becomes

@@ -3,6 +3,8 @@ package cmd
 import (
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/Thunder-Compute/thunder-cli/api"
 	"github.com/Thunder-Compute/thunder-cli/pkg/types"
 	"github.com/Thunder-Compute/thunder-cli/tui"
@@ -37,6 +39,25 @@ func testSpecStore() *utils.SpecStore {
 
 func tmplEntry(key, displayName string) api.TemplateEntry {
 	return api.TemplateEntry{Key: key, Template: types.EnvironmentTemplate{DisplayName: displayName}}
+}
+
+func TestCreateFlagsDoNotRequireDisk(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("mode", "", "")
+	cmd.Flags().String("gpu", "", "")
+	cmd.Flags().String("template", "", "")
+	cmd.Flags().String("snapshot", "", "")
+	cmd.Flags().Int("num-gpus", 0, "")
+	cmd.Flags().Int("vcpus", 0, "")
+	cmd.Flags().Int("disk", 0, "")
+	cmd.Flags().Int("disk-size-gb", 0, "")
+
+	require.NoError(t, cmd.Flags().Set("mode", "production"))
+	require.NoError(t, cmd.Flags().Set("gpu", "h100"))
+	require.NoError(t, cmd.Flags().Set("template", "base"))
+	require.NoError(t, cmd.Flags().Set("num-gpus", "4"))
+
+	assert.Empty(t, missingCreateFlags(cmd))
 }
 
 // TestValidateCreateConfig provides comprehensive validation testing for instance
@@ -310,6 +331,63 @@ func TestCreateConfigVCPUsAutoSet(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 30, config.VCPUs)
+}
+
+func TestCreateConfigDefaultsDiskSizePerGPU(t *testing.T) {
+	config := &tui.CreateConfig{
+		Mode:     "production",
+		GPUType:  "h100",
+		NumGPUs:  4,
+		Template: "base",
+	}
+
+	templates := []api.TemplateEntry{
+		tmplEntry("base", "Base"),
+	}
+
+	err := validateCreateConfig(config, templates, []api.Snapshot{}, false, testSpecStore())
+	require.NoError(t, err)
+
+	assert.Equal(t, 400, config.DiskSizeGB)
+}
+
+func TestCreateConfigDefaultDiskSizeRespectsSnapshotMinimum(t *testing.T) {
+	config := &tui.CreateConfig{
+		Mode:     "production",
+		GPUType:  "h100",
+		NumGPUs:  4,
+		Template: "large-snapshot",
+	}
+
+	snapshots := []api.Snapshot{{
+		Name:              "large-snapshot",
+		MinimumDiskSizeGB: 550,
+		Status:            "READY",
+	}}
+
+	err := validateCreateConfig(config, []api.TemplateEntry{}, snapshots, false, testSpecStore())
+	require.NoError(t, err)
+
+	assert.Equal(t, 550, config.DiskSizeGB)
+}
+
+func TestCreateConfigExplicitDiskCanBeBelowIncludedStorage(t *testing.T) {
+	config := &tui.CreateConfig{
+		Mode:       "production",
+		GPUType:    "h100",
+		NumGPUs:    4,
+		Template:   "base",
+		DiskSizeGB: 100,
+	}
+
+	templates := []api.TemplateEntry{
+		tmplEntry("base", "Base"),
+	}
+
+	err := validateCreateConfig(config, templates, []api.Snapshot{}, true, testSpecStore())
+	require.NoError(t, err)
+
+	assert.Equal(t, 100, config.DiskSizeGB)
 }
 
 // TestCreateConfigGPUTypeCaseInsensitive verifies that GPU type validation
