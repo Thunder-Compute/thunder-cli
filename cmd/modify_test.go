@@ -125,11 +125,11 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 			},
 		},
 		{
-			name:          "vcpus in production mode rejected",
+			name:          "vcpus for 4/8 GPU route rejected",
 			instance:      modifyInstance("production", "a100xl", "1", "18", 100),
 			flags:         map[string]string{"vcpus": "8"},
 			expectError:   true,
-			errorContains: "production mode does not use --vcpus flag",
+			errorContains: "vCPUs are auto-calculated for 4 and 8 GPU instances",
 		},
 		{
 			name:          "invalid vcpus for GPU",

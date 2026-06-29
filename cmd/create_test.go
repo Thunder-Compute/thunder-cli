@@ -40,8 +40,8 @@ func tmplEntry(key, displayName string) api.TemplateEntry {
 }
 
 // TestValidateCreateConfig provides comprehensive validation testing for instance
-// creation configurations, covering both prototyping and production modes with
-// various GPU types, CPU configurations, and template validations.
+// creation configurations, covering routed 1/2 and 4/8 GPU counts with various
+// GPU types, CPU configurations, and template validations.
 func TestValidateCreateConfig(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -66,11 +66,10 @@ func TestValidateCreateConfig(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "valid production config",
+			name: "valid 4 GPU config",
 			config: &tui.CreateConfig{
-				Mode:       "production",
 				GPUType:    "a100",
-				NumGPUs:    2,
+				NumGPUs:    4,
 				VCPUs:      30,
 				Template:   "pytorch",
 				DiskSizeGB: 500,
@@ -81,18 +80,19 @@ func TestValidateCreateConfig(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "invalid mode",
+			name: "invalid GPU count",
 			config: &tui.CreateConfig{
-				Mode: "invalid",
+				GPUType: "a100",
+				NumGPUs: 3,
 			},
 			expectError:   true,
-			errorContains: "mode must be 'development' or 'production'",
+			errorContains: "num-gpus must be one of 1, 2, 4, or 8",
 		},
 		{
 			name: "invalid GPU type",
 			config: &tui.CreateConfig{
-				Mode:    "prototyping",
 				GPUType: "invalid",
+				NumGPUs: 1,
 			},
 			expectError:   true,
 			errorContains: "development mode supports GPU types:",
@@ -100,36 +100,35 @@ func TestValidateCreateConfig(t *testing.T) {
 		{
 			name: "prototyping without vcpus",
 			config: &tui.CreateConfig{
-				Mode:    "prototyping",
 				GPUType: "a6000",
+				NumGPUs: 1,
 				VCPUs:   0,
 			},
 			expectError:   true,
-			errorContains: "development mode requires --vcpus flag",
+			errorContains: "--vcpus is required for 1 GPU instance(s)",
 		},
 		{
 			name: "invalid vcpus for prototyping",
 			config: &tui.CreateConfig{
-				Mode:    "prototyping",
 				GPUType: "a6000",
+				NumGPUs: 1,
 				VCPUs:   8,
 			},
 			expectError:   true,
 			errorContains: "vcpus must be one of [4 6] for a6000 with 1 GPU(s)",
 		},
 		{
-			name: "production with invalid GPU type",
+			name: "4 GPU route with invalid GPU type",
 			config: &tui.CreateConfig{
-				Mode:    "production",
 				GPUType: "a6000",
+				NumGPUs: 4,
 			},
 			expectError:   true,
 			errorContains: "production mode supports GPU types:",
 		},
 		{
-			name: "production with invalid num-gpus",
+			name: "unsupported GPU count",
 			config: &tui.CreateConfig{
-				Mode:       "production",
 				GPUType:    "a100",
 				NumGPUs:    3,
 				Template:   "base",

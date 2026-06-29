@@ -18,18 +18,17 @@ func renderPlainStatusTable(instances []api.Instance, verbose bool) {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tUUID\tSTATUS\tADDRESS\tMODE\tDISK\tGPU\tvCPUs\tRAM\tTEMPLATE")
+	fmt.Fprintln(w, "ID\tUUID\tSTATUS\tADDRESS\tDISK\tGPU\tvCPUs\tRAM\tTEMPLATE")
 
 	for _, inst := range instances {
 		gpu := fmt.Sprintf("%sx%s", inst.NumGPUs, utils.FormatGPUType(inst.GPUType))
 		disk := fmt.Sprintf("%dGB", inst.Storage)
 		ram := fmt.Sprintf("%sGB", inst.Memory)
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			inst.ID,
 			inst.UUID,
 			inst.Status,
 			inst.GetIP(),
-			utils.DisplayMode(inst.Mode),
 			disk,
 			gpu,
 			inst.CPUCores,

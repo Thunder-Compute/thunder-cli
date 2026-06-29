@@ -55,53 +55,44 @@ func FetchSpecStore(client *api.Client) (*SpecStore, error) {
 	return NewSpecStoreWithAvailability(specsMap, availability), nil
 }
 
-func configKey(gpuType string, gpuCount int, mode string) string {
-	return fmt.Sprintf("%s_x%d_%s", gpuType, gpuCount, mode)
+func publicConfigKey(gpuType string, gpuCount int) string {
+	return fmt.Sprintf("%s_x%d", gpuType, gpuCount)
 }
 
-// Lookup returns the spec for a given GPU type, count, and mode.
-func (s *SpecStore) Lookup(gpuType string, gpuCount int, mode string) *api.GpuSpecConfig {
-	key := configKey(gpuType, gpuCount, mode)
-	spec, ok := s.specs[key]
-	if !ok {
-		return nil
+// Lookup returns the spec for a given GPU type and count.
+func (s *SpecStore) Lookup(gpuType string, gpuCount int) *api.GpuSpecConfig {
+	spec, ok := s.specs[publicConfigKey(gpuType, gpuCount)]
+	if ok {
+		return &spec
 	}
-	return &spec
+	return nil
 }
 
 // IsSpecAvailable reports whether a concrete spec is available. Availability
 // fails open when the API did not provide availability data.
-func (s *SpecStore) IsSpecAvailable(gpuType string, gpuCount int, mode string) bool {
+func (s *SpecStore) IsSpecAvailable(gpuType string, gpuCount int) bool {
 	if s == nil || len(s.availability) == 0 {
 		return true
 	}
-	return s.availability[configKey(gpuType, gpuCount, mode)] == "available"
-}
-
-// IsGPUTypeAvailableForMode reports whether any count for this GPU type is available.
-func (s *SpecStore) IsGPUTypeAvailableForMode(gpuType string, mode string) bool {
-	for _, count := range s.GPUCountsForMode(gpuType, mode) {
-		if s.IsSpecAvailable(gpuType, count, mode) {
-			return true
-		}
+	status, ok := s.availability[publicConfigKey(gpuType, gpuCount)]
+	if !ok {
+		return true
 	}
-	return false
+	return status == "available"
 }
 
 // gpuDisplayOrder defines the canonical display ordering for GPU types
 // (ascending by cost/performance).
 var gpuDisplayOrder = []string{"a6000", "a100xl", "l40", "l40s", "h100"}
 
-// GPUOptionsForMode returns the GPU type identifiers available for a mode,
-// ordered by gpuDisplayOrder (a6000, a100xl, l40, l40s, h100). Out-of-stock
-// types are preserved in the list but pushed to the bottom.
-func (s *SpecStore) GPUOptionsForMode(mode string) []string {
+// GPUOptions returns the GPU type identifiers available in any size,
+// ordered by gpuDisplayOrder. Out-of-stock types are preserved in the list but
+// pushed to the bottom.
+func (s *SpecStore) GPUOptions() []string {
 	seen := map[string]bool{}
-	for key, spec := range s.specs {
-		if spec.Mode == mode {
-			gpuType := key[:len(key)-len(fmt.Sprintf("_x%d_%s", spec.GpuCount, spec.Mode))]
-			seen[gpuType] = true
-		}
+	for key := range s.specs {
+		gpuType := strings.Split(key, "_x")[0]
+		seen[gpuType] = true
 	}
 	var ordered []string
 	for _, gpu := range gpuDisplayOrder {
@@ -109,16 +100,14 @@ func (s *SpecStore) GPUOptionsForMode(mode string) []string {
 			ordered = append(ordered, gpu)
 		}
 	}
-	// Append any GPU types not in the predefined order
 	for gpuType := range seen {
 		if !slices.Contains(gpuDisplayOrder, gpuType) {
 			ordered = append(ordered, gpuType)
 		}
 	}
-	// Stable partition: available types first, out-of-stock at the bottom.
 	var available, unavailable []string
 	for _, gpu := range ordered {
-		if s.IsGPUTypeAvailableForMode(gpu, mode) {
+		if s.IsGPUTypeAvailable(gpu) {
 			available = append(available, gpu)
 		} else {
 			unavailable = append(unavailable, gpu)
@@ -127,20 +116,30 @@ func (s *SpecStore) GPUOptionsForMode(mode string) []string {
 	return append(available, unavailable...)
 }
 
-// GPUCountsForMode returns all valid GPU counts for a given GPU type and mode, sorted.
-func (s *SpecStore) GPUCountsForMode(gpuType string, mode string) []int {
+// GPUCounts returns all valid GPU counts for a given GPU type, sorted.
+func (s *SpecStore) GPUCounts(gpuType string) []int {
 	var counts []int
 	for gpuCount := 1; gpuCount <= 8; gpuCount++ {
-		if _, ok := s.specs[configKey(gpuType, gpuCount, mode)]; ok {
+		if s.Lookup(gpuType, gpuCount) != nil {
 			counts = append(counts, gpuCount)
 		}
 	}
 	return counts
 }
 
+// IsGPUTypeAvailable reports whether any count for this GPU type is available.
+func (s *SpecStore) IsGPUTypeAvailable(gpuType string) bool {
+	for _, count := range s.GPUCounts(gpuType) {
+		if s.IsSpecAvailable(gpuType, count) {
+			return true
+		}
+	}
+	return false
+}
+
 // VCPUOptions returns the allowed vCPU counts for a configuration.
-func (s *SpecStore) VCPUOptions(gpuType string, numGPUs int, mode string) []int {
-	spec := s.Lookup(gpuType, numGPUs, mode)
+func (s *SpecStore) VCPUOptions(gpuType string, numGPUs int) []int {
+	spec := s.Lookup(gpuType, numGPUs)
 	if spec == nil {
 		return nil
 	}
@@ -148,13 +147,13 @@ func (s *SpecStore) VCPUOptions(gpuType string, numGPUs int, mode string) []int 
 }
 
 // NeedsGPUCountPhase reports whether the GPU type supports multiple GPU counts.
-func (s *SpecStore) NeedsGPUCountPhase(gpuType string, mode string) bool {
-	return len(s.GPUCountsForMode(gpuType, mode)) > 1
+func (s *SpecStore) NeedsGPUCountPhase(gpuType string) bool {
+	return len(s.GPUCounts(gpuType)) > 1
 }
 
 // IncludedVCPUs returns the minimum (included) vCPU count for a configuration.
-func (s *SpecStore) IncludedVCPUs(gpuType string, numGPUs int, mode string) int {
-	opts := s.VCPUOptions(gpuType, numGPUs, mode)
+func (s *SpecStore) IncludedVCPUs(gpuType string, numGPUs int) int {
+	opts := s.VCPUOptions(gpuType, numGPUs)
 	if len(opts) == 0 {
 		return 4 // safe default
 	}
@@ -162,8 +161,8 @@ func (s *SpecStore) IncludedVCPUs(gpuType string, numGPUs int, mode string) int 
 }
 
 // RamPerVCPU returns the RAM per vCPU in GiB for a configuration.
-func (s *SpecStore) RamPerVCPU(gpuType string, numGPUs int, mode string) int {
-	spec := s.Lookup(gpuType, numGPUs, mode)
+func (s *SpecStore) RamPerVCPU(gpuType string, numGPUs int) int {
+	spec := s.Lookup(gpuType, numGPUs)
 	if spec == nil {
 		return 8
 	}
@@ -171,8 +170,8 @@ func (s *SpecStore) RamPerVCPU(gpuType string, numGPUs int, mode string) int {
 }
 
 // StorageRange returns the min/max storage for a configuration.
-func (s *SpecStore) StorageRange(gpuType string, numGPUs int, mode string) (int, int) {
-	spec := s.Lookup(gpuType, numGPUs, mode)
+func (s *SpecStore) StorageRange(gpuType string, numGPUs int) (int, int) {
+	spec := s.Lookup(gpuType, numGPUs)
 	if spec == nil {
 		return 100, 1000
 	}
@@ -180,9 +179,9 @@ func (s *SpecStore) StorageRange(gpuType string, numGPUs int, mode string) (int,
 }
 
 // NormalizeGPUType maps user-friendly GPU names to canonical names,
-// validated against available specs for the given mode.
+// validated against available specs.
 // Returns the canonical name and whether it was found.
-func (s *SpecStore) NormalizeGPUType(input string, mode string) (string, bool) {
+func (s *SpecStore) NormalizeGPUType(input string) (string, bool) {
 	input = strings.ToLower(input)
 
 	// Common aliases
@@ -193,8 +192,8 @@ func (s *SpecStore) NormalizeGPUType(input string, mode string) (string, bool) {
 		input = canonical
 	}
 
-	// Verify this GPU type exists for the given mode
-	for _, gpu := range s.GPUOptionsForMode(mode) {
+	// Verify this GPU type exists.
+	for _, gpu := range s.GPUOptions() {
 		if gpu == input {
 			return input, true
 		}

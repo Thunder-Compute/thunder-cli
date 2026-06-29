@@ -88,7 +88,7 @@ func NewModifyModel(client *api.Client, instance *api.Instance, specs *utils.Spe
 	ti.Prompt = "▶ "
 
 	m := modifyModel{
-		step:             modifyStepMode,
+		step:             modifyStepGPU,
 		cursor:           0,
 		config:           ModifyConfig{},
 		currentInstance:  instance,
@@ -99,13 +99,9 @@ func NewModifyModel(client *api.Client, instance *api.Instance, specs *utils.Spe
 		styles:           styles,
 		specs:            specs,
 	}
+	m.skippedSteps[modifyStepMode] = true
 
-	// Set initial cursor to current mode position (case-insensitive)
-	if strings.EqualFold(instance.Mode, "prototyping") {
-		m.cursor = 0
-	} else {
-		m.cursor = 1
-	}
+	m.cursor = m.getCurrentGPUCursorPosition()
 
 	return m
 }
@@ -132,16 +128,18 @@ func (m *modifyModel) trySkipCurrentStep() {
 				if mode == "prototyping" || mode == "production" {
 					m.config.Mode = mode
 					m.config.ModeChanged = !strings.EqualFold(mode, m.currentInstance.Mode)
-					m.skippedSteps[modifyStepMode] = true
-					skipped = true
 				}
 			}
+			m.skippedSteps[modifyStepMode] = true
+			skipped = true
 
 		case modifyStepGPU:
 			if m.presets != nil && m.presets.GPUType != nil {
-				effectiveMode := m.getEffectiveMode()
-				canonical, ok := resolveGPUForMode(*m.presets.GPUType, effectiveMode)
-				if ok && m.specs.IsGPUTypeAvailableForMode(canonical, effectiveMode) {
+				canonical := strings.ToLower(*m.presets.GPUType)
+				if normalized, ok := m.specs.NormalizeGPUType(canonical); ok {
+					canonical = normalized
+				}
+				if m.specs.IsGPUTypeAvailable(canonical) {
 					m.config.GPUType = canonical
 					m.config.GPUChanged = !strings.EqualFold(canonical, m.currentInstance.GPUType)
 					m.skippedSteps[modifyStepGPU] = true
@@ -156,7 +154,7 @@ func (m *modifyModel) trySkipCurrentStep() {
 			if m.presets != nil && m.presets.DiskSizeGB != nil {
 				v := *m.presets.DiskSizeGB
 				m.diskInput.SetValue(fmt.Sprintf("%d", v))
-				minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs, m.getEffectiveMode())
+				minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs)
 				if v >= max(m.currentInstance.Storage, minDisk) && v <= maxDisk {
 					m.config.DiskSizeGB = v
 					m.config.DiskChanged = v != m.currentInstance.Storage
@@ -184,28 +182,27 @@ func (m *modifyModel) trySkipModifyCompute() bool {
 		return false
 	}
 
-	effectiveMode := m.getEffectiveMode()
 	effectiveGPU := m.config.GPUType
 	if effectiveGPU == "" {
 		effectiveGPU = strings.ToLower(m.currentInstance.GPUType)
 	}
 
-	needsCount := m.specs.NeedsGPUCountPhase(effectiveGPU, effectiveMode)
+	needsCount := len(m.specs.GPUCounts(effectiveGPU)) > 1
 
 	if !needsCount {
-		gpuCounts := m.specs.GPUCountsForMode(effectiveGPU, effectiveMode)
+		gpuCounts := m.specs.GPUCounts(effectiveGPU)
 		if len(gpuCounts) > 0 {
 			m.config.NumGPUs = gpuCounts[0]
 		} else {
 			m.config.NumGPUs = 1
 		}
-		if !m.specs.IsSpecAvailable(effectiveGPU, m.config.NumGPUs, effectiveMode) {
+		if !m.specs.IsSpecAvailable(effectiveGPU, m.config.NumGPUs) {
 			return false
 		}
 		if m.presets.VCPUs == nil {
 			return false
 		}
-		if slices.Contains(m.specs.VCPUOptions(effectiveGPU, m.config.NumGPUs, effectiveMode), *m.presets.VCPUs) {
+		if slices.Contains(m.specs.VCPUOptions(effectiveGPU, m.config.NumGPUs), *m.presets.VCPUs) {
 			m.config.VCPUs = *m.presets.VCPUs
 			currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
 			m.config.ComputeChanged = m.config.VCPUs != currentVCPUs
@@ -216,9 +213,9 @@ func (m *modifyModel) trySkipModifyCompute() bool {
 
 	// Multi-GPU: need both to fully skip
 	if m.presets.NumGPUs != nil && m.presets.VCPUs != nil {
-		if slices.Contains(m.specs.GPUCountsForMode(effectiveGPU, effectiveMode), *m.presets.NumGPUs) &&
-			m.specs.IsSpecAvailable(effectiveGPU, *m.presets.NumGPUs, effectiveMode) {
-			vcpuOpts := m.specs.VCPUOptions(effectiveGPU, *m.presets.NumGPUs, effectiveMode)
+		if slices.Contains(m.specs.GPUCounts(effectiveGPU), *m.presets.NumGPUs) &&
+			m.specs.IsSpecAvailable(effectiveGPU, *m.presets.NumGPUs) {
+			vcpuOpts := m.specs.VCPUOptions(effectiveGPU, *m.presets.NumGPUs)
 			if len(vcpuOpts) == 1 {
 				m.config.NumGPUs = *m.presets.NumGPUs
 				m.config.VCPUs = vcpuOpts[0]
@@ -241,10 +238,10 @@ func (m *modifyModel) trySkipModifyCompute() bool {
 
 	// Only num-gpus provided
 	if m.presets.NumGPUs != nil {
-		if slices.Contains(m.specs.GPUCountsForMode(effectiveGPU, effectiveMode), *m.presets.NumGPUs) &&
-			m.specs.IsSpecAvailable(effectiveGPU, *m.presets.NumGPUs, effectiveMode) {
+		if slices.Contains(m.specs.GPUCounts(effectiveGPU), *m.presets.NumGPUs) &&
+			m.specs.IsSpecAvailable(effectiveGPU, *m.presets.NumGPUs) {
 			m.config.NumGPUs = *m.presets.NumGPUs
-			vcpuOpts := m.specs.VCPUOptions(effectiveGPU, *m.presets.NumGPUs, effectiveMode)
+			vcpuOpts := m.specs.VCPUOptions(effectiveGPU, *m.presets.NumGPUs)
 			if len(vcpuOpts) == 1 {
 				m.config.VCPUs = vcpuOpts[0]
 				currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
@@ -271,7 +268,7 @@ func (m *modifyModel) initModifyStep() {
 			m.gpuCountPhase = true
 			m.cursor = m.getCurrentGPUCountCursorPosition()
 		} else if !m.needsGPUCountPhase() {
-			gpuCounts := m.specs.GPUCountsForMode(m.config.GPUType, m.getEffectiveMode())
+			gpuCounts := m.specs.GPUCounts(m.config.GPUType)
 			if len(gpuCounts) > 0 {
 				m.config.NumGPUs = gpuCounts[0]
 			} else {
@@ -429,9 +426,8 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case modifyStepGPU:
-		effectiveMode := m.getEffectiveMode()
-		gpuValues := m.specs.GPUOptionsForMode(effectiveMode)
-		if !m.specs.IsGPUTypeAvailableForMode(gpuValues[m.cursor], effectiveMode) {
+		gpuValues := m.specs.GPUOptions()
+		if !m.specs.IsGPUTypeAvailable(gpuValues[m.cursor]) {
 			return m, nil
 		}
 		m.resetComputeSelection()
@@ -445,18 +441,16 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case modifyStepCompute:
-		effectiveMode := m.getEffectiveMode()
-
 		if m.gpuCountPhase {
-			gpuCounts := m.specs.GPUCountsForMode(m.config.GPUType, effectiveMode)
-			if !m.specs.IsSpecAvailable(m.config.GPUType, gpuCounts[m.cursor], effectiveMode) {
+			gpuCounts := m.specs.GPUCounts(m.config.GPUType)
+			if !m.specs.IsSpecAvailable(m.config.GPUType, gpuCounts[m.cursor]) {
 				return m, nil
 			}
 			m.config.NumGPUs = gpuCounts[m.cursor]
 			m.gpuCountPhase = false
 			// Check if vCPUs preset can now be applied
 			if m.presets != nil && m.presets.VCPUs != nil {
-				if slices.Contains(m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, effectiveMode), *m.presets.VCPUs) {
+				if slices.Contains(m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs), *m.presets.VCPUs) {
 					m.config.VCPUs = *m.presets.VCPUs
 					currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
 					currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
@@ -473,7 +467,7 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		vcpuOptions := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, effectiveMode)
+		vcpuOptions := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs)
 		m.config.VCPUs = vcpuOptions[m.cursor]
 		currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
 		currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
@@ -486,8 +480,7 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case modifyStepDiskSize:
-		effectiveMode := m.getEffectiveMode()
-		minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs, effectiveMode)
+		minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs)
 		diskSize, err := strconv.Atoi(m.diskInput.Value())
 		if err != nil || diskSize < minDisk || diskSize > maxDisk {
 			m.validationErr = fmt.Errorf("primary storage for this instance type must be between %d and %d GB. Check storage limits at https://www.thundercompute.com/pricing", minDisk, maxDisk)
@@ -533,13 +526,8 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 }
 
 func (m modifyModel) getCurrentGPUCursorPosition() int {
-	effectiveMode := m.currentInstance.Mode
-	if m.config.ModeChanged {
-		effectiveMode = m.config.Mode
-	}
-
 	currentGPU := strings.ToLower(m.currentInstance.GPUType)
-	gpuOptions := m.specs.GPUOptionsForMode(effectiveMode)
+	gpuOptions := m.specs.GPUOptions()
 	for i, gpu := range gpuOptions {
 		if gpu == currentGPU {
 			return i
@@ -560,12 +548,12 @@ func (m modifyModel) getEffectiveMode() string {
 }
 
 func (m modifyModel) needsGPUCountPhase() bool {
-	return m.specs.NeedsGPUCountPhase(m.config.GPUType, m.getEffectiveMode())
+	return m.specs.NeedsGPUCountPhase(m.config.GPUType)
 }
 
 func (m modifyModel) getCurrentGPUCountCursorPosition() int {
 	currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
-	gpuCounts := m.specs.GPUCountsForMode(m.config.GPUType, m.getEffectiveMode())
+	gpuCounts := m.specs.GPUCounts(m.config.GPUType)
 	for i, count := range gpuCounts {
 		if count == currentNumGPUs {
 			return i
@@ -575,10 +563,8 @@ func (m modifyModel) getCurrentGPUCountCursorPosition() int {
 }
 
 func (m modifyModel) getCurrentComputeCursorPosition() int {
-	effectiveMode := m.getEffectiveMode()
-
 	currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
-	vcpuOptions := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, effectiveMode)
+	vcpuOptions := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs)
 	for i, vcpus := range vcpuOptions {
 		if vcpus == currentVCPUs {
 			return i
@@ -593,14 +579,13 @@ func (m modifyModel) getMaxCursor() int {
 		return 1 // Prototyping, Production
 
 	case modifyStepGPU:
-		return len(m.specs.GPUOptionsForMode(m.getEffectiveMode())) - 1
+		return len(m.specs.GPUOptions()) - 1
 
 	case modifyStepCompute:
-		effectiveMode := m.getEffectiveMode()
 		if m.gpuCountPhase {
-			return len(m.specs.GPUCountsForMode(m.config.GPUType, effectiveMode)) - 1
+			return len(m.specs.GPUCounts(m.config.GPUType)) - 1
 		}
-		return len(m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, effectiveMode)) - 1
+		return len(m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs)) - 1
 
 	case modifyStepConfirmation:
 		return 1 // Apply Changes, Cancel
@@ -663,7 +648,6 @@ func (m modifyModel) View() string {
 // using current instance values as base and overriding with selections/hovered option.
 func (m modifyModel) computePreviewPrice() float64 {
 	// Start with current instance values
-	mode := strings.ToLower(m.currentInstance.Mode)
 	gpuType := strings.ToLower(m.currentInstance.GPUType)
 	numGPUs := 1
 	if n, err := strconv.Atoi(m.currentInstance.NumGPUs); err == nil {
@@ -676,9 +660,6 @@ func (m modifyModel) computePreviewPrice() float64 {
 	diskSizeGB := m.currentInstance.Storage
 
 	// Override with already-confirmed selections
-	if m.config.ModeChanged {
-		mode = m.config.Mode
-	}
 	if m.config.GPUChanged {
 		gpuType = m.config.GPUType
 	}
@@ -697,24 +678,21 @@ func (m modifyModel) computePreviewPrice() float64 {
 	// Override with hovered option for the current step
 	switch m.step {
 	case modifyStepMode:
-		modeOptions := []string{"prototyping", "production"}
-		mode = modeOptions[m.cursor]
 	case modifyStepGPU:
-		gpuValues := m.specs.GPUOptionsForMode(m.getEffectiveMode())
+		gpuValues := m.specs.GPUOptions()
 		gpuType = gpuValues[m.cursor]
-		gpuCounts := m.specs.GPUCountsForMode(gpuType, mode)
+		gpuCounts := m.specs.GPUCounts(gpuType)
 		if !slices.Contains(gpuCounts, numGPUs) && len(gpuCounts) > 0 {
 			numGPUs = gpuCounts[0]
-			vcpus = m.specs.IncludedVCPUs(gpuType, numGPUs, mode)
+			vcpus = m.specs.IncludedVCPUs(gpuType, numGPUs)
 		}
 	case modifyStepCompute:
-		effectiveMode := m.getEffectiveMode()
 		if m.gpuCountPhase {
-			gpuCounts := m.specs.GPUCountsForMode(m.config.GPUType, effectiveMode)
+			gpuCounts := m.specs.GPUCounts(m.config.GPUType)
 			numGPUs = gpuCounts[m.cursor]
-			vcpus = m.specs.IncludedVCPUs(gpuType, numGPUs, effectiveMode)
+			vcpus = m.specs.IncludedVCPUs(gpuType, numGPUs)
 		} else {
-			vcpuOptions := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, effectiveMode)
+			vcpuOptions := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs)
 			vcpus = vcpuOptions[m.cursor]
 		}
 	case modifyStepDiskSize:
@@ -723,18 +701,18 @@ func (m modifyModel) computePreviewPrice() float64 {
 		}
 	}
 
-	included := m.specs.IncludedVCPUs(gpuType, numGPUs, mode)
-	return utils.CalculateHourlyPrice(m.pricing, mode, gpuType, numGPUs, vcpus, diskSizeGB, included)
+	included := m.specs.IncludedVCPUs(gpuType, numGPUs)
+	return utils.CalculateHourlyPrice(m.pricing, "", gpuType, numGPUs, vcpus, diskSizeGB, included)
 }
 
 func (m modifyModel) renderModeStep() string {
 	var s strings.Builder
 
-	s.WriteString("Select instance mode:\n\n")
+	s.WriteString("Select configuration profile:\n\n")
 
 	modeLabels := []string{
-		"Development (lowest cost, dev/test)",
-		"Production (highest stability, long-running)",
+		"Default",
+		"Large GPU count",
 	}
 	modeValues := []string{"prototyping", "production"}
 
@@ -760,12 +738,7 @@ func (m modifyModel) renderGPUStep() string {
 
 	s.WriteString("Select GPU type:\n\n")
 
-	effectiveMode := m.currentInstance.Mode
-	if m.config.ModeChanged {
-		effectiveMode = m.config.Mode
-	}
-
-	optionValues := m.specs.GPUOptionsForMode(effectiveMode)
+	optionValues := m.specs.GPUOptions()
 	optionLabels := make([]string, len(optionValues))
 	for i, gpu := range optionValues {
 		optionLabels[i] = utils.FormatGPUType(gpu)
@@ -782,14 +755,14 @@ func (m modifyModel) renderGPUStep() string {
 		if m.cursor == i {
 			cursor = m.styles.Cursor.Render("▶ ")
 		}
-		if !m.specs.IsGPUTypeAvailableForMode(optionValues[i], effectiveMode) {
+		if !m.specs.IsGPUTypeAvailable(optionValues[i]) {
 			option = subtleTextStyle.Render(option + " (unavailable)")
 		} else if m.cursor == i {
 			option = m.styles.Selected.Render(option)
 		}
 		s.WriteString(fmt.Sprintf("%s%s\n", cursor, option))
 	}
-	if len(optionValues) > 0 && !m.specs.IsGPUTypeAvailableForMode(optionValues[m.cursor], effectiveMode) {
+	if len(optionValues) > 0 && !m.specs.IsGPUTypeAvailable(optionValues[m.cursor]) {
 		s.WriteString("\n")
 		s.WriteString(warningStyleTUI.Render("This GPU type is currently unavailable. Choose another GPU."))
 		s.WriteString("\n")
@@ -801,13 +774,11 @@ func (m modifyModel) renderGPUStep() string {
 func (m modifyModel) renderComputeStep() string {
 	var s strings.Builder
 
-	effectiveMode := m.getEffectiveMode()
-
 	if m.gpuCountPhase {
 		s.WriteString("Select number of GPUs:\n\n")
 
 		currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
-		gpuCounts := m.specs.GPUCountsForMode(m.config.GPUType, effectiveMode)
+		gpuCounts := m.specs.GPUCounts(m.config.GPUType)
 		for i, num := range gpuCounts {
 			option := fmt.Sprintf("%d GPU(s)", num)
 
@@ -819,24 +790,24 @@ func (m modifyModel) renderComputeStep() string {
 			if m.cursor == i {
 				cursor = m.styles.Cursor.Render("▶ ")
 			}
-			if !m.specs.IsSpecAvailable(m.config.GPUType, num, effectiveMode) {
+			if !m.specs.IsSpecAvailable(m.config.GPUType, num) {
 				option = subtleTextStyle.Render(option + " (unavailable)")
 			} else if m.cursor == i {
 				option = m.styles.Selected.Render(option)
 			}
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, option))
 		}
-		if len(gpuCounts) > 0 && !m.specs.IsSpecAvailable(m.config.GPUType, gpuCounts[m.cursor], effectiveMode) {
+		if len(gpuCounts) > 0 && !m.specs.IsSpecAvailable(m.config.GPUType, gpuCounts[m.cursor]) {
 			s.WriteString("\n")
 			s.WriteString(warningStyleTUI.Render("This GPU count is currently unavailable. Choose another count."))
 			s.WriteString("\n")
 		}
 	} else {
-		ramPerVCPU := m.specs.RamPerVCPU(m.config.GPUType, m.config.NumGPUs, effectiveMode)
+		ramPerVCPU := m.specs.RamPerVCPU(m.config.GPUType, m.config.NumGPUs)
 		s.WriteString(fmt.Sprintf("Select vCPU count (%dGB RAM per vCPU):\n\n", ramPerVCPU))
 
 		currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
-		vcpuOptions := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, effectiveMode)
+		vcpuOptions := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs)
 		for i, vcpus := range vcpuOptions {
 			ram := vcpus * ramPerVCPU
 			option := fmt.Sprintf("%d vCPUs (%d GB RAM)", vcpus, ram)
@@ -881,10 +852,6 @@ func (m modifyModel) renderConfirmationStep() string {
 	// Build change summary using panel style like create.go
 	var panel strings.Builder
 
-	if m.config.ModeChanged {
-		panel.WriteString(m.styles.Label.Render("Mode:       ") + fmt.Sprintf("%s → %s", utils.Capitalize(m.currentInstance.Mode), utils.Capitalize(m.config.Mode)) + "\n")
-	}
-
 	if m.config.GPUChanged {
 		currentGPU := m.formatGPUType(m.currentInstance.GPUType)
 		newGPU := m.formatGPUType(m.config.GPUType)
@@ -892,17 +859,12 @@ func (m modifyModel) renderConfirmationStep() string {
 	}
 
 	if m.config.ComputeChanged {
-		effectiveMode := m.currentInstance.Mode
-		if m.config.ModeChanged {
-			effectiveMode = m.config.Mode
-		}
-
 		currentNumGPUs, _ := strconv.Atoi(m.currentInstance.NumGPUs)
 		if m.config.NumGPUs != currentNumGPUs {
 			panel.WriteString(m.styles.Label.Render("GPUs:       ") + fmt.Sprintf("%d → %d", currentNumGPUs, m.config.NumGPUs) + "\n")
 		}
-		currentRamPerVCPU := m.specs.RamPerVCPU(strings.ToLower(m.currentInstance.GPUType), currentNumGPUs, strings.ToLower(m.currentInstance.Mode))
-		newRamPerVCPU := m.specs.RamPerVCPU(m.config.GPUType, m.config.NumGPUs, effectiveMode)
+		currentRamPerVCPU := m.specs.RamPerVCPU(strings.ToLower(m.currentInstance.GPUType), currentNumGPUs)
+		newRamPerVCPU := m.specs.RamPerVCPU(m.config.GPUType, m.config.NumGPUs)
 		currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
 		currentRAM := currentVCPUs * currentRamPerVCPU
 		newRAM := m.config.VCPUs * newRamPerVCPU
@@ -1092,12 +1054,11 @@ func (m modifyInstanceSelectorModel) View() string {
 		}
 
 		statusText := statusStyle.Render(fmt.Sprintf("(%s)", instance.Status))
-		rest := fmt.Sprintf(" %s%s - %sx%s - %s",
+		rest := fmt.Sprintf(" %s%s - %sx%s",
 			statusText,
 			statusSuffix,
 			instance.NumGPUs,
 			instance.GPUType,
-			utils.Capitalize(instance.Mode),
 		)
 
 		s.WriteString(fmt.Sprintf("%s%s%s\n", cursor, idAndName, rest))

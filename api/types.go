@@ -40,7 +40,7 @@ type GpuSpecConfig struct {
 	StorageGB     StorageRange `json:"storageGB"`
 }
 
-// GPUAvailabilityResponse represents GPU availability returned by /v1/status.
+// GPUAvailabilityResponse represents GPU availability returned by /v2/status.
 type GPUAvailabilityResponse struct {
 	GPUType map[string]map[string]string `json:"gpu_type"`
 	Specs   map[string]string            `json:"specs"`

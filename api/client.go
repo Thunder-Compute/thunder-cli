@@ -338,7 +338,7 @@ func (c *Client) FetchPricing() (map[string]float64, error) {
 	var result struct {
 		Pricing map[string]float64 `json:"pricing"`
 	}
-	if err := c.doRequest(context.Background(), "GET", "/v1/pricing", nil, &result); err != nil {
+	if err := c.doRequest(context.Background(), "GET", "/v2/pricing", nil, &result); err != nil {
 		return nil, err
 	}
 	return result.Pricing, nil
@@ -349,7 +349,7 @@ func (c *Client) GetSpecs() (map[string]GpuSpecConfig, error) {
 	var result struct {
 		Specs map[string]GpuSpecConfig `json:"specs"`
 	}
-	if err := c.doRequest(context.Background(), "GET", "/v1/specs", nil, &result); err != nil {
+	if err := c.doRequest(context.Background(), "GET", "/v2/specs", nil, &result); err != nil {
 		return nil, err
 	}
 	return result.Specs, nil
@@ -358,7 +358,7 @@ func (c *Client) GetSpecs() (map[string]GpuSpecConfig, error) {
 // GetAvailability retrieves per-spec GPU availability from the API.
 func (c *Client) GetAvailability() (*GPUAvailabilityResponse, error) {
 	var result GPUAvailabilityResponse
-	if err := c.doRequest(context.Background(), "GET", "/v1/status", nil, &result); err != nil {
+	if err := c.doRequest(context.Background(), "GET", "/v2/status", nil, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil

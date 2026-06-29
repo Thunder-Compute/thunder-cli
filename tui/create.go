@@ -101,16 +101,18 @@ func NewCreateModel(client *api.Client, specs *utils.SpecStore) createModel {
 	ti.Prompt = "▶ "
 
 	m := createModel{
-		step:         stepMode,
+		step:         stepGPU,
 		client:       client,
 		spinner:      s,
 		styles:       styles,
 		skippedSteps: make(map[createStep]bool),
 		diskInput:    ti,
 		config: CreateConfig{
+			Mode:       "prototyping",
 			DiskSizeGB: 100,
 		},
 	}
+	m.skippedSteps[stepMode] = true
 	if specs != nil {
 		m.specs = specs
 		m.specsLoaded = true
@@ -154,15 +156,18 @@ func (m *createModel) trySkipCurrentStep() tea.Cmd {
 				mode := utils.NormalizeModeInput(*m.presets.Mode)
 				if mode == "prototyping" || mode == "production" {
 					m.config.Mode = mode
-					m.skippedSteps[stepMode] = true
-					skipped = true
 				}
 			}
+			m.skippedSteps[stepMode] = true
+			skipped = true
 
 		case stepGPU:
 			if m.presets != nil && m.presets.GPUType != nil {
-				canonical, ok := resolveGPUForMode(*m.presets.GPUType, m.config.Mode)
-				if ok && m.specs.IsGPUTypeAvailableForMode(canonical, m.config.Mode) {
+				canonical := strings.ToLower(*m.presets.GPUType)
+				if normalized, ok := m.specs.NormalizeGPUType(canonical); ok {
+					canonical = normalized
+				}
+				if m.specs.IsGPUTypeAvailable(canonical) {
 					m.config.GPUType = canonical
 					m.skippedSteps[stepGPU] = true
 					skipped = true
@@ -178,7 +183,7 @@ func (m *createModel) trySkipCurrentStep() tea.Cmd {
 		case stepDiskSize:
 			if m.presets != nil && m.presets.DiskSizeGB != nil {
 				v := *m.presets.DiskSizeGB
-				minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
+				minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs)
 				if v >= minDisk && v <= maxDisk {
 					m.config.DiskSizeGB = v
 					m.skippedSteps[stepDiskSize] = true
@@ -207,19 +212,22 @@ func (m *createModel) trySkipCompute() bool {
 	}
 
 	gpuType := m.config.GPUType
-	mode := m.config.Mode
-	needsCount := m.specs.NeedsGPUCountPhase(gpuType, mode)
+	needsCount := len(m.specs.GPUCounts(gpuType)) > 1
 
 	if !needsCount {
 		// Single-GPU type: numGPUs is always 1
-		m.config.NumGPUs = 1
-		if !m.specs.IsSpecAvailable(gpuType, 1, mode) {
+		counts := m.specs.GPUCounts(gpuType)
+		if len(counts) == 0 {
+			return false
+		}
+		m.config.NumGPUs = counts[0]
+		if !m.specs.IsSpecAvailable(gpuType, m.config.NumGPUs) {
 			return false
 		}
 		if m.presets.VCPUs == nil {
 			return false
 		}
-		if slices.Contains(m.specs.VCPUOptions(gpuType, 1, mode), *m.presets.VCPUs) {
+		if slices.Contains(m.specs.VCPUOptions(gpuType, m.config.NumGPUs), *m.presets.VCPUs) {
 			m.config.VCPUs = *m.presets.VCPUs
 			return true
 		}
@@ -228,8 +236,8 @@ func (m *createModel) trySkipCompute() bool {
 
 	// Multi-GPU type: need both num-gpus and vcpus to fully skip
 	if m.presets.NumGPUs != nil && m.presets.VCPUs != nil {
-		if slices.Contains(m.specs.GPUCountsForMode(gpuType, mode), *m.presets.NumGPUs) && m.specs.IsSpecAvailable(gpuType, *m.presets.NumGPUs, mode) {
-			vcpuOpts := m.specs.VCPUOptions(gpuType, *m.presets.NumGPUs, mode)
+		if slices.Contains(m.specs.GPUCounts(gpuType), *m.presets.NumGPUs) && m.specs.IsSpecAvailable(gpuType, *m.presets.NumGPUs) {
+			vcpuOpts := m.specs.VCPUOptions(gpuType, *m.presets.NumGPUs)
 			if len(vcpuOpts) == 1 {
 				// Single vCPU option (e.g. production) — auto-select
 				m.config.NumGPUs = *m.presets.NumGPUs
@@ -247,10 +255,10 @@ func (m *createModel) trySkipCompute() bool {
 
 	// Only num-gpus provided
 	if m.presets.NumGPUs != nil {
-		if slices.Contains(m.specs.GPUCountsForMode(gpuType, mode), *m.presets.NumGPUs) && m.specs.IsSpecAvailable(gpuType, *m.presets.NumGPUs, mode) {
+		if slices.Contains(m.specs.GPUCounts(gpuType), *m.presets.NumGPUs) && m.specs.IsSpecAvailable(gpuType, *m.presets.NumGPUs) {
 			m.config.NumGPUs = *m.presets.NumGPUs
 			// If single vCPU option, auto-select it too
-			vcpuOpts := m.specs.VCPUOptions(gpuType, *m.presets.NumGPUs, mode)
+			vcpuOpts := m.specs.VCPUOptions(gpuType, *m.presets.NumGPUs)
 			if len(vcpuOpts) == 1 {
 				m.config.VCPUs = vcpuOpts[0]
 				return true
@@ -317,22 +325,25 @@ func (m *createModel) initStep() {
 	case stepGPU:
 		gpus := m.getGPUOptions()
 		for i, gpu := range gpus {
-			if m.specs.IsGPUTypeAvailableForMode(gpu, m.config.Mode) {
+			if m.specs.IsGPUTypeAvailable(gpu) {
 				m.cursor = i
 				break
 			}
 		}
 	case stepCompute:
-		if m.specs.NeedsGPUCountPhase(m.config.GPUType, m.config.Mode) && m.config.NumGPUs == 0 {
+		if len(m.specs.GPUCounts(m.config.GPUType)) > 1 && m.config.NumGPUs == 0 {
 			m.gpuCountPhase = true
-			for i, count := range m.specs.GPUCountsForMode(m.config.GPUType, m.config.Mode) {
-				if m.specs.IsSpecAvailable(m.config.GPUType, count, m.config.Mode) {
+			for i, count := range m.specs.GPUCounts(m.config.GPUType) {
+				if m.specs.IsSpecAvailable(m.config.GPUType, count) {
 					m.cursor = i
 					break
 				}
 			}
-		} else if !m.specs.NeedsGPUCountPhase(m.config.GPUType, m.config.Mode) {
-			m.config.NumGPUs = 1
+		} else if len(m.specs.GPUCounts(m.config.GPUType)) <= 1 {
+			counts := m.specs.GPUCounts(m.config.GPUType)
+			if len(counts) > 0 {
+				m.config.NumGPUs = counts[0]
+			}
 			m.gpuCountPhase = false
 		}
 	case stepDiskSize:
@@ -552,7 +563,7 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.templateOffset = 0
 				m.snapshotOffset = 0
 				m.cursor = 0
-			} else if m.step == stepCompute && !m.gpuCountPhase && m.specs.NeedsGPUCountPhase(m.config.GPUType, m.config.Mode) {
+			} else if m.step == stepCompute && !m.gpuCountPhase && len(m.specs.GPUCounts(m.config.GPUType)) > 1 {
 				// Go back to GPU count selection phase
 				m.gpuCountPhase = true
 				m.cursor = 0
@@ -614,7 +625,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		gpus := m.getGPUOptions()
-		if !m.specs.IsGPUTypeAvailableForMode(gpus[m.cursor], m.config.Mode) {
+		if !m.specs.IsGPUTypeAvailable(gpus[m.cursor]) {
 			return m, nil
 		}
 		m.config.GPUType = gpus[m.cursor]
@@ -623,8 +634,8 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 
 	case stepCompute:
 		if m.gpuCountPhase {
-			gpuCounts := m.specs.GPUCountsForMode(m.config.GPUType, m.config.Mode)
-			if !m.specs.IsSpecAvailable(m.config.GPUType, gpuCounts[m.cursor], m.config.Mode) {
+			gpuCounts := m.specs.GPUCounts(m.config.GPUType)
+			if !m.specs.IsSpecAvailable(m.config.GPUType, gpuCounts[m.cursor]) {
 				return m, nil
 			}
 			m.config.NumGPUs = gpuCounts[m.cursor]
@@ -632,7 +643,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.cursor = 0
 			// Check if vCPUs preset can now be applied
 			if m.presets != nil && m.presets.VCPUs != nil {
-				if slices.Contains(m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, m.config.Mode), *m.presets.VCPUs) {
+				if slices.Contains(m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs), *m.presets.VCPUs) {
 					m.config.VCPUs = *m.presets.VCPUs
 					m.step = stepTemplate
 					return m, m.trySkipCurrentStep()
@@ -640,7 +651,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 			}
 			// Stay on stepCompute to show vCPU options next
 		} else {
-			vcpuOpts := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
+			vcpuOpts := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs)
 			if len(vcpuOpts) == 1 {
 				// Single option (e.g. production) — auto-select
 				m.config.VCPUs = vcpuOpts[0]
@@ -701,7 +712,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 		}
 
 	case stepDiskSize:
-		minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
+		minDisk, maxDisk := m.specs.StorageRange(m.config.GPUType, m.config.NumGPUs)
 		if m.selectedSnapshot != nil {
 			if m.selectedSnapshot.MinimumDiskSizeGB > minDisk {
 				minDisk = m.selectedSnapshot.MinimumDiskSizeGB
@@ -739,7 +750,7 @@ func (m createModel) getGPUOptions() []string {
 	if m.specs == nil {
 		return nil
 	}
-	return m.specs.GPUOptionsForMode(m.config.Mode)
+	return m.specs.GPUOptions()
 }
 
 func (m createModel) getMaxCursor() int {
@@ -750,9 +761,9 @@ func (m createModel) getMaxCursor() int {
 		return len(m.getGPUOptions()) - 1
 	case stepCompute:
 		if m.gpuCountPhase {
-			return len(m.specs.GPUCountsForMode(m.config.GPUType, m.config.Mode)) - 1
+			return len(m.specs.GPUCounts(m.config.GPUType)) - 1
 		}
-		return len(m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, m.config.Mode)) - 1
+		return len(m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs)) - 1
 	case stepTemplate:
 		if m.templateBrowse {
 			return len(m.templates) - 1
@@ -794,7 +805,6 @@ func (m createModel) View() string {
 		steps []createStep
 	}
 	progressSteps := []progressEntry{
-		{"Mode", []createStep{stepMode}},
 		{"GPU", []createStep{stepGPU}},
 		{"Size", []createStep{stepCompute}},
 		{"Template", []createStep{stepTemplate}},
@@ -829,8 +839,8 @@ func (m createModel) View() string {
 
 	switch m.step {
 	case stepMode:
-		s.WriteString("Select instance mode:\n\n")
-		modes := []string{"Development (R&D, single-instance training, fine-tuning)", "Production (Production Inference, multi-instance training)"}
+		s.WriteString("Select configuration profile:\n\n")
+		modes := []string{"Default", "Large GPU count"}
 		for i, mode := range modes {
 			cursor := "  "
 			if m.cursor == i {
@@ -858,7 +868,7 @@ func (m createModel) View() string {
 			}
 			displayName := utils.FormatGPUType(gpu)
 
-			if !m.specs.IsGPUTypeAvailableForMode(gpu, m.config.Mode) {
+			if !m.specs.IsGPUTypeAvailable(gpu) {
 				displayName += " (unavailable)"
 				displayName = subtleTextStyle.Render(displayName)
 			} else if m.cursor == i {
@@ -866,7 +876,7 @@ func (m createModel) View() string {
 			}
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, displayName))
 		}
-		if len(gpus) > 0 && !m.specs.IsGPUTypeAvailableForMode(gpus[m.cursor], m.config.Mode) {
+		if len(gpus) > 0 && !m.specs.IsGPUTypeAvailable(gpus[m.cursor]) {
 			s.WriteString("\n")
 			s.WriteString(warningStyleTUI.Render("This GPU type is currently unavailable. Choose another GPU type."))
 			s.WriteString("\n")
@@ -875,29 +885,31 @@ func (m createModel) View() string {
 	case stepCompute:
 		if m.gpuCountPhase {
 			s.WriteString("Select number of GPUs:\n\n")
-			gpuCounts := m.specs.GPUCountsForMode(m.config.GPUType, m.config.Mode)
+			gpuCounts := m.specs.GPUCounts(m.config.GPUType)
 			for i, num := range gpuCounts {
 				cursor := "  "
 				if m.cursor == i {
 					cursor = m.styles.Cursor.Render("▶ ")
 				}
 				text := fmt.Sprintf("%d GPU(s)", num)
-				if !m.specs.IsSpecAvailable(m.config.GPUType, num, m.config.Mode) {
+				if !m.specs.IsSpecAvailable(m.config.GPUType, num) {
 					text = subtleTextStyle.Render(text + " (unavailable)")
 				} else if m.cursor == i {
 					text = m.styles.Selected.Render(text)
 				}
 				s.WriteString(fmt.Sprintf("%s%s\n", cursor, text))
 			}
-			if len(gpuCounts) > 0 && !m.specs.IsSpecAvailable(m.config.GPUType, gpuCounts[m.cursor], m.config.Mode) {
-				s.WriteString("\n")
-				s.WriteString(warningStyleTUI.Render("This GPU count is currently unavailable. Choose another count."))
-				s.WriteString("\n")
+			if len(gpuCounts) > 0 {
+				if !m.specs.IsSpecAvailable(m.config.GPUType, gpuCounts[m.cursor]) {
+					s.WriteString("\n")
+					s.WriteString(warningStyleTUI.Render("This GPU count is currently unavailable. Choose another count."))
+					s.WriteString("\n")
+				}
 			}
 		} else {
-			ramPerVCPU := m.specs.RamPerVCPU(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
+			ramPerVCPU := m.specs.RamPerVCPU(m.config.GPUType, m.config.NumGPUs)
 			s.WriteString(fmt.Sprintf("Select vCPU count (%dGB RAM per vCPU):\n\n", ramPerVCPU))
-			vcpuOpts := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
+			vcpuOpts := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs)
 			for i, vcpu := range vcpuOpts {
 				cursor := "  "
 				if m.cursor == i {
@@ -1025,12 +1037,11 @@ func (m createModel) View() string {
 		s.WriteString("Review your configuration:\n")
 
 		var panel strings.Builder
-		panel.WriteString(m.styles.Label.Render("Mode:       ") + utils.Capitalize(m.config.Mode) + "\n")
 		panel.WriteString(m.styles.Label.Render("Template:   ") + utils.Capitalize(m.config.Template) + "\n")
 		panel.WriteString(m.styles.Label.Render("GPU Type:   ") + utils.FormatGPUType(m.config.GPUType) + "\n")
 		panel.WriteString(m.styles.Label.Render("GPUs:       ") + strconv.Itoa(m.config.NumGPUs) + "\n")
 		panel.WriteString(m.styles.Label.Render("vCPUs:      ") + strconv.Itoa(m.config.VCPUs) + "\n")
-		confirmRamPerVCPU := m.specs.RamPerVCPU(m.config.GPUType, m.config.NumGPUs, m.config.Mode)
+		confirmRamPerVCPU := m.specs.RamPerVCPU(m.config.GPUType, m.config.NumGPUs)
 		panel.WriteString(m.styles.Label.Render("RAM:        ") + strconv.Itoa(m.config.VCPUs*confirmRamPerVCPU) + " GB\n")
 		panel.WriteString(m.styles.Label.Render("Disk Size:  ") + strconv.Itoa(m.config.DiskSizeGB) + " GB")
 
@@ -1053,25 +1064,21 @@ func (m createModel) View() string {
 		}
 	}
 
-	// Pricing line (skip on mode step since config is too incomplete). Specs and
-	// pricing both load asynchronously; show a spinner in place until both
-	// arrive, mirroring the per-step loading indicators above. If pricing failed
-	// to load, surface the (user-facing) error inline rather than spinning forever.
-	if m.step != stepMode {
-		s.WriteString("\n")
-		switch {
-		case m.pricing != nil && m.specsLoaded:
-			price := m.computePreviewPrice()
-			s.WriteString(m.styles.Help.Render(fmt.Sprintf("Estimated cost: %s", utils.FormatPrice(price))))
-		case m.pricingLoaded && m.specsLoaded:
-			msg := "Estimated cost: unavailable"
-			if m.pricingErr != nil {
-				msg = fmt.Sprintf("Estimated cost: unavailable (%v)", m.pricingErr)
-			}
-			s.WriteString(m.styles.Help.Render(msg))
-		default:
-			s.WriteString(m.styles.Help.Render(fmt.Sprintf("Estimated cost: %s calculating…", m.spinner.View())))
+	// Specs and pricing both load asynchronously; show a spinner in place until
+	// both arrive. If pricing failed to load, surface the error inline.
+	s.WriteString("\n")
+	switch {
+	case m.pricing != nil && m.specsLoaded:
+		price := m.computePreviewPrice()
+		s.WriteString(m.styles.Help.Render(fmt.Sprintf("Estimated cost: %s", utils.FormatPrice(price))))
+	case m.pricingLoaded && m.specsLoaded:
+		msg := "Estimated cost: unavailable"
+		if m.pricingErr != nil {
+			msg = fmt.Sprintf("Estimated cost: unavailable (%v)", m.pricingErr)
 		}
+		s.WriteString(m.styles.Help.Render(msg))
+	default:
+		s.WriteString(m.styles.Help.Render(fmt.Sprintf("Estimated cost: %s calculating…", m.spinner.View())))
 	}
 
 	s.WriteString("\n")
@@ -1087,18 +1094,14 @@ func (m createModel) View() string {
 // computePreviewPrice calculates the price based on current config state,
 // using the hovered option for the current step to preview pricing.
 func (m createModel) computePreviewPrice() float64 {
-	mode := m.config.Mode
 	gpuType := m.config.GPUType
 	numGPUs := m.config.NumGPUs
 	vcpus := m.config.VCPUs
 	diskSizeGB := m.config.DiskSizeGB
 
 	// Apply defaults for unfilled fields
-	if mode == "" {
-		mode = "prototyping"
-	}
 	if gpuType == "" {
-		gpuOpts := m.specs.GPUOptionsForMode(mode)
+		gpuOpts := m.specs.GPUOptions()
 		if len(gpuOpts) > 0 {
 			gpuType = gpuOpts[0]
 		}
@@ -1107,7 +1110,7 @@ func (m createModel) computePreviewPrice() float64 {
 		numGPUs = 1
 	}
 	if vcpus == 0 {
-		vcpus = m.specs.IncludedVCPUs(gpuType, numGPUs, mode)
+		vcpus = m.specs.IncludedVCPUs(gpuType, numGPUs)
 	}
 	if diskSizeGB == 0 {
 		diskSizeGB = 100
@@ -1115,15 +1118,6 @@ func (m createModel) computePreviewPrice() float64 {
 
 	// Override with hovered option for current step
 	switch m.step {
-	case stepMode:
-		modes := []string{"prototyping", "production"}
-		mode = modes[m.cursor]
-		gpuOpts := m.specs.GPUOptionsForMode(mode)
-		if len(gpuOpts) > 0 {
-			gpuType = gpuOpts[0]
-		}
-		numGPUs = 1
-		vcpus = m.specs.IncludedVCPUs(gpuType, numGPUs, mode)
 	case stepGPU:
 		gpus := m.getGPUOptions()
 		if m.cursor < len(gpus) {
@@ -1132,16 +1126,16 @@ func (m createModel) computePreviewPrice() float64 {
 		if numGPUs == 0 {
 			numGPUs = 1
 		}
-		vcpus = m.specs.IncludedVCPUs(gpuType, numGPUs, mode)
+		vcpus = m.specs.IncludedVCPUs(gpuType, numGPUs)
 	case stepCompute:
 		if m.gpuCountPhase {
-			gpuCounts := m.specs.GPUCountsForMode(gpuType, mode)
+			gpuCounts := m.specs.GPUCounts(gpuType)
 			if m.cursor < len(gpuCounts) {
 				numGPUs = gpuCounts[m.cursor]
 			}
-			vcpus = m.specs.IncludedVCPUs(gpuType, numGPUs, mode)
+			vcpus = m.specs.IncludedVCPUs(gpuType, numGPUs)
 		} else {
-			vcpuOpts := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs, mode)
+			vcpuOpts := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs)
 			if m.cursor < len(vcpuOpts) {
 				vcpus = vcpuOpts[m.cursor]
 			}
@@ -1152,8 +1146,8 @@ func (m createModel) computePreviewPrice() float64 {
 		}
 	}
 
-	included := m.specs.IncludedVCPUs(gpuType, numGPUs, mode)
-	return utils.CalculateHourlyPrice(m.pricing, mode, gpuType, numGPUs, vcpus, diskSizeGB, included)
+	included := m.specs.IncludedVCPUs(gpuType, numGPUs)
+	return utils.CalculateHourlyPrice(m.pricing, "", gpuType, numGPUs, vcpus, diskSizeGB, included)
 }
 
 func runCreateModel(m createModel) (*CreateConfig, error) {

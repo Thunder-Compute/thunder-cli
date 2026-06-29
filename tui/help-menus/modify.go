@@ -53,12 +53,6 @@ func RenderModifyHelp(cmd *cobra.Command) {
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
-	output.WriteString(FlagStyle.Render("--mode"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Instance mode"))
-	output.WriteString("\n")
-
-	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--gpu"))
 	output.WriteString("   ")
 	output.WriteString(DescStyle.Render("GPU type"))

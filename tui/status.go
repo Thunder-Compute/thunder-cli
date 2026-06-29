@@ -410,7 +410,6 @@ func (m statusModel) renderTable() string {
 		"UUID":     15,
 		"Status":   14,
 		"Address":  18,
-		"Mode":     15,
 		"Disk":     8,
 		"GPU":      14,
 		"vCPUs":    8,
@@ -420,7 +419,7 @@ func (m statusModel) renderTable() string {
 
 	var b strings.Builder
 
-	headers := []string{"ID", "UUID", "Status", "Address", "Mode", "Disk", "GPU", "vCPUs", "RAM", "Template"}
+	headers := []string{"ID", "UUID", "Status", "Address", "Disk", "GPU", "vCPUs", "RAM", "Template"}
 	headerRow := make([]string, len(headers))
 	for i, h := range headers {
 		headerRow[i] = m.styles.header.Width(colWidths[h]).Render(h)
@@ -450,7 +449,6 @@ func (m statusModel) renderTable() string {
 		uuid := truncate(instance.UUID, colWidths["UUID"])
 		status := m.formatStatus(instance.Status, colWidths["Status"])
 		address := truncate(instance.GetIP(), colWidths["Address"])
-		mode := truncate(utils.Capitalize(instance.Mode), colWidths["Mode"])
 		disk := truncate(fmt.Sprintf("%dGB", instance.Storage), colWidths["Disk"])
 		gpu := truncate(fmt.Sprintf("%sx%s", instance.NumGPUs, utils.FormatGPUType(instance.GPUType)), colWidths["GPU"])
 		vcpus := truncate(instance.CPUCores, colWidths["vCPUs"])
@@ -462,7 +460,6 @@ func (m statusModel) renderTable() string {
 			m.styles.cell.Width(colWidths["UUID"]).Render(uuid),
 			m.styles.cell.Width(colWidths["Status"]).Render(status),
 			m.styles.cell.Width(colWidths["Address"]).Render(address),
-			m.styles.cell.Width(colWidths["Mode"]).Render(mode),
 			m.styles.cell.Width(colWidths["Disk"]).Render(disk),
 			m.styles.cell.Width(colWidths["GPU"]).Render(gpu),
 			m.styles.cell.Width(colWidths["vCPUs"]).Render(vcpus),

@@ -639,10 +639,7 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{
 		Category: "connect",
 		Message:  "setting up token",
-		Data: map[string]interface{}{
-			"mode": instance.Mode,
-		},
-		Level: sentry.LevelInfo,
+		Level:    sentry.LevelInfo,
 	})
 
 	tui.SendPhaseUpdate(p, 2, tui.PhaseInProgress, "Setting up token...", 0)

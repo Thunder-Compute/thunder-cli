@@ -29,35 +29,29 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(CommandStyle.Render("With flags"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("tnr create --mode <mode> --gpu <gpu> [flags]"))
+	output.WriteString(DescStyle.Render("tnr create --gpu <gpu> --num-gpus <count> [flags]"))
 	output.WriteString("\n\n")
 
 	// Examples Section
 	output.WriteString(SectionStyle.Render("● EXAMPLES"))
 	output.WriteString("\n\n")
 	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Create a development instance"))
+	output.WriteString(ExampleStyle.Render("# Create a 1 GPU instance"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr create --mode development --gpu a6000 --vcpus 8 --template base --disk 100"))
+	output.WriteString(CommandTextStyle.Render("tnr create --gpu a6000 --num-gpus 1 --vcpus 8 --template base --disk 100"))
 	output.WriteString("\n\n")
 
 	output.WriteString("  ")
-	output.WriteString(ExampleStyle.Render("# Create a production instance"))
+	output.WriteString(ExampleStyle.Render("# Create a 4 GPU instance"))
 	output.WriteString("\n")
 	output.WriteString("  ")
-	output.WriteString(CommandTextStyle.Render("tnr create --mode production --gpu a100 --num-gpus 2 --template base --disk 500"))
+	output.WriteString(CommandTextStyle.Render("tnr create --gpu a100 --num-gpus 4 --template base --disk 500"))
 	output.WriteString("\n\n")
 
 	// Flags Section
 	output.WriteString(SectionStyle.Render("● FLAGS"))
 	output.WriteString("\n\n")
-
-	output.WriteString("  ")
-	output.WriteString(FlagStyle.Render("--mode"))
-	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Instance mode: development or production"))
-	output.WriteString("\n")
 
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--gpu"))

@@ -30,3 +30,14 @@ func DisplayMode(wire string) string {
 		return strings.ToLower(wire)
 	}
 }
+
+func RoutedModeForGPUCount(gpuCount int) (string, bool) {
+	switch gpuCount {
+	case 1, 2:
+		return modeWirePrototyping, true
+	case 4, 8:
+		return modeWireProduction, true
+	default:
+		return "", false
+	}
+}
