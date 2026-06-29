@@ -19,7 +19,6 @@ import (
 )
 
 var (
-	mode          string
 	gpuType       string
 	numGPUs       int
 	vcpus         int
@@ -41,7 +40,6 @@ func init() {
 
 	rootCmd.AddCommand(createCmd)
 
-	createCmd.Flags().StringVar(&mode, "mode", "", "Deprecated compatibility flag")
 	createCmd.Flags().StringVar(&gpuType, "gpu", "", "GPU type")
 	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs: 1, 2, 4, or 8")
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores: options vary by GPU type and count")
@@ -50,7 +48,6 @@ func init() {
 	createCmd.Flags().IntVar(&diskSizeGB, "disk", 100, "Disk storage in GB (range depends on GPU config)")
 	createCmd.Flags().IntVar(&diskSizeGB, "disk-size-gb", 100, "Disk storage in GB (range depends on GPU config)")
 	_ = createCmd.Flags().MarkHidden("disk-size-gb")
-	_ = createCmd.Flags().MarkHidden("mode")
 }
 
 func createInstanceCmd(client *api.Client, req api.CreateInstanceRequest, resp **api.CreateInstanceResponse) tea.Cmd {
@@ -91,9 +88,6 @@ func renderCreateSuccess(resp **api.CreateInstanceResponse) func() string {
 
 func buildCreatePresets(cmd *cobra.Command) *tui.CreatePresets {
 	p := &tui.CreatePresets{}
-	if cmd.Flags().Changed("mode") {
-		p.Mode = &mode
-	}
 	if cmd.Flags().Changed("gpu") {
 		p.GPUType = &gpuType
 	}
@@ -218,7 +212,6 @@ func runCreate(cmd *cobra.Command) error {
 
 		diskSizeWasSet := cmd.Flags().Changed("disk") || cmd.Flags().Changed("disk-size-gb")
 		createConfig = &tui.CreateConfig{
-			Mode:       mode,
 			GPUType:    gpuType,
 			NumGPUs:    numGPUs,
 			VCPUs:      vcpus,
@@ -244,7 +237,7 @@ func runCreate(cmd *cobra.Command) error {
 			if pricing, pErr := client.FetchPricing(); pErr == nil {
 				pd := &utils.PricingData{Rates: pricing}
 				included := specs.IncludedVCPUs(createConfig.GPUType, createConfig.NumGPUs)
-				price := utils.CalculateHourlyPrice(pd, "", createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB, included)
+				price := utils.CalculateHourlyPrice(pd, createConfig.GPUType, createConfig.NumGPUs, createConfig.VCPUs, createConfig.DiskSizeGB, included)
 				fmt.Fprintf(os.Stderr, "\nEstimated cost: %s\n", utils.FormatPrice(price))
 			}
 		}

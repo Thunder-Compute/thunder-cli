@@ -13,25 +13,19 @@ import (
 
 func testSpecStore() *utils.SpecStore {
 	return utils.NewSpecStore(map[string]api.GpuSpecConfig{
-		"a100xl_x1_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 1, Mode: "production", VcpuOptions: []int{15}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
-		"a100xl_x1_prototyping": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8, 12}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
-		"a100xl_x2_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 2, Mode: "production", VcpuOptions: []int{30}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"a100xl_x2_prototyping": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16, 20, 24}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"a100xl_x4_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 4, Mode: "production", VcpuOptions: []int{60}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 2000}},
-		"a100xl_x8_production":  {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 8, Mode: "production", VcpuOptions: []int{120}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 4000}},
-		"a6000_x1_prototyping":  {DisplayName: "RTX A6000", VramGB: 48, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 6}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
-		"h100_x1_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 1, Mode: "production", VcpuOptions: []int{15}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
-		"h100_x1_prototyping":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8, 12, 16}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
-		"h100_x2_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 2, Mode: "production", VcpuOptions: []int{30}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"h100_x2_prototyping":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16, 20, 24}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"h100_x4_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 4, Mode: "production", VcpuOptions: []int{60}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 2000}},
-		"h100_x8_production":    {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 8, Mode: "production", VcpuOptions: []int{120}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 4000}},
-		"l40_x1_production":     {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 1, Mode: "production", VcpuOptions: []int{10}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
-		"l40_x1_prototyping":    {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
-		"l40_x2_production":     {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 2, Mode: "production", VcpuOptions: []int{20}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"l40_x2_prototyping":    {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{8, 12, 16}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"l40_x4_production":     {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 4, Mode: "production", VcpuOptions: []int{40}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 2000}},
-		"l40_x8_production":     {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 8, Mode: "production", VcpuOptions: []int{80}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 4000}},
+		"a100xl_x1": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 1, VcpuOptions: []int{4, 8, 12}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
+		"a100xl_x2": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 2, VcpuOptions: []int{8, 12, 16, 20, 24}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"a100xl_x4": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 4, VcpuOptions: []int{60}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 2000}},
+		"a100xl_x8": {DisplayName: "NVIDIA A100 (80GB)", VramGB: 80, GpuCount: 8, VcpuOptions: []int{120}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 4000}},
+		"a6000_x1":  {DisplayName: "RTX A6000", VramGB: 48, GpuCount: 1, VcpuOptions: []int{4, 6}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
+		"h100_x1":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 1, VcpuOptions: []int{4, 8, 12, 16}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
+		"h100_x2":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 2, VcpuOptions: []int{8, 12, 16, 20, 24}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"h100_x4":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 4, VcpuOptions: []int{60}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 2000}},
+		"h100_x8":   {DisplayName: "NVIDIA H100", VramGB: 80, GpuCount: 8, VcpuOptions: []int{120}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 4000}},
+		"l40_x1":    {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 1, VcpuOptions: []int{4, 8}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 500}},
+		"l40_x2":    {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 2, VcpuOptions: []int{8, 12, 16}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"l40_x4":    {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 4, VcpuOptions: []int{40}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 2000}},
+		"l40_x8":    {DisplayName: "NVIDIA L40", VramGB: 48, GpuCount: 8, VcpuOptions: []int{80}, RamPerVCPUGiB: 8, StorageGB: api.StorageRange{Min: 100, Max: 4000}},
 	})
 }
 
@@ -51,9 +45,8 @@ func TestValidateCreateConfig(t *testing.T) {
 		errorContains string
 	}{
 		{
-			name: "valid prototyping config",
+			name: "valid config",
 			config: &tui.CreateConfig{
-				Mode:       "prototyping",
 				GPUType:    "a6000",
 				NumGPUs:    1,
 				VCPUs:      6,
@@ -70,7 +63,7 @@ func TestValidateCreateConfig(t *testing.T) {
 			config: &tui.CreateConfig{
 				GPUType:    "a100",
 				NumGPUs:    4,
-				VCPUs:      30,
+				VCPUs:      60,
 				Template:   "pytorch",
 				DiskSizeGB: 500,
 			},
@@ -95,10 +88,10 @@ func TestValidateCreateConfig(t *testing.T) {
 				NumGPUs: 1,
 			},
 			expectError:   true,
-			errorContains: "development mode supports GPU types:",
+			errorContains: "supported GPU types:",
 		},
 		{
-			name: "prototyping without vcpus",
+			name: "without vcpus",
 			config: &tui.CreateConfig{
 				GPUType: "a6000",
 				NumGPUs: 1,
@@ -108,7 +101,7 @@ func TestValidateCreateConfig(t *testing.T) {
 			errorContains: "--vcpus is required for 1 GPU instance(s)",
 		},
 		{
-			name: "invalid vcpus for prototyping",
+			name: "invalid vcpus",
 			config: &tui.CreateConfig{
 				GPUType: "a6000",
 				NumGPUs: 1,
@@ -118,13 +111,13 @@ func TestValidateCreateConfig(t *testing.T) {
 			errorContains: "vcpus must be one of [4 6] for a6000 with 1 GPU(s)",
 		},
 		{
-			name: "4 GPU route with invalid GPU type",
+			name: "4 GPU count with invalid GPU type",
 			config: &tui.CreateConfig{
 				GPUType: "a6000",
 				NumGPUs: 4,
 			},
 			expectError:   true,
-			errorContains: "production mode supports GPU types:",
+			errorContains: "GPU count 4 is not valid",
 		},
 		{
 			name: "unsupported GPU count",
@@ -141,9 +134,8 @@ func TestValidateCreateConfig(t *testing.T) {
 			errorContains: "GPU count 3 is not valid",
 		},
 		{
-			name: "invalid num-gpus for production",
+			name: "invalid num-gpus",
 			config: &tui.CreateConfig{
-				Mode:    "production",
 				GPUType: "a100",
 				NumGPUs: 3,
 			},
@@ -151,9 +143,8 @@ func TestValidateCreateConfig(t *testing.T) {
 			errorContains: "GPU count 3 is not valid",
 		},
 		{
-			name: "valid production config with 8 GPUs",
+			name: "valid 8 GPU config",
 			config: &tui.CreateConfig{
-				Mode:       "production",
 				GPUType:    "a100",
 				NumGPUs:    8,
 				VCPUs:      120,
@@ -168,7 +159,6 @@ func TestValidateCreateConfig(t *testing.T) {
 		{
 			name: "invalid disk size",
 			config: &tui.CreateConfig{
-				Mode:       "prototyping",
 				GPUType:    "a6000",
 				VCPUs:      6,
 				Template:   "ubuntu-22.04",
@@ -183,7 +173,6 @@ func TestValidateCreateConfig(t *testing.T) {
 		{
 			name: "empty template is required error",
 			config: &tui.CreateConfig{
-				Mode:       "prototyping",
 				GPUType:    "a6000",
 				VCPUs:      6,
 				DiskSizeGB: 100,
@@ -197,7 +186,6 @@ func TestValidateCreateConfig(t *testing.T) {
 		{
 			name: "template not found",
 			config: &tui.CreateConfig{
-				Mode:       "prototyping",
 				GPUType:    "a6000",
 				VCPUs:      6,
 				Template:   "nonexistent",
@@ -229,7 +217,6 @@ func TestValidateCreateConfig(t *testing.T) {
 
 func TestCreateInstanceRequest(t *testing.T) {
 	config := &tui.CreateConfig{
-		Mode:       "prototyping",
 		GPUType:    "a6000",
 		NumGPUs:    1,
 		VCPUs:      6,
@@ -244,7 +231,6 @@ func TestCreateInstanceRequest(t *testing.T) {
 	require.NoError(t, validateCreateConfig(config, templates, []api.Snapshot{}, false, testSpecStore()))
 
 	req := api.CreateInstanceRequest{
-		Mode:       api.InstanceMode(config.Mode),
 		GPUType:    config.GPUType,
 		NumGPUs:    config.NumGPUs,
 		CPUCores:   config.VCPUs,
@@ -252,7 +238,6 @@ func TestCreateInstanceRequest(t *testing.T) {
 		DiskSizeGB: config.DiskSizeGB,
 	}
 
-	assert.Equal(t, api.InstanceMode("prototyping"), req.Mode)
 	assert.Equal(t, "a6000", req.GPUType)
 	assert.Equal(t, 1, req.NumGPUs)
 	assert.Equal(t, 6, req.CPUCores)
@@ -262,7 +247,6 @@ func TestCreateInstanceRequest(t *testing.T) {
 
 func TestCreateInstanceRequestA100Alias(t *testing.T) {
 	config := &tui.CreateConfig{
-		Mode:       "prototyping",
 		GPUType:    "a100",
 		VCPUs:      8,
 		Template:   "ubuntu-22.04",
@@ -276,7 +260,6 @@ func TestCreateInstanceRequestA100Alias(t *testing.T) {
 	require.NoError(t, validateCreateConfig(config, templates, []api.Snapshot{}, false, testSpecStore()))
 
 	req := api.CreateInstanceRequest{
-		Mode:       api.InstanceMode(config.Mode),
 		GPUType:    config.GPUType,
 		NumGPUs:    config.NumGPUs,
 		CPUCores:   config.VCPUs,
@@ -284,18 +267,16 @@ func TestCreateInstanceRequestA100Alias(t *testing.T) {
 		DiskSizeGB: config.DiskSizeGB,
 	}
 
-	assert.Equal(t, api.InstanceMode("prototyping"), req.Mode)
 	assert.Equal(t, "a100xl", req.GPUType)
 	assert.Equal(t, 1, req.NumGPUs)
 }
 
-// TestCreateConfigVCPUsAutoSet verifies that VCPUs are automatically calculated
-// for production mode instances based on the number of GPUs.
+// TestCreateConfigVCPUsAutoSet verifies that VCPUs are automatically selected
+// for fixed-size specs.
 func TestCreateConfigVCPUsAutoSet(t *testing.T) {
 	config := &tui.CreateConfig{
-		Mode:       "production",
 		GPUType:    "a100",
-		NumGPUs:    2,
+		NumGPUs:    4,
 		VCPUs:      0,
 		Template:   "pytorch",
 		DiskSizeGB: 100,
@@ -308,14 +289,13 @@ func TestCreateConfigVCPUsAutoSet(t *testing.T) {
 	err := validateCreateConfig(config, templates, []api.Snapshot{}, false, testSpecStore())
 	require.NoError(t, err)
 
-	assert.Equal(t, 30, config.VCPUs)
+	assert.Equal(t, 60, config.VCPUs)
 }
 
 // TestCreateConfigGPUTypeCaseInsensitive verifies that GPU type validation
 // is case-insensitive and converts input to lowercase.
 func TestCreateConfigGPUTypeCaseInsensitive(t *testing.T) {
 	config := &tui.CreateConfig{
-		Mode:       "prototyping",
 		GPUType:    "A6000",
 		VCPUs:      6,
 		Template:   "ubuntu-22.04",
@@ -334,7 +314,6 @@ func TestCreateConfigGPUTypeCaseInsensitive(t *testing.T) {
 
 func TestCreateConfigA100Alias(t *testing.T) {
 	config := &tui.CreateConfig{
-		Mode:       "prototyping",
 		GPUType:    "A100",
 		VCPUs:      8,
 		Template:   "ubuntu-22.04",
@@ -355,7 +334,6 @@ func TestCreateConfigA100Alias(t *testing.T) {
 // is case-insensitive when comparing with display names.
 func TestCreateConfigTemplateCaseInsensitive(t *testing.T) {
 	config := &tui.CreateConfig{
-		Mode:       "prototyping",
 		GPUType:    "a6000",
 		VCPUs:      6,
 		Template:   "UBUNTU 22.04",
@@ -376,7 +354,6 @@ func TestCreateConfigTemplateCaseInsensitive(t *testing.T) {
 // matched by their display name and converted to the appropriate key.
 func TestCreateConfigTemplateByDisplayName(t *testing.T) {
 	config := &tui.CreateConfig{
-		Mode:       "prototyping",
 		GPUType:    "a6000",
 		VCPUs:      6,
 		Template:   "Ubuntu 22.04",
@@ -427,7 +404,6 @@ func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := &tui.CreateConfig{
-				Mode:       "prototyping",
 				GPUType:    "a6000",
 				VCPUs:      6,
 				Template:   "ubuntu-22.04",

@@ -21,7 +21,6 @@ func modifyInstance(mode, gpuType, numGPUs, cpuCores string, storage int) *api.I
 		UUID:     "uuid-1",
 		Name:     "test-instance",
 		Status:   "RUNNING",
-		Mode:     mode,
 		GPUType:  gpuType,
 		NumGPUs:  numGPUs,
 		CPUCores: cpuCores,
@@ -32,7 +31,6 @@ func modifyInstance(mode, gpuType, numGPUs, cpuCores string, storage int) *api.I
 // modifyCmd creates a fresh cobra command with modify flags for testing.
 func newModifyCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "modify"}
-	cmd.Flags().String("mode", "", "")
 	cmd.Flags().String("gpu", "", "")
 	cmd.Flags().Int("num-gpus", 0, "")
 	cmd.Flags().Int("vcpus", 0, "")
@@ -66,7 +64,6 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 			validate: func(t *testing.T, req api.InstanceModifyRequest) {
 				require.NotNil(t, req.GPUType)
 				assert.Equal(t, "h100", *req.GPUType)
-				assert.Nil(t, req.Mode)
 			},
 		},
 		{
@@ -93,43 +90,11 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 			errorContains: "disk size must be between",
 		},
 		{
-			name:          "invalid mode",
-			instance:      modifyInstance("prototyping", "a6000", "1", "8", 100),
-			flags:         map[string]string{"mode": "invalid"},
-			expectError:   true,
-			errorContains: "mode must be 'development' or 'production'",
-		},
-		{
-			name:          "switch to production without num-gpus",
-			instance:      modifyInstance("prototyping", "a6000", "1", "8", 100),
-			flags:         map[string]string{"mode": "production"},
-			expectError:   true,
-			errorContains: "switching to production requires --num-gpus",
-		},
-		{
-			name:          "switch to prototyping without vcpus",
-			instance:      modifyInstance("production", "a100xl", "1", "18", 100),
-			flags:         map[string]string{"mode": "prototyping"},
-			expectError:   true,
-			errorContains: "switching to development requires --vcpus",
-		},
-		{
-			name:     "switch to production with num-gpus",
-			instance: modifyInstance("prototyping", "h100", "1", "8", 100),
-			flags:    map[string]string{"mode": "production", "num-gpus": "1"},
-			validate: func(t *testing.T, req api.InstanceModifyRequest) {
-				require.NotNil(t, req.Mode)
-				assert.Equal(t, api.InstanceMode("production"), *req.Mode)
-				require.NotNil(t, req.NumGPUs)
-				assert.Equal(t, 1, *req.NumGPUs)
-			},
-		},
-		{
-			name:          "vcpus for 4/8 GPU route rejected",
+			name:          "vcpus for fixed-size spec rejected",
 			instance:      modifyInstance("production", "a100xl", "1", "18", 100),
 			flags:         map[string]string{"vcpus": "8"},
 			expectError:   true,
-			errorContains: "vCPUs are auto-calculated for 4 and 8 GPU instances",
+			errorContains: "vcpus must be one of",
 		},
 		{
 			name:          "invalid vcpus for GPU",
@@ -148,13 +113,6 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 			},
 		},
 		{
-			name:          "invalid GPU type for mode",
-			instance:      modifyInstance("production", "a100xl", "1", "18", 100),
-			flags:         map[string]string{"gpu": "a6000"},
-			expectError:   true,
-			errorContains: "invalid GPU type",
-		},
-		{
 			name:          "invalid num-gpus count",
 			instance:      modifyInstance("production", "a100xl", "1", "18", 100),
 			flags:         map[string]string{"num-gpus": "3"},
@@ -164,12 +122,12 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 		{
 			name:     "valid num-gpus change",
 			instance: modifyInstance("production", "a100xl", "1", "18", 100),
-			flags:    map[string]string{"num-gpus": "2"},
+			flags:    map[string]string{"num-gpus": "4"},
 			validate: func(t *testing.T, req api.InstanceModifyRequest) {
 				require.NotNil(t, req.NumGPUs)
-				assert.Equal(t, 2, *req.NumGPUs)
+				assert.Equal(t, 4, *req.NumGPUs)
 				require.NotNil(t, req.CPUCores)
-				assert.Equal(t, 30, *req.CPUCores)
+				assert.Equal(t, 60, *req.CPUCores)
 			},
 		},
 		{
@@ -186,15 +144,6 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 			validate: func(t *testing.T, req api.InstanceModifyRequest) {
 				require.NotNil(t, req.GPUType)
 				assert.Equal(t, "h100", *req.GPUType)
-			},
-		},
-		{
-			name:     "same mode does not require dependent flags",
-			instance: modifyInstance("prototyping", "a6000", "1", "4", 100),
-			flags:    map[string]string{"mode": "prototyping"},
-			validate: func(t *testing.T, req api.InstanceModifyRequest) {
-				require.NotNil(t, req.Mode)
-				assert.Equal(t, api.InstanceMode("prototyping"), *req.Mode)
 			},
 		},
 	}
@@ -223,15 +172,13 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 
 func TestBuildModifyRequestFromFlags_ValidatesVCPUsAgainstRequestedGPUCount(t *testing.T) {
 	specs := utils.NewSpecStore(map[string]api.GpuSpecConfig{
-		"a6000_x1_prototyping": {
+		"a6000_x1": {
 			GpuCount:    1,
-			Mode:        "prototyping",
 			VcpuOptions: []int{4, 8},
 			StorageGB:   api.StorageRange{Min: 100, Max: 300},
 		},
-		"a6000_x4_prototyping": {
+		"a6000_x4": {
 			GpuCount:    4,
-			Mode:        "prototyping",
 			VcpuOptions: []int{16, 24, 32},
 			StorageGB:   api.StorageRange{Min: 100, Max: 1000},
 		},
@@ -250,15 +197,13 @@ func TestBuildModifyRequestFromFlags_ValidatesVCPUsAgainstRequestedGPUCount(t *t
 
 func TestBuildModifyRequestFromFlags_RejectsInvalidTargetSpecValues(t *testing.T) {
 	specs := utils.NewSpecStore(map[string]api.GpuSpecConfig{
-		"a6000_x1_prototyping": {
+		"a6000_x1": {
 			GpuCount:    1,
-			Mode:        "prototyping",
 			VcpuOptions: []int{4, 8},
 			StorageGB:   api.StorageRange{Min: 100, Max: 300},
 		},
-		"a6000_x4_prototyping": {
+		"a6000_x4": {
 			GpuCount:    4,
-			Mode:        "prototyping",
 			VcpuOptions: []int{16, 24, 32},
 			StorageGB:   api.StorageRange{Min: 200, Max: 1000},
 		},
@@ -296,14 +241,13 @@ func TestBuildModifyRequestFromFlags_RejectsInvalidTargetSpecValues(t *testing.T
 
 func TestBuildModifyRequestFromFlags_RejectsUnavailableTargetSpec(t *testing.T) {
 	specs := utils.NewSpecStoreWithAvailability(map[string]api.GpuSpecConfig{
-		"a6000_x1_prototyping": {
+		"a6000_x1": {
 			GpuCount:    1,
-			Mode:        "prototyping",
 			VcpuOptions: []int{4, 8},
 			StorageGB:   api.StorageRange{Min: 100, Max: 300},
 		},
 	}, map[string]string{
-		"a6000_x1_prototyping": "unavailable",
+		"a6000_x1": "unavailable",
 	})
 
 	cmd := newModifyCmd()
@@ -312,7 +256,7 @@ func TestBuildModifyRequestFromFlags_RejectsUnavailableTargetSpec(t *testing.T) 
 	_, err := buildModifyRequestFromFlags(cmd, modifyInstance("prototyping", "a6000", "1", "8", 100), specs)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "GPU configuration a6000 x1 in prototyping mode is currently unavailable")
+	assert.Contains(t, err.Error(), "GPU configuration a6000 x1 is currently unavailable")
 }
 
 // ── buildModifyRequestFromConfig ────────────────────────────────────────────
@@ -327,20 +271,6 @@ func TestBuildModifyRequestFromConfig(t *testing.T) {
 		validate      func(t *testing.T, req api.InstanceModifyRequest)
 	}{
 		{
-			name: "mode change only",
-			config: &tui.ModifyConfig{
-				Mode:        "production",
-				ModeChanged: true,
-			},
-			instance: modifyInstance("prototyping", "a6000", "1", "8", 100),
-			validate: func(t *testing.T, req api.InstanceModifyRequest) {
-				require.NotNil(t, req.Mode)
-				assert.Equal(t, api.InstanceMode("production"), *req.Mode)
-				assert.Nil(t, req.GPUType)
-				assert.Nil(t, req.DiskSizeGB)
-			},
-		},
-		{
 			name: "GPU change only",
 			config: &tui.ModifyConfig{
 				GPUType:    "h100",
@@ -350,11 +280,10 @@ func TestBuildModifyRequestFromConfig(t *testing.T) {
 			validate: func(t *testing.T, req api.InstanceModifyRequest) {
 				require.NotNil(t, req.GPUType)
 				assert.Equal(t, "h100", *req.GPUType)
-				assert.Nil(t, req.Mode)
 			},
 		},
 		{
-			name: "compute change in prototyping sets vcpus",
+			name: "compute change sets vcpus",
 			config: &tui.ModifyConfig{
 				VCPUs:          12,
 				ComputeChanged: true,
@@ -367,7 +296,7 @@ func TestBuildModifyRequestFromConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "compute change in prototyping sets num-gpus",
+			name: "compute change sets num-gpus",
 			config: &tui.ModifyConfig{
 				NumGPUs:        4,
 				VCPUs:          8,
@@ -381,7 +310,7 @@ func TestBuildModifyRequestFromConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "compute change in prototyping sets num-gpus and vcpus",
+			name: "compute change sets num-gpus and vcpus",
 			config: &tui.ModifyConfig{
 				NumGPUs:        4,
 				VCPUs:          16,
@@ -396,7 +325,7 @@ func TestBuildModifyRequestFromConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "compute change in production sets num-gpus",
+			name: "compute change sets num-gpus",
 			config: &tui.ModifyConfig{
 				NumGPUs:        2,
 				VCPUs:          36,
@@ -408,22 +337,6 @@ func TestBuildModifyRequestFromConfig(t *testing.T) {
 				assert.Equal(t, 2, *req.NumGPUs)
 				require.NotNil(t, req.CPUCores)
 				assert.Equal(t, 36, *req.CPUCores)
-			},
-		},
-		{
-			name: "compute change with mode switch uses new mode",
-			config: &tui.ModifyConfig{
-				Mode:           "production",
-				ModeChanged:    true,
-				NumGPUs:        4,
-				ComputeChanged: true,
-			},
-			instance: modifyInstance("prototyping", "h100", "1", "8", 100),
-			validate: func(t *testing.T, req api.InstanceModifyRequest) {
-				require.NotNil(t, req.Mode)
-				require.NotNil(t, req.NumGPUs)
-				assert.Equal(t, 4, *req.NumGPUs)
-				assert.Nil(t, req.CPUCores)
 			},
 		},
 		{
@@ -441,8 +354,6 @@ func TestBuildModifyRequestFromConfig(t *testing.T) {
 		{
 			name: "all changes at once",
 			config: &tui.ModifyConfig{
-				Mode:           "production",
-				ModeChanged:    true,
 				GPUType:        "h100",
 				GPUChanged:     true,
 				NumGPUs:        2,
@@ -452,7 +363,6 @@ func TestBuildModifyRequestFromConfig(t *testing.T) {
 			},
 			instance: modifyInstance("prototyping", "a6000", "1", "8", 100),
 			validate: func(t *testing.T, req api.InstanceModifyRequest) {
-				require.NotNil(t, req.Mode)
 				require.NotNil(t, req.GPUType)
 				require.NotNil(t, req.NumGPUs)
 				require.NotNil(t, req.DiskSizeGB)
@@ -461,7 +371,6 @@ func TestBuildModifyRequestFromConfig(t *testing.T) {
 		{
 			name: "no changes returns error",
 			config: &tui.ModifyConfig{
-				ModeChanged:    false,
 				GPUChanged:     false,
 				ComputeChanged: false,
 				DiskChanged:    false,
@@ -501,14 +410,14 @@ func TestHasAllModifyFlags(t *testing.T) {
 
 	t.Run("single flag returns true", func(t *testing.T) {
 		cmd := newModifyCmd()
-		_ = cmd.Flags().Set("mode", "production")
+		_ = cmd.Flags().Set("gpu", "h100")
 		assert.True(t, hasAllModifyFlags(cmd))
 	})
 
 	t.Run("multiple flags returns true", func(t *testing.T) {
 		cmd := newModifyCmd()
-		_ = cmd.Flags().Set("mode", "production")
 		_ = cmd.Flags().Set("gpu", "h100")
+		_ = cmd.Flags().Set("num-gpus", "2")
 		assert.True(t, hasAllModifyFlags(cmd))
 	})
 }
@@ -524,7 +433,6 @@ func TestBuildModifyPresets(t *testing.T) {
 
 	t.Run("all flags set populates all fields", func(t *testing.T) {
 		cmd := newModifyCmd()
-		_ = cmd.Flags().Set("mode", "production")
 		_ = cmd.Flags().Set("gpu", "h100")
 		_ = cmd.Flags().Set("num-gpus", "2")
 		_ = cmd.Flags().Set("vcpus", "8")
@@ -532,8 +440,6 @@ func TestBuildModifyPresets(t *testing.T) {
 
 		p := buildModifyPresets(cmd)
 		assert.False(t, p.IsEmpty())
-		require.NotNil(t, p.Mode)
-		assert.Equal(t, "production", *p.Mode)
 		require.NotNil(t, p.GPUType)
 		assert.Equal(t, "h100", *p.GPUType)
 		require.NotNil(t, p.NumGPUs)
@@ -550,7 +456,6 @@ func TestBuildModifyPresets(t *testing.T) {
 
 		p := buildModifyPresets(cmd)
 		assert.False(t, p.IsEmpty())
-		assert.Nil(t, p.Mode)
 		require.NotNil(t, p.GPUType)
 		assert.Equal(t, "a100", *p.GPUType)
 	})

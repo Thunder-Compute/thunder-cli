@@ -8,7 +8,6 @@ import (
 
 type (
 	Instance               = types.InstanceListItem
-	InstanceMode           = types.InstanceMode
 	CreateInstanceRequest  = types.InstanceCreateRequest
 	CreateInstanceResponse = types.InstanceCreateResponse
 	InstanceModifyRequest  = types.InstanceModifyRequest
@@ -34,7 +33,6 @@ type GpuSpecConfig struct {
 	DisplayName   string       `json:"displayName"`
 	VramGB        int          `json:"vramGB"`
 	GpuCount      int          `json:"gpuCount"`
-	Mode          string       `json:"mode"`
 	VcpuOptions   []int        `json:"vcpuOptions"`
 	RamPerVCPUGiB int          `json:"ramPerVCPUGiB"`
 	StorageGB     StorageRange `json:"storageGB"`

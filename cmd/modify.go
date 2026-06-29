@@ -32,14 +32,12 @@ var modifyCmd = &cobra.Command{
 }
 
 func init() {
-	modifyCmd.Flags().String("mode", "", "Deprecated compatibility flag")
 	modifyCmd.Flags().String("gpu", "", "GPU type (a6000, a100, h100)")
 	modifyCmd.Flags().Int("num-gpus", 0, "Number of GPUs: 1, 2, 4, or 8")
 	modifyCmd.Flags().Int("vcpus", 0, "CPU cores: options vary by GPU type and count")
 	modifyCmd.Flags().Int("disk", 0, "Disk size in GB (cannot shrink, max depends on config)")
 	modifyCmd.Flags().Int("disk-size-gb", 0, "Disk size in GB (cannot shrink, max depends on config)")
 	_ = modifyCmd.Flags().MarkHidden("disk-size-gb")
-	_ = modifyCmd.Flags().MarkHidden("mode")
 
 	modifyCmd.SetHelpFunc(wrapHelp(helpmenus.RenderModifyHelp))
 
@@ -207,7 +205,6 @@ func runModify(cmd *cobra.Command, args []string) error {
 	if pricing, pricingErr := client.FetchPricing(); pricingErr == nil {
 		pd := &utils.PricingData{Rates: pricing}
 		// Compute resulting config: start with current values, override with modifications
-		resultMode := ""
 		resultGPU := strings.ToLower(selectedInstance.GPUType)
 		resultNumGPUs := 1
 		if n, parseErr := strconv.Atoi(selectedInstance.NumGPUs); parseErr == nil {
@@ -237,7 +234,7 @@ func runModify(cmd *cobra.Command, args []string) error {
 		}
 
 		included := specs.IncludedVCPUs(resultGPU, resultNumGPUs)
-		price := utils.CalculateHourlyPrice(pd, resultMode, resultGPU, resultNumGPUs, resultVCPUs, resultDisk, included)
+		price := utils.CalculateHourlyPrice(pd, resultGPU, resultNumGPUs, resultVCPUs, resultDisk, included)
 		fmt.Printf("\nEstimated cost: %s\n", utils.FormatPrice(price))
 	}
 
@@ -294,10 +291,6 @@ func runModify(cmd *cobra.Command, args []string) error {
 
 func buildModifyPresets(cmd *cobra.Command) *tui.ModifyPresets {
 	p := &tui.ModifyPresets{}
-	if cmd.Flags().Changed("mode") {
-		v, _ := cmd.Flags().GetString("mode")
-		p.Mode = &v
-	}
 	if cmd.Flags().Changed("gpu") {
 		v, _ := cmd.Flags().GetString("gpu")
 		p.GPUType = &v

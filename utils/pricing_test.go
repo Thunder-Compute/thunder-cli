@@ -9,15 +9,13 @@ import (
 func testPricingData() *PricingData {
 	return &PricingData{
 		Rates: map[string]float64{
-			"a6000_x1_prototyping":  0.50,
-			"a100xl_x1_prototyping": 1.10,
-			"a100xl_x2_prototyping": 2.20,
-			"h100_x1_prototyping":   2.49,
-			"h100_x2_prototyping":   4.98,
-			"a100xl_x1_production":  1.64,
-			"h100_x1_production":    3.49,
-			"additional_vcpus":      0.03,
-			"disk_gb":               0.0001,
+			"a6000_x1":         0.50,
+			"a100xl_x1":        1.10,
+			"a100xl_x2":        2.20,
+			"h100_x1":          2.49,
+			"h100_x2":          4.98,
+			"additional_vcpus": 0.03,
+			"disk_gb":          0.0001,
 		},
 	}
 }
@@ -28,7 +26,6 @@ func TestCalculateHourlyPrice(t *testing.T) {
 	tests := []struct {
 		name         string
 		pricing      *PricingData
-		mode         string
 		gpuType      string
 		numGPUs      int
 		vcpus        int
@@ -39,7 +36,6 @@ func TestCalculateHourlyPrice(t *testing.T) {
 		{
 			name:         "nil pricing returns zero",
 			pricing:      nil,
-			mode:         "prototyping",
 			gpuType:      "a6000",
 			numGPUs:      1,
 			vcpus:        4,
@@ -50,7 +46,6 @@ func TestCalculateHourlyPrice(t *testing.T) {
 		{
 			name:         "nil rates returns zero",
 			pricing:      &PricingData{Rates: nil},
-			mode:         "prototyping",
 			gpuType:      "a6000",
 			numGPUs:      1,
 			vcpus:        4,
@@ -61,7 +56,6 @@ func TestCalculateHourlyPrice(t *testing.T) {
 		{
 			name:         "base GPU cost only, no extras",
 			pricing:      p,
-			mode:         "prototyping",
 			gpuType:      "a6000",
 			numGPUs:      1,
 			vcpus:        4,
@@ -70,9 +64,8 @@ func TestCalculateHourlyPrice(t *testing.T) {
 			expected:     0.50,
 		},
 		{
-			name:         "extra vCPUs in prototyping mode",
+			name:         "extra vCPUs",
 			pricing:      p,
-			mode:         "prototyping",
 			gpuType:      "a6000",
 			numGPUs:      1,
 			vcpus:        8,
@@ -82,20 +75,18 @@ func TestCalculateHourlyPrice(t *testing.T) {
 			expected: 0.50 + 0.12,
 		},
 		{
-			name:         "production mode with included vCPUs has no surcharge",
+			name:         "included vCPUs have no surcharge",
 			pricing:      p,
-			mode:         "production",
 			gpuType:      "a100xl",
 			numGPUs:      1,
 			vcpus:        18,
 			diskSizeGB:   100,
 			includedVCPU: 18,
-			expected:     1.64,
+			expected:     1.10,
 		},
 		{
 			name:         "disk surcharge above 100GB",
 			pricing:      p,
-			mode:         "prototyping",
 			gpuType:      "a6000",
 			numGPUs:      1,
 			vcpus:        4,
@@ -107,7 +98,6 @@ func TestCalculateHourlyPrice(t *testing.T) {
 		{
 			name:         "no disk surcharge at exactly 100GB",
 			pricing:      p,
-			mode:         "prototyping",
 			gpuType:      "h100",
 			numGPUs:      1,
 			vcpus:        4,
@@ -118,7 +108,6 @@ func TestCalculateHourlyPrice(t *testing.T) {
 		{
 			name:         "vCPU pricing: beyond 32 total at flat rate",
 			pricing:      p,
-			mode:         "prototyping",
 			gpuType:      "a100xl",
 			numGPUs:      2,
 			vcpus:        40,
@@ -131,7 +120,6 @@ func TestCalculateHourlyPrice(t *testing.T) {
 		{
 			name:         "all extras combined",
 			pricing:      p,
-			mode:         "prototyping",
 			gpuType:      "h100",
 			numGPUs:      1,
 			vcpus:        12,
@@ -144,7 +132,6 @@ func TestCalculateHourlyPrice(t *testing.T) {
 		{
 			name:         "includedVCPUs defaults to 4 when zero",
 			pricing:      p,
-			mode:         "prototyping",
 			gpuType:      "a6000",
 			numGPUs:      1,
 			vcpus:        8,
@@ -156,7 +143,6 @@ func TestCalculateHourlyPrice(t *testing.T) {
 		{
 			name:         "unknown GPU type returns zero base cost",
 			pricing:      p,
-			mode:         "prototyping",
 			gpuType:      "unknown",
 			numGPUs:      1,
 			vcpus:        4,
@@ -168,7 +154,7 @@ func TestCalculateHourlyPrice(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CalculateHourlyPrice(tt.pricing, tt.mode, tt.gpuType, tt.numGPUs, tt.vcpus, tt.diskSizeGB, tt.includedVCPU)
+			got := CalculateHourlyPrice(tt.pricing, tt.gpuType, tt.numGPUs, tt.vcpus, tt.diskSizeGB, tt.includedVCPU)
 			assert.InDelta(t, tt.expected, got, 0.001)
 		})
 	}

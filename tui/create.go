@@ -21,8 +21,7 @@ const templateWindowSize = 10
 type createStep int
 
 const (
-	stepMode createStep = iota
-	stepGPU
+	stepGPU createStep = iota
 	stepCompute
 	stepTemplate
 	stepDiskSize
@@ -32,7 +31,6 @@ const (
 
 // CreateConfig holds the configuration for creating an instance
 type CreateConfig struct {
-	Mode       string
 	GPUType    string
 	NumGPUs    int
 	VCPUs      int
@@ -44,7 +42,6 @@ type CreateConfig struct {
 // CreatePresets holds flag values provided on the command line for hybrid mode.
 // nil pointer means the flag was not set.
 type CreatePresets struct {
-	Mode       *string
 	GPUType    *string
 	NumGPUs    *int
 	VCPUs      *int
@@ -54,7 +51,7 @@ type CreatePresets struct {
 
 // IsEmpty returns true if no preset flags were set.
 func (p *CreatePresets) IsEmpty() bool {
-	return p.Mode == nil && p.GPUType == nil && p.NumGPUs == nil &&
+	return p.GPUType == nil && p.NumGPUs == nil &&
 		p.VCPUs == nil && p.Template == nil && p.DiskSizeGB == nil
 }
 
@@ -108,11 +105,9 @@ func NewCreateModel(client *api.Client, specs *utils.SpecStore) createModel {
 		skippedSteps: make(map[createStep]bool),
 		diskInput:    ti,
 		config: CreateConfig{
-			Mode:       "prototyping",
 			DiskSizeGB: 100,
 		},
 	}
-	m.skippedSteps[stepMode] = true
 	if specs != nil {
 		m.specs = specs
 		m.specsLoaded = true
@@ -128,21 +123,6 @@ func NewCreateModelWithPresets(client *api.Client, specs *utils.SpecStore, prese
 	return m
 }
 
-// resolveGPUForMode normalizes a user-provided GPU string and validates it
-// against the given mode. Returns the canonical GPU type and true if valid.
-func resolveGPUForMode(raw, mode string) (string, bool) {
-	raw = strings.ToLower(raw)
-	gpuMap := map[string]string{"a6000": "a6000", "a100": "a100xl", "h100": "h100"}
-	canonical, ok := gpuMap[raw]
-	if !ok {
-		return "", false
-	}
-	if mode == "production" && canonical == "a6000" {
-		return "", false
-	}
-	return canonical, true
-}
-
 // trySkipCurrentStep is the core hybrid-mode method. It loops forward through
 // steps, auto-filling each one from presets if the preset value is valid given
 // the current config state. Called after every step transition.
@@ -151,16 +131,6 @@ func (m *createModel) trySkipCurrentStep() tea.Cmd {
 		skipped := false
 
 		switch m.step {
-		case stepMode:
-			if m.presets != nil && m.presets.Mode != nil {
-				mode := utils.NormalizeModeInput(*m.presets.Mode)
-				if mode == "prototyping" || mode == "production" {
-					m.config.Mode = mode
-				}
-			}
-			m.skippedSteps[stepMode] = true
-			skipped = true
-
 		case stepGPU:
 			if m.presets != nil && m.presets.GPUType != nil {
 				canonical := strings.ToLower(*m.presets.GPUType)
@@ -355,7 +325,7 @@ func (m *createModel) initStep() {
 
 // prevVisibleStep returns the previous non-skipped step. Returns -1 if none.
 func (m *createModel) prevVisibleStep(from createStep) createStep {
-	for s := from - 1; s >= stepMode; s-- {
+	for s := from - 1; s >= stepGPU; s-- {
 		if !m.skippedSteps[s] {
 			return s
 		}
@@ -614,12 +584,6 @@ func (m createModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
-	case stepMode:
-		modes := []string{"prototyping", "production"}
-		m.config.Mode = modes[m.cursor]
-		m.step = stepGPU
-		return m, m.trySkipCurrentStep()
-
 	case stepGPU:
 		if !m.specsLoaded {
 			return m, nil
@@ -755,8 +719,6 @@ func (m createModel) getGPUOptions() []string {
 
 func (m createModel) getMaxCursor() int {
 	switch m.step {
-	case stepMode:
-		return 1
 	case stepGPU:
 		return len(m.getGPUOptions()) - 1
 	case stepCompute:
@@ -838,21 +800,6 @@ func (m createModel) View() string {
 	s.WriteString("\n\n")
 
 	switch m.step {
-	case stepMode:
-		s.WriteString("Select configuration profile:\n\n")
-		modes := []string{"Default", "Large GPU count"}
-		for i, mode := range modes {
-			cursor := "  "
-			if m.cursor == i {
-				cursor = m.styles.Cursor.Render("▶ ")
-			}
-			display := mode
-			if m.cursor == i {
-				display = m.styles.Selected.Render(mode)
-			}
-			s.WriteString(fmt.Sprintf("%s%s\n", cursor, display))
-		}
-
 	case stepGPU:
 		if !m.specsLoaded {
 			s.WriteString("Select GPU type:\n\n")
@@ -1147,7 +1094,7 @@ func (m createModel) computePreviewPrice() float64 {
 	}
 
 	included := m.specs.IncludedVCPUs(gpuType, numGPUs)
-	return utils.CalculateHourlyPrice(m.pricing, "", gpuType, numGPUs, vcpus, diskSizeGB, included)
+	return utils.CalculateHourlyPrice(m.pricing, gpuType, numGPUs, vcpus, diskSizeGB, included)
 }
 
 func runCreateModel(m createModel) (*CreateConfig, error) {

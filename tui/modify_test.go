@@ -10,18 +10,10 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
-func TestModifyModelSingleCountProductionGPUInitializesNumGPUs(t *testing.T) {
+func TestModifyModelSingleCountGPUInitializesNumGPUs(t *testing.T) {
 	specs := utils.NewSpecStore(map[string]api.GpuSpecConfig{
-		"a6000_x1_prototyping": {
+		"a6000_x1": {
 			GpuCount:      1,
-			Mode:          "prototyping",
-			VcpuOptions:   []int{4, 8},
-			RamPerVCPUGiB: 8,
-			StorageGB:     api.StorageRange{Min: 100, Max: 300},
-		},
-		"a6000_x1_production": {
-			GpuCount:      1,
-			Mode:          "production",
 			VcpuOptions:   []int{18},
 			RamPerVCPUGiB: 5,
 			StorageGB:     api.StorageRange{Min: 100, Max: 1000},
@@ -31,7 +23,6 @@ func TestModifyModelSingleCountProductionGPUInitializesNumGPUs(t *testing.T) {
 		ID:       "0",
 		Name:     "rqrljt9j",
 		Status:   "RUNNING",
-		Mode:     "prototyping",
 		GPUType:  "a6000",
 		NumGPUs:  "1",
 		CPUCores: "8",
@@ -40,19 +31,10 @@ func TestModifyModelSingleCountProductionGPUInitializesNumGPUs(t *testing.T) {
 
 	model := NewModifyModel(nil, instance, specs).(modifyModel)
 
-	// Select production mode.
-	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = updated.(modifyModel)
-	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	model = updated.(modifyModel)
-	if model.step != modifyStepGPU {
-		t.Fatalf("expected GPU step after selecting production, got %v", model.step)
-	}
-
-	// Keep A6000 and enter compute. Production A6000 only has one GPU-count
+	// Keep A6000 and enter compute. A6000 only has one GPU-count
 	// option, so the TUI should initialize NumGPUs instead of leaving it as 0.
-	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	model = updated.(modifyModel)
 	if model.step != modifyStepCompute {
 		t.Fatalf("expected compute step after selecting GPU, got %v", model.step)
 	}
@@ -64,26 +46,25 @@ func TestModifyModelSingleCountProductionGPUInitializesNumGPUs(t *testing.T) {
 	}
 
 	updated, _ = model.Update(modifyPricingMsg{rates: map[string]float64{
-		"a6000_x1_production": 1.25,
+		"a6000_x1": 1.25,
 	}})
 	model = updated.(modifyModel)
 	if view := model.View(); !strings.Contains(view, "18 vCPUs") {
-		t.Fatalf("expected production vCPU option to render, got:\n%s", view)
+		t.Fatalf("expected vCPU option to render, got:\n%s", view)
 	}
 }
 
 func TestModifyModelChangingGPUClearsStaleGPUCount(t *testing.T) {
 	specs := utils.NewSpecStore(map[string]api.GpuSpecConfig{
-		"a6000_x1_prototyping": {GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8}},
-		"a6000_x4_prototyping": {GpuCount: 4, Mode: "prototyping", VcpuOptions: []int{16, 24}},
-		"h100_x1_prototyping":  {GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{8, 12}},
-		"h100_x2_prototyping":  {GpuCount: 2, Mode: "prototyping", VcpuOptions: []int{16, 24}},
+		"a6000_x1": {GpuCount: 1, VcpuOptions: []int{4, 8}},
+		"a6000_x4": {GpuCount: 4, VcpuOptions: []int{16, 24}},
+		"h100_x1":  {GpuCount: 1, VcpuOptions: []int{8, 12}},
+		"h100_x2":  {GpuCount: 2, VcpuOptions: []int{16, 24}},
 	})
 	instance := &api.Instance{
 		ID:       "0",
 		Name:     "rqrljt9j",
 		Status:   "RUNNING",
-		Mode:     "prototyping",
 		GPUType:  "a6000",
 		NumGPUs:  "1",
 		CPUCores: "8",
@@ -92,7 +73,7 @@ func TestModifyModelChangingGPUClearsStaleGPUCount(t *testing.T) {
 
 	model := NewModifyModel(nil, instance, specs).(modifyModel)
 
-	// Keep prototyping and A6000, then select 4 GPUs.
+	// Keep A6000, then select 4 GPUs.
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = updated.(modifyModel)
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -135,17 +116,16 @@ func TestModifyModelChangingGPUClearsStaleGPUCount(t *testing.T) {
 
 func TestModifyModelUnavailableGPUCountCannotBeSelected(t *testing.T) {
 	specs := utils.NewSpecStoreWithAvailability(map[string]api.GpuSpecConfig{
-		"a6000_x1_prototyping": {GpuCount: 1, Mode: "prototyping", VcpuOptions: []int{4, 8}},
-		"a6000_x4_prototyping": {GpuCount: 4, Mode: "prototyping", VcpuOptions: []int{16, 24}},
+		"a6000_x1": {GpuCount: 1, VcpuOptions: []int{4, 8}},
+		"a6000_x4": {GpuCount: 4, VcpuOptions: []int{16, 24}},
 	}, map[string]string{
-		"a6000_x1_prototyping": "available",
-		"a6000_x4_prototyping": "unavailable",
+		"a6000_x1": "available",
+		"a6000_x4": "unavailable",
 	})
 	instance := &api.Instance{
 		ID:       "0",
 		Name:     "rqrljt9j",
 		Status:   "RUNNING",
-		Mode:     "prototyping",
 		GPUType:  "a6000",
 		NumGPUs:  "1",
 		CPUCores: "8",

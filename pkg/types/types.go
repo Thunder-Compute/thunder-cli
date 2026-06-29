@@ -26,24 +26,6 @@ const (
 	InstanceStatus_Migrating    InstanceStatus = "MIGRATING"
 )
 
-// InstanceMode represents the mode of operation for an instance.
-type InstanceMode string
-
-const (
-	InstanceMode_Prototyping InstanceMode = "prototyping"
-	InstanceMode_Production  InstanceMode = "production"
-)
-
-// IsValidInstanceMode checks if the given mode is a valid InstanceMode.
-func IsValidInstanceMode(mode InstanceMode) bool {
-	switch mode {
-	case InstanceMode_Prototyping, InstanceMode_Production:
-		return true
-	default:
-		return false
-	}
-}
-
 // InstanceListResponse is the API response for listing instances.
 type InstanceListResponse map[string]InstanceListItem
 
@@ -62,7 +44,6 @@ type InstanceListItem struct {
 	NumGPUs           string           `json:"numGpus"`
 	Memory            string           `json:"memory"`
 	Promoted          bool             `json:"promoted"`
-	Mode              string           `json:"mode"`
 	Port              int              `json:"port"`
 	HTTPPorts         []int            `json:"httpPorts,omitempty"`
 	K8s               bool             `json:"k8s"`
@@ -124,12 +105,11 @@ func (i *InstanceListItem) UnmarshalJSON(data []byte) error {
 
 // InstanceCreateRequest represents the request body for creating an instance.
 type InstanceCreateRequest struct {
-	CPUCores   int          `json:"cpu_cores"`
-	Mode       InstanceMode `json:"mode"`
-	Template   string       `json:"template"`
-	GPUType    string       `json:"gpu_type"`
-	NumGPUs    int          `json:"num_gpus"`
-	DiskSizeGB int          `json:"disk_size_gb"`
+	CPUCores   int    `json:"cpu_cores"`
+	Template   string `json:"template"`
+	GPUType    string `json:"gpu_type"`
+	NumGPUs    int    `json:"num_gpus"`
+	DiskSizeGB int    `json:"disk_size_gb"`
 }
 
 // InstanceCreateResponse represents the response from creating an instance.
@@ -149,18 +129,16 @@ type InstanceAddKeyResponse struct {
 
 // InstanceModifyRequest represents the request body for modifying an instance.
 type InstanceModifyRequest struct {
-	CPUCores   *int          `json:"cpu_cores,omitempty"`
-	GPUType    *string       `json:"gpu_type,omitempty"`
-	NumGPUs    *int          `json:"num_gpus,omitempty"`
-	DiskSizeGB *int          `json:"disk_size_gb,omitempty"`
-	Mode       *InstanceMode `json:"mode,omitempty"`
+	CPUCores   *int    `json:"cpu_cores,omitempty"`
+	GPUType    *string `json:"gpu_type,omitempty"`
+	NumGPUs    *int    `json:"num_gpus,omitempty"`
+	DiskSizeGB *int    `json:"disk_size_gb,omitempty"`
 }
 
 // InstanceModifyResponse represents the response from modifying an instance.
 type InstanceModifyResponse struct {
 	Identifier   string  `json:"identifier"`
 	InstanceName string  `json:"instance_name"`
-	Mode         *string `json:"mode,omitempty"`
 	GPUType      *string `json:"gpu_type,omitempty"`
 	NumGPUs      *int    `json:"num_gpus,omitempty"`
 }

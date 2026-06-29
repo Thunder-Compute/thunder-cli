@@ -34,7 +34,6 @@ func TestCreateInstanceRequest(t *testing.T) {
 		Template:   "ubuntu-22.04",
 		NumGPUs:    1,
 		DiskSizeGB: 100,
-		Mode:       InstanceMode("prototyping"),
 	}
 
 	jsonData, err := json.Marshal(req)
@@ -49,7 +48,6 @@ func TestCreateInstanceRequest(t *testing.T) {
 	assert.Equal(t, req.Template, unmarshaled.Template)
 	assert.Equal(t, req.NumGPUs, unmarshaled.NumGPUs)
 	assert.Equal(t, req.DiskSizeGB, unmarshaled.DiskSizeGB)
-	assert.Equal(t, req.Mode, unmarshaled.Mode)
 
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(jsonData, &raw))
@@ -58,7 +56,7 @@ func TestCreateInstanceRequest(t *testing.T) {
 	assert.Equal(t, req.Template, raw["template"])
 	assert.Equal(t, float64(req.NumGPUs), raw["num_gpus"])
 	assert.Equal(t, float64(req.DiskSizeGB), raw["disk_size_gb"])
-	assert.Equal(t, string(req.Mode), raw["mode"])
+	assert.NotContains(t, raw, "mode")
 }
 
 func TestCreateInstanceResponse(t *testing.T) {
@@ -110,7 +108,6 @@ func TestInstanceStruct(t *testing.T) {
 		Storage:   100,
 		GPUType:   "T4",
 		NumGPUs:   "1",
-		Mode:      "prototyping",
 		Template:  "ubuntu-22.04",
 		CreatedAt: "2023-10-01T10:00:00Z",
 		Port:      22,
@@ -134,7 +131,6 @@ func TestInstanceStruct(t *testing.T) {
 	assert.Equal(t, instance.Storage, unmarshaled.Storage)
 	assert.Equal(t, instance.GPUType, unmarshaled.GPUType)
 	assert.Equal(t, instance.NumGPUs, unmarshaled.NumGPUs)
-	assert.Equal(t, instance.Mode, unmarshaled.Mode)
 	assert.Equal(t, instance.Template, unmarshaled.Template)
 	assert.Equal(t, instance.CreatedAt, unmarshaled.CreatedAt)
 	assert.Equal(t, instance.Port, unmarshaled.Port)

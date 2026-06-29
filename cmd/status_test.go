@@ -37,7 +37,6 @@ func TestInstanceFields(t *testing.T) {
 		Storage:   100,
 		GPUType:   "a6000",
 		NumGPUs:   "1",
-		Mode:      "prototyping",
 		Template:  "ubuntu-22.04",
 		CreatedAt: "2023-10-01T10:00:00Z",
 		Port:      22,
@@ -55,7 +54,6 @@ func TestInstanceFields(t *testing.T) {
 	assert.Equal(t, 100, instance.Storage)
 	assert.Equal(t, "a6000", instance.GPUType)
 	assert.Equal(t, "1", instance.NumGPUs)
-	assert.Equal(t, "prototyping", instance.Mode)
 	assert.Equal(t, "ubuntu-22.04", instance.Template)
 	assert.Equal(t, "2023-10-01T10:00:00Z", instance.CreatedAt)
 	assert.Equal(t, 22, instance.Port)

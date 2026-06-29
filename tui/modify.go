@@ -18,8 +18,7 @@ import (
 type modifyStep int
 
 const (
-	modifyStepMode modifyStep = iota
-	modifyStepGPU
+	modifyStepGPU modifyStep = iota
 	modifyStepCompute
 	modifyStepDiskSize
 	modifyStepConfirmation
@@ -28,13 +27,11 @@ const (
 
 // ModifyConfig holds the configuration for modifying an instance
 type ModifyConfig struct {
-	Mode           string
 	GPUType        string
 	NumGPUs        int
 	VCPUs          int
 	DiskSizeGB     int
 	Confirmed      bool
-	ModeChanged    bool
 	GPUChanged     bool
 	ComputeChanged bool
 	DiskChanged    bool
@@ -42,7 +39,6 @@ type ModifyConfig struct {
 
 // ModifyPresets holds flag values provided on the command line for hybrid mode.
 type ModifyPresets struct {
-	Mode       *string
 	GPUType    *string
 	NumGPUs    *int
 	VCPUs      *int
@@ -51,7 +47,7 @@ type ModifyPresets struct {
 
 // IsEmpty returns true if no preset flags were set.
 func (p *ModifyPresets) IsEmpty() bool {
-	return p.Mode == nil && p.GPUType == nil && p.NumGPUs == nil &&
+	return p.GPUType == nil && p.NumGPUs == nil &&
 		p.VCPUs == nil && p.DiskSizeGB == nil
 }
 
@@ -99,8 +95,6 @@ func NewModifyModel(client *api.Client, instance *api.Instance, specs *utils.Spe
 		styles:           styles,
 		specs:            specs,
 	}
-	m.skippedSteps[modifyStepMode] = true
-
 	m.cursor = m.getCurrentGPUCursorPosition()
 
 	return m
@@ -122,17 +116,6 @@ func (m *modifyModel) trySkipCurrentStep() {
 		m.skippedSteps[m.step] = false
 
 		switch m.step {
-		case modifyStepMode:
-			if m.presets != nil && m.presets.Mode != nil {
-				mode := utils.NormalizeModeInput(*m.presets.Mode)
-				if mode == "prototyping" || mode == "production" {
-					m.config.Mode = mode
-					m.config.ModeChanged = !strings.EqualFold(mode, m.currentInstance.Mode)
-				}
-			}
-			m.skippedSteps[modifyStepMode] = true
-			skipped = true
-
 		case modifyStepGPU:
 			if m.presets != nil && m.presets.GPUType != nil {
 				canonical := strings.ToLower(*m.presets.GPUType)
@@ -296,7 +279,7 @@ func (m *modifyModel) resetComputeSelection() {
 
 // prevVisibleStep returns the previous non-skipped step. Returns -1 if none.
 func (m *modifyModel) prevVisibleStep(from modifyStep) modifyStep {
-	for s := from - 1; s >= modifyStepMode; s-- {
+	for s := from - 1; s >= modifyStepGPU; s-- {
 		if !m.skippedSteps[s] {
 			return s
 		}
@@ -406,25 +389,6 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 	m.validationErr = nil
 
 	switch m.step {
-	case modifyStepMode:
-		modeOptions := []string{"prototyping", "production"}
-		newMode := modeOptions[m.cursor]
-		m.config.Mode = newMode
-		m.config.ModeChanged = !strings.EqualFold(newMode, m.currentInstance.Mode)
-		m.config.GPUType = ""
-		m.config.GPUChanged = false
-		m.resetComputeSelection()
-		m.step = modifyStepGPU
-		m.trySkipCurrentStep()
-		// If we're on the GPU step after skipping, set cursor to current GPU position
-		if m.step == modifyStepGPU {
-			m.cursor = m.getCurrentGPUCursorPosition()
-		}
-		if m.quitting {
-			return m, tea.Quit
-		}
-		return m, nil
-
 	case modifyStepGPU:
 		gpuValues := m.specs.GPUOptions()
 		if !m.specs.IsGPUTypeAvailable(gpuValues[m.cursor]) {
@@ -496,7 +460,7 @@ func (m modifyModel) handleEnter() (tea.Model, tea.Cmd) {
 		m.config.DiskChanged = (diskSize != m.currentInstance.Storage)
 		m.validationErr = nil
 
-		if !m.config.ModeChanged && !m.config.GPUChanged && !m.config.ComputeChanged && !m.config.DiskChanged {
+		if !m.config.GPUChanged && !m.config.ComputeChanged && !m.config.DiskChanged {
 			m.err = ErrNoChanges
 			m.quitting = true
 			return m, tea.Quit
@@ -540,13 +504,6 @@ func (m modifyModel) formatGPUType(gpuType string) string {
 	return utils.FormatGPUType(gpuType)
 }
 
-func (m modifyModel) getEffectiveMode() string {
-	if m.config.ModeChanged {
-		return m.config.Mode
-	}
-	return m.currentInstance.Mode
-}
-
 func (m modifyModel) needsGPUCountPhase() bool {
 	return m.specs.NeedsGPUCountPhase(m.config.GPUType)
 }
@@ -575,9 +532,6 @@ func (m modifyModel) getCurrentComputeCursorPosition() int {
 
 func (m modifyModel) getMaxCursor() int {
 	switch m.step {
-	case modifyStepMode:
-		return 1 // Prototyping, Production
-
 	case modifyStepGPU:
 		return len(m.specs.GPUOptions()) - 1
 
@@ -611,8 +565,6 @@ func (m modifyModel) View() string {
 
 	// Render current step
 	switch m.step {
-	case modifyStepMode:
-		s.WriteString(m.renderModeStep())
 	case modifyStepGPU:
 		s.WriteString(m.renderGPUStep())
 	case modifyStepCompute:
@@ -623,8 +575,7 @@ func (m modifyModel) View() string {
 		s.WriteString(m.renderConfirmationStep())
 	}
 
-	// Pricing line (skip on mode step since config is too incomplete)
-	if m.pricing != nil && m.step != modifyStepMode {
+	if m.pricing != nil {
 		price := m.computePreviewPrice()
 		s.WriteString("\n")
 		s.WriteString(m.styles.Help.Render(fmt.Sprintf("Estimated cost: %s", utils.FormatPrice(price))))
@@ -677,7 +628,6 @@ func (m modifyModel) computePreviewPrice() float64 {
 
 	// Override with hovered option for the current step
 	switch m.step {
-	case modifyStepMode:
 	case modifyStepGPU:
 		gpuValues := m.specs.GPUOptions()
 		gpuType = gpuValues[m.cursor]
@@ -702,35 +652,7 @@ func (m modifyModel) computePreviewPrice() float64 {
 	}
 
 	included := m.specs.IncludedVCPUs(gpuType, numGPUs)
-	return utils.CalculateHourlyPrice(m.pricing, "", gpuType, numGPUs, vcpus, diskSizeGB, included)
-}
-
-func (m modifyModel) renderModeStep() string {
-	var s strings.Builder
-
-	s.WriteString("Select configuration profile:\n\n")
-
-	modeLabels := []string{
-		"Default",
-		"Large GPU count",
-	}
-	modeValues := []string{"prototyping", "production"}
-
-	for i, label := range modeLabels {
-		option := label
-		if strings.EqualFold(modeValues[i], m.currentInstance.Mode) {
-			option += " [current]"
-		}
-
-		cursor := "  "
-		if m.cursor == i {
-			cursor = m.styles.Cursor.Render("▶ ")
-			option = m.styles.Selected.Render(option)
-		}
-		s.WriteString(fmt.Sprintf("%s%s\n", cursor, option))
-	}
-
-	return s.String()
+	return utils.CalculateHourlyPrice(m.pricing, gpuType, numGPUs, vcpus, diskSizeGB, included)
 }
 
 func (m modifyModel) renderGPUStep() string {

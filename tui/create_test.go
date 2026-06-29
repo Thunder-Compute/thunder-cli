@@ -19,11 +19,11 @@ func TestCreateModelSurvivesInputBeforeSpecsLoad(t *testing.T) {
 		t.Fatal("expected specsLoaded=false when constructed without specs")
 	}
 
-	// Select a mode: advances to the GPU step and runs initStep with nil specs.
+	// The flow starts at GPU selection and should remain safe before specs load.
 	model, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	cm := model.(createModel)
 	if cm.step != stepGPU {
-		t.Fatalf("expected stepGPU after mode selection, got %v", cm.step)
+		t.Fatalf("expected stepGPU before specs load, got %v", cm.step)
 	}
 
 	// Pricing typically arrives before specs in the async flow. Rendering the
@@ -58,31 +58,5 @@ func TestCreateModelSurvivesInputBeforeSpecsLoad(t *testing.T) {
 	}
 	if view := cm.View(); !strings.Contains(view, "Estimated cost") {
 		t.Fatalf("expected an estimated cost line after specs load, got:\n%s", view)
-	}
-}
-
-// TestCreateHybridSkipsModeStepForDevelopmentAlias guards the hybrid (flag +
-// TUI) flow against the "development" user-facing alias. The preset value is the
-// raw flag string, so the skip logic must normalize it the same way
-// validateCreateConfig does; otherwise --mode development silently fails to
-// pre-fill the mode step and forces the user to re-select it interactively.
-func TestCreateHybridSkipsModeStepForDevelopmentAlias(t *testing.T) {
-	for _, input := range []string{"development", "Development", "prototyping", "production"} {
-		t.Run(input, func(t *testing.T) {
-			in := input
-			m := NewCreateModelWithPresets(nil, nil, &CreatePresets{Mode: &in})
-
-			if !m.skippedSteps[stepMode] {
-				t.Fatalf("expected stepMode to be auto-skipped for --mode %q", input)
-			}
-			if m.step == stepMode {
-				t.Fatalf("expected to advance past stepMode for --mode %q", input)
-			}
-
-			want := utils.NormalizeModeInput(input)
-			if m.config.Mode != want {
-				t.Fatalf("expected wire mode %q for --mode %q, got %q", want, input, m.config.Mode)
-			}
-		})
 	}
 }

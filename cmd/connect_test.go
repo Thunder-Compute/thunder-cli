@@ -87,7 +87,7 @@ func (m *mockSSHClient) Close() error {
 // =============================================================================
 
 // createTestInstance creates a test instance with the given parameters
-func createTestInstance(id, uuid, name, ip, status, template, mode string, port int) api.Instance {
+func createTestInstance(id, uuid, name, ip, status, template, _ string, port int) api.Instance {
 	return api.Instance{
 		ID:       id,
 		UUID:     uuid,
@@ -95,7 +95,6 @@ func createTestInstance(id, uuid, name, ip, status, template, mode string, port 
 		IP:       &ip,
 		Status:   status,
 		Template: template,
-		Mode:     mode,
 		Port:     port,
 		NumGPUs:  "1",
 		GPUType:  "a6000",
@@ -454,7 +453,6 @@ func TestCreateTestInstance(t *testing.T) {
 	assert.Equal(t, "10.0.0.1", instance.GetIP())
 	assert.Equal(t, "RUNNING", instance.Status)
 	assert.Equal(t, "jupyter", instance.Template)
-	assert.Equal(t, "prototyping", instance.Mode)
 	assert.Equal(t, 2222, instance.Port)
 }
 

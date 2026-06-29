@@ -9,8 +9,7 @@ import (
 	"github.com/Thunder-Compute/thunder-cli/api"
 )
 
-// SpecStore wraps fetched GPU specs and provides helper methods
-// that replace the old hardcoded prototyping/production config.
+// SpecStore wraps fetched GPU specs and provides helper methods.
 type SpecStore struct {
 	specs        map[string]api.GpuSpecConfig
 	availability map[string]string
