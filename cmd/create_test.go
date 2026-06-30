@@ -37,7 +37,6 @@ func tmplEntry(key, displayName string) api.TemplateEntry {
 
 func TestCreateFlagsDoNotRequireDisk(t *testing.T) {
 	cmd := &cobra.Command{}
-	cmd.Flags().String("mode", "", "")
 	cmd.Flags().String("gpu", "", "")
 	cmd.Flags().String("template", "", "")
 	cmd.Flags().String("snapshot", "", "")
@@ -46,7 +45,6 @@ func TestCreateFlagsDoNotRequireDisk(t *testing.T) {
 	cmd.Flags().Int("disk", 0, "")
 	cmd.Flags().Int("disk-size-gb", 0, "")
 
-	require.NoError(t, cmd.Flags().Set("mode", "production"))
 	require.NoError(t, cmd.Flags().Set("gpu", "h100"))
 	require.NoError(t, cmd.Flags().Set("template", "base"))
 	require.NoError(t, cmd.Flags().Set("num-gpus", "4"))
@@ -315,7 +313,6 @@ func TestCreateConfigVCPUsAutoSet(t *testing.T) {
 
 func TestCreateConfigDefaultsDiskSizePerGPU(t *testing.T) {
 	config := &tui.CreateConfig{
-		Mode:     "production",
 		GPUType:  "h100",
 		NumGPUs:  4,
 		Template: "base",
@@ -333,7 +330,6 @@ func TestCreateConfigDefaultsDiskSizePerGPU(t *testing.T) {
 
 func TestCreateConfigDefaultDiskSizeRespectsSnapshotMinimum(t *testing.T) {
 	config := &tui.CreateConfig{
-		Mode:     "production",
 		GPUType:  "h100",
 		NumGPUs:  4,
 		Template: "large-snapshot",
@@ -353,7 +349,6 @@ func TestCreateConfigDefaultDiskSizeRespectsSnapshotMinimum(t *testing.T) {
 
 func TestCreateConfigExplicitDiskCanBeBelowIncludedStorage(t *testing.T) {
 	config := &tui.CreateConfig{
-		Mode:       "production",
 		GPUType:    "h100",
 		NumGPUs:    4,
 		Template:   "base",

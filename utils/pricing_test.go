@@ -98,7 +98,6 @@ func TestCalculateHourlyPrice(t *testing.T) {
 		{
 			name:         "disk allowance is 100GB per GPU: 2 GPUs, 200GB free",
 			pricing:      p,
-			mode:         "prototyping",
 			gpuType:      "a100xl",
 			numGPUs:      2,
 			vcpus:        8,
@@ -110,7 +109,6 @@ func TestCalculateHourlyPrice(t *testing.T) {
 		{
 			name:         "disk surcharge above per-GPU allowance: 2 GPUs, 300GB",
 			pricing:      p,
-			mode:         "prototyping",
 			gpuType:      "a100xl",
 			numGPUs:      2,
 			vcpus:        8,

@@ -12,15 +12,14 @@ import (
 
 func createTestSpecStore() *utils.SpecStore {
 	return utils.NewSpecStore(map[string]api.GpuSpecConfig{
-		"h100_x1_production": {GpuCount: 1, Mode: "production", VcpuOptions: []int{15}, StorageGB: api.StorageRange{Min: 100, Max: 500}},
-		"h100_x2_production": {GpuCount: 2, Mode: "production", VcpuOptions: []int{30}, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
-		"h100_x4_production": {GpuCount: 4, Mode: "production", VcpuOptions: []int{60}, StorageGB: api.StorageRange{Min: 100, Max: 2000}},
+		"h100_x1": {GpuCount: 1, VcpuOptions: []int{15}, StorageGB: api.StorageRange{Min: 100, Max: 500}},
+		"h100_x2": {GpuCount: 2, VcpuOptions: []int{30}, StorageGB: api.StorageRange{Min: 100, Max: 1000}},
+		"h100_x4": {GpuCount: 4, VcpuOptions: []int{60}, StorageGB: api.StorageRange{Min: 100, Max: 2000}},
 	})
 }
 
 func TestCreateDefaultDiskSizeUsesFreeStoragePerGPU(t *testing.T) {
 	m := NewCreateModel(nil, createTestSpecStore())
-	m.config.Mode = "production"
 	m.config.GPUType = "h100"
 	m.config.NumGPUs = 4
 
@@ -31,7 +30,6 @@ func TestCreateDefaultDiskSizeUsesFreeStoragePerGPU(t *testing.T) {
 
 func TestCreateDefaultDiskSizeRespectsSnapshotMinimum(t *testing.T) {
 	m := NewCreateModel(nil, createTestSpecStore())
-	m.config.Mode = "production"
 	m.config.GPUType = "h100"
 	m.config.NumGPUs = 4
 	m.selectedSnapshot = &api.Snapshot{MinimumDiskSizeGB: 550}
@@ -43,7 +41,6 @@ func TestCreateDefaultDiskSizeRespectsSnapshotMinimum(t *testing.T) {
 
 func TestCreateDiskInputSeedsFromGPUCount(t *testing.T) {
 	m := NewCreateModel(nil, createTestSpecStore())
-	m.config.Mode = "production"
 	m.config.GPUType = "h100"
 	m.config.NumGPUs = 4
 	m.setDefaultDiskSize()
