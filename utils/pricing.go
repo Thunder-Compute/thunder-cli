@@ -31,9 +31,11 @@ func CalculateHourlyPrice(p *PricingData, gpuType string, numGPUs, vcpus, diskSi
 		vcpuCost = float64(extra) * rate
 	}
 
+	// First 100GB of persistent disk per GPU is included free.
 	var diskCost float64
-	if diskSizeGB > 100 {
-		diskCost = float64(diskSizeGB-100) * p.Rates["disk_gb"]
+	includedDiskGB := numGPUs * 100
+	if diskSizeGB > includedDiskGB {
+		diskCost = float64(diskSizeGB-includedDiskGB) * p.Rates["disk_gb"]
 	}
 
 	return gpuCost + vcpuCost + diskCost

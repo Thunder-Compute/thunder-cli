@@ -86,7 +86,7 @@ func RenderCreateHelp(cmd *cobra.Command) {
 	output.WriteString("  ")
 	output.WriteString(FlagStyle.Render("--disk"))
 	output.WriteString("   ")
-	output.WriteString(DescStyle.Render("Disk storage in GB"))
+	output.WriteString(DescStyle.Render("Disk storage in GB (defaults to 100GB per GPU)"))
 	output.WriteString("\n")
 
 	fmt.Fprint(os.Stdout, output.String())

@@ -96,6 +96,30 @@ func TestCalculateHourlyPrice(t *testing.T) {
 			expected: 0.50 + 0.02,
 		},
 		{
+			name:         "disk allowance is 100GB per GPU: 2 GPUs, 200GB free",
+			pricing:      p,
+			mode:         "prototyping",
+			gpuType:      "a100xl",
+			numGPUs:      2,
+			vcpus:        8,
+			diskSizeGB:   200,
+			includedVCPU: 8,
+			// 200GB <= 2*100GB free → no disk surcharge; a100xl_x2 base only
+			expected: 2.20,
+		},
+		{
+			name:         "disk surcharge above per-GPU allowance: 2 GPUs, 300GB",
+			pricing:      p,
+			mode:         "prototyping",
+			gpuType:      "a100xl",
+			numGPUs:      2,
+			vcpus:        8,
+			diskSizeGB:   300,
+			includedVCPU: 8,
+			// 300 - 2*100 = 100 extra GB * 0.0001 = 0.01
+			expected: 2.20 + 0.01,
+		},
+		{
 			name:         "no disk surcharge at exactly 100GB",
 			pricing:      p,
 			gpuType:      "h100",
