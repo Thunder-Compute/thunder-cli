@@ -74,14 +74,14 @@ func TestCreateModelSurvivesInputBeforeSpecsLoad(t *testing.T) {
 
 	// Pricing typically arrives before specs in the async flow. Rendering the
 	// GPU step with pricing present but specs still nil must not deref the nil
-	// SpecStore via computePreviewPrice — instead it shows a calculating spinner.
+	// SpecStore via computePreviewPrice; it keeps the cost label empty instead.
 	model, _ = cm.Update(createPricingMsg{rates: map[string]float64{}})
 	cm = model.(createModel)
 	if cm.pricing == nil {
 		t.Fatal("expected pricing to be set after createPricingMsg")
 	}
-	if view := cm.View(); !strings.Contains(view, "calculating") {
-		t.Fatalf("expected a calculating indicator before specs load, got:\n%s", view)
+	if view := cm.View(); !strings.Contains(view, "Estimated cost:") || strings.Contains(view, "calculating") {
+		t.Fatalf("expected an empty estimated cost line before specs load, got:\n%s", view)
 	}
 
 	// Navigation must also be safe while specs are still loading.

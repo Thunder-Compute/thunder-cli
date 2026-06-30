@@ -1055,9 +1055,8 @@ func (m createModel) View() string {
 		}
 	}
 
-	// Specs and pricing both load asynchronously; show a spinner in place until both
-	// arrive, mirroring the per-step loading indicators above. If pricing failed
-	// to load, surface the (user-facing) error inline rather than spinning forever.
+	// Specs and pricing both load asynchronously. Keep the estimated-cost label
+	// stable while data is pending, then fill in the value when pricing is ready.
 	s.WriteString("\n")
 	switch {
 	case m.pricing != nil && m.specsLoaded:
@@ -1070,7 +1069,7 @@ func (m createModel) View() string {
 		}
 		s.WriteString(m.styles.Help.Render(msg))
 	default:
-		s.WriteString(m.styles.Help.Render(fmt.Sprintf("Estimated cost: %s calculating…", m.spinner.View())))
+		s.WriteString(m.styles.Help.Render("Estimated cost:"))
 	}
 
 	s.WriteString("\n")

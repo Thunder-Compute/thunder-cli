@@ -92,7 +92,7 @@ func TestBuildModifyRequestFromFlags(t *testing.T) {
 		{
 			name:          "vcpus for fixed-size spec rejected",
 			instance:      modifyInstance("production", "a100xl", "1", "18", 100),
-			flags:         map[string]string{"vcpus": "8"},
+			flags:         map[string]string{"vcpus": "18"},
 			expectError:   true,
 			errorContains: "vcpus must be one of",
 		},

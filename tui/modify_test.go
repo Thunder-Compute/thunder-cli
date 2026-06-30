@@ -56,16 +56,16 @@ func TestModifyModelSingleCountGPUInitializesNumGPUs(t *testing.T) {
 
 func TestModifyModelChangingGPUClearsStaleGPUCount(t *testing.T) {
 	specs := utils.NewSpecStore(map[string]api.GpuSpecConfig{
-		"a6000_x1": {GpuCount: 1, VcpuOptions: []int{4, 8}},
-		"a6000_x4": {GpuCount: 4, VcpuOptions: []int{16, 24}},
-		"h100_x1":  {GpuCount: 1, VcpuOptions: []int{8, 12}},
-		"h100_x2":  {GpuCount: 2, VcpuOptions: []int{16, 24}},
+		"a100xl_x1": {GpuCount: 1, VcpuOptions: []int{4, 8}},
+		"a100xl_x4": {GpuCount: 4, VcpuOptions: []int{16, 24}},
+		"h100_x1":   {GpuCount: 1, VcpuOptions: []int{8, 12}},
+		"h100_x2":   {GpuCount: 2, VcpuOptions: []int{16, 24}},
 	})
 	instance := &api.Instance{
 		ID:       "0",
 		Name:     "rqrljt9j",
 		Status:   "RUNNING",
-		GPUType:  "a6000",
+		GPUType:  "a100xl",
 		NumGPUs:  "1",
 		CPUCores: "8",
 		Storage:  100,
@@ -73,13 +73,11 @@ func TestModifyModelChangingGPUClearsStaleGPUCount(t *testing.T) {
 
 	model := NewModifyModel(nil, instance, specs).(modifyModel)
 
-	// Keep A6000, then select 4 GPUs.
+	// Keep A100, then select 4 GPUs.
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = updated.(modifyModel)
-	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	model = updated.(modifyModel)
 	if !model.gpuCountPhase {
-		t.Fatal("expected A6000 to show a GPU-count phase")
+		t.Fatal("expected A100 to show a GPU-count phase")
 	}
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
 	model = updated.(modifyModel)
@@ -89,7 +87,7 @@ func TestModifyModelChangingGPUClearsStaleGPUCount(t *testing.T) {
 		t.Fatalf("expected stale setup to select 4 GPUs, got %d", model.config.NumGPUs)
 	}
 
-	// Back up to GPU selection and choose H100. The old A6000 x4 count must not
+	// Back up to GPU selection and choose H100. The old A100 x4 count must not
 	// be reused for H100, whose valid counts are 1 and 2.
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model = updated.(modifyModel)
@@ -116,17 +114,17 @@ func TestModifyModelChangingGPUClearsStaleGPUCount(t *testing.T) {
 
 func TestModifyModelUnavailableGPUCountCannotBeSelected(t *testing.T) {
 	specs := utils.NewSpecStoreWithAvailability(map[string]api.GpuSpecConfig{
-		"a6000_x1": {GpuCount: 1, VcpuOptions: []int{4, 8}},
-		"a6000_x4": {GpuCount: 4, VcpuOptions: []int{16, 24}},
+		"a100xl_x1": {GpuCount: 1, VcpuOptions: []int{4, 8}},
+		"a100xl_x4": {GpuCount: 4, VcpuOptions: []int{16, 24}},
 	}, map[string]string{
-		"a6000_x1": "available",
-		"a6000_x4": "unavailable",
+		"a100xl_x1": "available",
+		"a100xl_x4": "unavailable",
 	})
 	instance := &api.Instance{
 		ID:       "0",
 		Name:     "rqrljt9j",
 		Status:   "RUNNING",
-		GPUType:  "a6000",
+		GPUType:  "a100xl",
 		NumGPUs:  "1",
 		CPUCores: "8",
 		Storage:  100,
@@ -135,10 +133,8 @@ func TestModifyModelUnavailableGPUCountCannotBeSelected(t *testing.T) {
 	model := NewModifyModel(nil, instance, specs).(modifyModel)
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = updated.(modifyModel)
-	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	model = updated.(modifyModel)
 	if !model.gpuCountPhase {
-		t.Fatal("expected A6000 to show a GPU-count phase")
+		t.Fatal("expected A100 to show a GPU-count phase")
 	}
 
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})

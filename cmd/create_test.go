@@ -57,11 +57,12 @@ func TestCreateFlagsDoNotRequireDisk(t *testing.T) {
 // GPU types, CPU configurations, and template validations.
 func TestValidateCreateConfig(t *testing.T) {
 	tests := []struct {
-		name          string
-		config        *tui.CreateConfig
-		templates     []api.TemplateEntry
-		expectError   bool
-		errorContains string
+		name           string
+		config         *tui.CreateConfig
+		templates      []api.TemplateEntry
+		diskSizeWasSet bool
+		expectError    bool
+		errorContains  string
 	}{
 		{
 			name: "valid config",
@@ -98,7 +99,7 @@ func TestValidateCreateConfig(t *testing.T) {
 				NumGPUs: 3,
 			},
 			expectError:   true,
-			errorContains: "num-gpus must be one of 1, 2, 4, or 8",
+			errorContains: "GPU count 3 is not valid for a100xl",
 		},
 		{
 			name: "invalid GPU type",
@@ -186,8 +187,9 @@ func TestValidateCreateConfig(t *testing.T) {
 			templates: []api.TemplateEntry{
 				tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 			},
-			expectError:   true,
-			errorContains: "disk size must be between 100 and 500 GB",
+			diskSizeWasSet: true,
+			expectError:    true,
+			errorContains:  "disk size must be between 100 and 500 GB",
 		},
 		{
 			name: "empty template is required error",
@@ -220,7 +222,7 @@ func TestValidateCreateConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateCreateConfig(tt.config, tt.templates, []api.Snapshot{}, false, testSpecStore())
+			err := validateCreateConfig(tt.config, tt.templates, []api.Snapshot{}, tt.diskSizeWasSet, testSpecStore())
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -487,7 +489,7 @@ func TestCreateConfigDiskSizeBoundaries(t *testing.T) {
 				tmplEntry("ubuntu-22.04", "Ubuntu 22.04"),
 			}
 
-			err := validateCreateConfig(config, templates, []api.Snapshot{}, false, testSpecStore())
+			err := validateCreateConfig(config, templates, []api.Snapshot{}, true, testSpecStore())
 
 			if tt.expectError {
 				assert.Error(t, err)
