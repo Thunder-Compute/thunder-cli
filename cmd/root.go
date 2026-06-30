@@ -320,7 +320,7 @@ func handleMandatoryUpdate(parentCtx context.Context, res updatepolicy.Result, m
 	if manual {
 		fmt.Fprintln(os.Stderr, "Installing update...")
 	} else {
-		fmt.Fprintln(os.Stderr, "Attempting automatic update...")
+		fmt.Fprintln(os.Stderr, "Attempting automatic update, you may be prompted for your system password...")
 	}
 	updateCtx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
 	defer cancel()
