@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -13,9 +14,10 @@ import (
 type BusyDoneMsg struct{}
 
 type BusyModel struct {
-	text     string
-	spin     spinner.Model
-	Quitting bool
+	text        string
+	spin        spinner.Model
+	Quitting    bool
+	Interrupted bool
 
 	styles busyStyles
 }
@@ -54,7 +56,7 @@ func (m BusyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "Q", "esc", "ctrl+c":
-			selfInterrupt()
+			m.Interrupted = true
 			m.Quitting = true
 			return m, tea.Quit
 		}
@@ -80,12 +82,22 @@ func RunWithBusySpinner(message string, out io.Writer, fn func() error) error {
 		fmt.Fprintf(os.Stderr, "%s\n", message)
 		return fn()
 	}
+
 	busy := NewBusyModel(message)
-	bp := tea.NewProgram(busy, tea.WithOutput(out))
-	done := make(chan struct{})
-	go func() { _, _ = bp.Run(); close(done) }()
-	err := fn()
-	bp.Send(BusyDoneMsg{})
-	<-done
-	return err
+
+	bp := tea.NewProgram(busy, tea.WithOutput(out), tea.WithoutSignalHandler())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- fn()
+		bp.Send(BusyDoneMsg{})
+	}()
+
+	finalModel, runErr := bp.Run()
+	if runErr != nil {
+		return runErr
+	}
+	if m, ok := finalModel.(BusyModel); ok && m.Interrupted {
+		return context.Canceled
+	}
+	return <-errCh
 }
