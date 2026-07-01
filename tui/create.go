@@ -906,7 +906,7 @@ func (m createModel) View() string {
 				if m.cursor == i {
 					cursor = m.styles.Cursor.Render("▶ ")
 				}
-				ram := vcpu * ramPerVCPU
+				ram := m.specs.RamForVCPU(m.config.GPUType, m.config.NumGPUs, vcpu)
 				line := fmt.Sprintf("%s%d vCPUs (%d GB RAM)", cursor, vcpu, ram)
 				if m.cursor == i {
 					line = fmt.Sprintf("%s%s", cursor, m.styles.Selected.Render(fmt.Sprintf("%d vCPUs (%d GB RAM)", vcpu, ram)))
@@ -1032,8 +1032,8 @@ func (m createModel) View() string {
 		panel.WriteString(m.styles.Label.Render("GPU Type:   ") + utils.FormatGPUType(m.config.GPUType) + "\n")
 		panel.WriteString(m.styles.Label.Render("GPUs:       ") + strconv.Itoa(m.config.NumGPUs) + "\n")
 		panel.WriteString(m.styles.Label.Render("vCPUs:      ") + strconv.Itoa(m.config.VCPUs) + "\n")
-		confirmRamPerVCPU := m.specs.RamPerVCPU(m.config.GPUType, m.config.NumGPUs)
-		panel.WriteString(m.styles.Label.Render("RAM:        ") + strconv.Itoa(m.config.VCPUs*confirmRamPerVCPU) + " GB\n")
+		confirmRAM := m.specs.RamForVCPU(m.config.GPUType, m.config.NumGPUs, m.config.VCPUs)
+		panel.WriteString(m.styles.Label.Render("RAM:        ") + strconv.Itoa(confirmRAM) + " GB\n")
 		panel.WriteString(m.styles.Label.Render("Disk Size:  ") + strconv.Itoa(m.config.DiskSizeGB) + " GB")
 
 		s.WriteString(m.styles.Panel.Render(panel.String()))

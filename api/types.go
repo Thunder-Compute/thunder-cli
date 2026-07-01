@@ -30,12 +30,15 @@ type StorageRange struct {
 
 // GpuSpecConfig represents a single GPU configuration entry.
 type GpuSpecConfig struct {
-	DisplayName   string       `json:"displayName"`
-	VramGB        int          `json:"vramGB"`
-	GpuCount      int          `json:"gpuCount"`
-	VcpuOptions   []int        `json:"vcpuOptions"`
-	RamPerVCPUGiB int          `json:"ramPerVCPUGiB"`
-	StorageGB     StorageRange `json:"storageGB"`
+	DisplayName   string `json:"displayName"`
+	VramGB        int    `json:"vramGB"`
+	GpuCount      int    `json:"gpuCount"`
+	VcpuOptions   []int  `json:"vcpuOptions"`
+	RamPerVCPUGiB int    `json:"ramPerVCPUGiB"`
+	// RamCapGiB, when > 0, caps total RAM at the max vCPU option (affine RAM).
+	// See services/pkg/thundertypes.GpuSpecConfig.MemoryGiB.
+	RamCapGiB int          `json:"ramCapGiB"`
+	StorageGB StorageRange `json:"storageGB"`
 }
 
 // GPUAvailabilityResponse represents GPU availability returned by /v2/status.
