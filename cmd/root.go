@@ -76,6 +76,9 @@ func Execute() int {
 
 	c, err := rootCmd.ExecuteC()
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return 130
+		}
 		if !isUserError(err) {
 			sentry.WithScope(func(scope *sentry.Scope) {
 				scope.SetTag("source", "catch_all")

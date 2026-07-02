@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,9 +15,10 @@ import (
 type BusyDoneMsg struct{}
 
 type BusyModel struct {
-	text     string
-	spin     spinner.Model
-	Quitting bool
+	text        string
+	spin        spinner.Model
+	Quitting    bool
+	Interrupted bool
 
 	styles busyStyles
 }
@@ -54,7 +57,7 @@ func (m BusyModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "Q", "esc", "ctrl+c":
-			selfInterrupt()
+			m.Interrupted = true
 			m.Quitting = true
 			return m, tea.Quit
 		}
@@ -75,17 +78,38 @@ func (m BusyModel) View() string {
 
 // RunWithBusySpinner shows a spinner while fn executes, then dismisses it.
 // In non-interactive mode (no TTY), it skips the TUI spinner and runs fn synchronously.
+//
+// If the user cancels (q/esc/ctrl+c) it returns context.Canceled immediately
+// while fn may still be running, so callers must not read fn's outputs unless
+// the returned error is nil. Keep fn read-only: a cancel that races a
+// just-completed fn is still reported as cancelled.
 func RunWithBusySpinner(message string, out io.Writer, fn func() error) error {
 	if !IsInteractive() {
 		fmt.Fprintf(os.Stderr, "%s\n", message)
 		return fn()
 	}
+
 	busy := NewBusyModel(message)
-	bp := tea.NewProgram(busy, tea.WithOutput(out))
-	done := make(chan struct{})
-	go func() { _, _ = bp.Run(); close(done) }()
-	err := fn()
-	bp.Send(BusyDoneMsg{})
-	<-done
-	return err
+
+	bp := tea.NewProgram(busy, tea.WithOutput(out), tea.WithoutSignalHandler())
+	errCh := make(chan error, 1)
+	go func() {
+		// A panic in fn would crash the process without unwinding the tty-restore
+		// defers in cmd.Execute; convert it to an error, keeping the panic-site stack.
+		defer func() {
+			if r := recover(); r != nil {
+				errCh <- fmt.Errorf("busy spinner task panicked: %v\n%s", r, debug.Stack())
+				bp.Send(BusyDoneMsg{})
+			}
+		}()
+		errCh <- fn()
+		bp.Send(BusyDoneMsg{})
+	}()
+
+	// A TUI failure must not fail the command; fall through to fn's result.
+	finalModel, _ := bp.Run()
+	if m, ok := finalModel.(BusyModel); ok && m.Interrupted {
+		return context.Canceled
+	}
+	return <-errCh
 }
