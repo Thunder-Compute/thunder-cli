@@ -116,7 +116,7 @@ func (m statusModel) Init() tea.Cmd {
 func hasTransitionalInstance(instances []api.Instance) bool {
 	for _, inst := range instances {
 		switch inst.Status {
-		case "PROVISIONING", "RESTORING", "MIGRATING", "STARTING", "STAGING", "PENDING", "QUEUED", "UNKNOWN":
+		case "PROVISIONING", "RESTORING", "MIGRATING", "STARTING", "STAGING", "PENDING", "QUEUED", "UNKNOWN", "MODIFYING":
 			return true
 		}
 	}
