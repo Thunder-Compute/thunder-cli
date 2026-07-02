@@ -28,7 +28,7 @@ Thunder Compute provides a remote MCP server that lets AI coding agents manage G
 
 No API tokens needed — authenticates via OAuth in the browser.
 
-**28 tools:** instance management, GPU specs/pricing/availability, snapshots, SSH keys, port forwarding, billing, and API tokens.
+**37 tools:** instance management, command execution and background jobs, file reads, GPU specs/pricing/availability, snapshots, SSH keys, port forwarding, billing, and API tokens.
 
 [Full MCP documentation](https://www.thundercompute.com/docs/guides/mcp-server)
 

@@ -10,7 +10,7 @@ MCP endpoint: `https://www.thundercompute.com/mcp`
 
 No API tokens needed — authenticates via OAuth in the browser.
 
-28 tools: instance management, GPU specs/pricing/availability, snapshots, SSH keys, port forwarding, connectivity, billing, and API tokens.
+37 tools: instance management, command execution and background jobs, file reads, GPU specs/pricing/availability, snapshots, SSH keys, port forwarding, connectivity, billing, and API tokens.
 
 Full MCP guide: https://www.thundercompute.com/docs/guides/mcp-server
 Documentation: https://www.thundercompute.com/docs
