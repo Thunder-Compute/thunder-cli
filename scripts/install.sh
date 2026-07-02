@@ -15,26 +15,14 @@ case "$ARCH" in x86_64|amd64) ARCH=amd64;; arm64|aarch64) ARCH=arm64;; *) echo "
 case "$OS" in darwin) OS=macos;; esac
 FILE_OS="$OS"; [[ "$OS" == "macos" ]] && FILE_OS=darwin
 
-for cmd in curl tar gzip; do
+for cmd in curl tar gzip sed sha256sum; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "Error: $cmd is required but not installed." >&2; exit 1; }
 done
 
-ensure_jq() {
-  command -v jq >/dev/null 2>&1 && return 0
-
-  echo "jq not found. Attempting to install..."
-  local sudo=""; [[ "$(id -u)" -ne 0 ]] && { sudo -n true 2>/dev/null && sudo="sudo" || { echo "jq is required. Install it manually and retry." >&2; exit 1; }; }
-
-  if   command -v apt-get >/dev/null 2>&1; then $sudo apt-get update -qq && $sudo apt-get install -y jq
-  elif command -v apk     >/dev/null 2>&1; then $sudo apk add --no-cache jq
-  elif command -v dnf     >/dev/null 2>&1; then $sudo dnf install -y jq
-  elif command -v yum     >/dev/null 2>&1; then $sudo yum install -y jq
-  else echo "Cannot auto-install jq. Install it manually: https://jqlang.github.io/jq/download/" >&2; exit 1
-  fi
-
-  command -v jq >/dev/null 2>&1 || { echo "jq installation failed." >&2; exit 1; }
+json_str() {
+  # $1 = file, $2 = literal JSON key
+  sed -n 's|.*"'"$2"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*|\1|p' "$1" | head -n1
 }
-ensure_jq
 
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
@@ -43,9 +31,9 @@ trap 'rm -rf "$tmpdir"' EXIT
 if [[ -n "$LATEST_URL" ]]; then
   echo "Fetching manifest: $LATEST_URL"
   curl -fsSL "$LATEST_URL" -o "$tmpdir/manifest.json"
-  [[ -z "$VERSION" ]] && VERSION=$(jq -r '.version' "$tmpdir/manifest.json")
-  url=$(jq -r --arg k "${OS}/${ARCH}" '.assets[$k]' "$tmpdir/manifest.json")
-  checksums=$(jq -r '.assets["checksums"]' "$tmpdir/manifest.json")
+  [[ -z "$VERSION" ]] && VERSION=$(json_str "$tmpdir/manifest.json" version)
+  url=$(json_str "$tmpdir/manifest.json" "${OS}/${ARCH}")
+  checksums=$(json_str "$tmpdir/manifest.json" checksums)
 elif [[ -n "$VERSION" ]]; then
   VERSION="${VERSION#v}"
   url="https://github.com/Thunder-Compute/thunder-cli/releases/download/v${VERSION}/tnr_${VERSION}_${FILE_OS}_${ARCH}.tar.gz"
@@ -53,7 +41,7 @@ elif [[ -n "$VERSION" ]]; then
 else
   echo "Fetching latest release from GitHub..."
   curl -fsSL -H "Accept: application/vnd.github+json" "$GITHUB_API" -o "$tmpdir/release.json"
-  VERSION=$(jq -r '.tag_name' "$tmpdir/release.json")
+  VERSION=$(json_str "$tmpdir/release.json" tag_name)
   VERSION="${VERSION#v}"
   url="https://github.com/Thunder-Compute/thunder-cli/releases/download/v${VERSION}/tnr_${VERSION}_${FILE_OS}_${ARCH}.tar.gz"
   checksums="https://github.com/Thunder-Compute/thunder-cli/releases/download/v${VERSION}/checksums.txt"
@@ -63,7 +51,7 @@ fi
 echo "Downloading tnr v${VERSION}..."
 curl -fL "$url" -o "$tmpdir/tnr.tar.gz"
 curl -fsSL "$checksums" -o "$tmpdir/checksums.txt"
-sum=$(sha256sum "$tmpdir/tnr.tar.gz" | awk '{print $1}')
+sum=$(sha256sum "$tmpdir/tnr.tar.gz" | cut -d' ' -f1)
 grep -q "$sum" "$tmpdir/checksums.txt" || { echo "Checksum mismatch" >&2; exit 1; }
 
 # Extract and install
