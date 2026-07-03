@@ -731,7 +731,7 @@ func (m modifyModel) renderComputeStep() string {
 		currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
 		vcpuOptions := m.specs.VCPUOptions(m.config.GPUType, m.config.NumGPUs)
 		for i, vcpus := range vcpuOptions {
-			ram := m.specs.RamForVCPU(m.config.GPUType, m.config.NumGPUs, vcpus)
+			ram := vcpus * ramPerVCPU
 			option := fmt.Sprintf("%d vCPUs (%d GB RAM)", vcpus, ram)
 
 			if vcpus == currentVCPUs {
@@ -785,9 +785,11 @@ func (m modifyModel) renderConfirmationStep() string {
 		if m.config.NumGPUs != currentNumGPUs {
 			panel.WriteString(m.styles.Label.Render("GPUs:       ") + fmt.Sprintf("%d → %d", currentNumGPUs, m.config.NumGPUs) + "\n")
 		}
+		currentRamPerVCPU := m.specs.RamPerVCPU(strings.ToLower(m.currentInstance.GPUType), currentNumGPUs)
+		newRamPerVCPU := m.specs.RamPerVCPU(m.config.GPUType, m.config.NumGPUs)
 		currentVCPUs, _ := strconv.Atoi(m.currentInstance.CPUCores)
-		currentRAM := m.specs.RamForVCPU(strings.ToLower(m.currentInstance.GPUType), currentNumGPUs, currentVCPUs)
-		newRAM := m.specs.RamForVCPU(m.config.GPUType, m.config.NumGPUs, m.config.VCPUs)
+		currentRAM := currentVCPUs * currentRamPerVCPU
+		newRAM := m.config.VCPUs * newRamPerVCPU
 		panel.WriteString(m.styles.Label.Render("vCPUs:      ") + fmt.Sprintf("%s → %d", m.currentInstance.CPUCores, m.config.VCPUs) + "\n")
 		panel.WriteString(m.styles.Label.Render("RAM:        ") + fmt.Sprintf("%d GB → %d GB", currentRAM, newRAM) + "\n")
 	}
