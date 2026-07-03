@@ -168,6 +168,27 @@ func (s *SpecStore) RamPerVCPU(gpuType string, numGPUs int) int {
 	return spec.RamPerVCPUGiB
 }
 
+// RamForVCPU returns total system RAM in GiB for a given vCPU count. When the
+// config sets ramCapGiB, RAM is affine (capped at the max vCPU option and reduced
+// by RamPerVCPUGiB per vCPU below it); otherwise it is vcpus * RamPerVCPUGiB.
+// Mirrors thundertypes.GpuSpecConfig.MemoryGiB.
+func (s *SpecStore) RamForVCPU(gpuType string, numGPUs, vcpus int) int {
+	spec := s.Lookup(gpuType, numGPUs)
+	if spec == nil {
+		return vcpus * 8
+	}
+	if spec.RamCapGiB > 0 && len(spec.VcpuOptions) > 0 {
+		maxVcpu := spec.VcpuOptions[0]
+		for _, v := range spec.VcpuOptions {
+			if v > maxVcpu {
+				maxVcpu = v
+			}
+		}
+		return spec.RamCapGiB - (maxVcpu-vcpus)*spec.RamPerVCPUGiB
+	}
+	return vcpus * spec.RamPerVCPUGiB
+}
+
 // StorageRange returns the min/max storage for a configuration.
 func (s *SpecStore) StorageRange(gpuType string, numGPUs int) (int, int) {
 	spec := s.Lookup(gpuType, numGPUs)
