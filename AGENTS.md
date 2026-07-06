@@ -41,10 +41,10 @@ tnr status           # List instances with status
 tnr connect <id>     # SSH into an instance
 tnr scp <src> <dst>  # Transfer files
 tnr delete <id>      # Delete an instance
-tnr port <id> <port> # Forward a port
+tnr ports forward <id> --add <port> # Forward a port
 ```
 
-Instance IDs are integers. Add `--json` for scripted/non-interactive usage.
+Instance IDs are integers (also accept UUID or name). Add `--json` for scripted/non-interactive usage.
 
 ## Development
 
