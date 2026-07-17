@@ -5,6 +5,7 @@ package types
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -174,6 +175,20 @@ type Snapshot struct {
 	MinimumDiskSizeGB int    `json:"minimumDiskSizeGb"`
 	Status            string `json:"status"`
 	CreatedAt         int64  `json:"createdAt"`
+}
+
+// NormalizedStatus returns the API snapshot status in its canonical form.
+func (s Snapshot) NormalizedStatus() string {
+	status := strings.ToUpper(strings.TrimSpace(s.Status))
+	if status == "" {
+		return "UNKNOWN"
+	}
+	return status
+}
+
+// IsReady reports whether the snapshot can be used to create an instance.
+func (s Snapshot) IsReady() bool {
+	return s.NormalizedStatus() == "READY"
 }
 
 // ListSnapshotsResponse is the list of user snapshots.

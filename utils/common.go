@@ -16,6 +16,8 @@ func FormatGPUType(gpuType string) string {
 		return "A6000"
 	case "a100xl":
 		return "A100 80GB"
+	case "l40":
+		return "L40"
 	case "h100":
 		return "H100"
 	default:

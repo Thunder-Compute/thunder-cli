@@ -349,6 +349,32 @@ func TestCreateConfigDefaultDiskSizeRespectsSnapshotMinimum(t *testing.T) {
 	assert.Equal(t, 550, config.DiskSizeGB)
 }
 
+func TestCreateConfigRejectsNonReadySnapshot(t *testing.T) {
+	for _, status := range []string{"CREATING", "FAILED", "UNKNOWN", ""} {
+		name := status
+		if name == "" {
+			name = "empty"
+		}
+		t.Run(name, func(t *testing.T) {
+			config := &tui.CreateConfig{
+				GPUType:  "h100",
+				NumGPUs:  4,
+				Template: "not-ready",
+			}
+			snapshots := []api.Snapshot{{
+				Name:              "not-ready",
+				MinimumDiskSizeGB: 100,
+				Status:            status,
+			}}
+
+			err := validateCreateConfig(config, []api.TemplateEntry{}, snapshots, false, testSpecStore())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "only READY snapshots can be used for creation")
+			assert.Contains(t, err.Error(), snapshots[0].NormalizedStatus())
+		})
+	}
+}
+
 func TestCreateConfigExplicitDiskCanBeBelowIncludedStorage(t *testing.T) {
 	config := &tui.CreateConfig{
 		GPUType:    "h100",

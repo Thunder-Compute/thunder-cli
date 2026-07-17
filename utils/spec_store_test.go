@@ -148,6 +148,7 @@ func TestNormalizeGPUType(t *testing.T) {
 		{"uppercase normalized", "A100", "a100xl", true},
 		{"unknown GPU", "v100", "v100", false},
 		{"h100", "h100", "h100", true},
+		{"uppercase l40", "L40", "l40", true},
 	}
 
 	for _, tt := range tests {

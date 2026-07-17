@@ -162,17 +162,6 @@ func (m *createModel) setDefaultDiskSize() {
 	m.config.DiskSizeGB = m.defaultDiskSizeGB()
 }
 
-// resolveGPU normalizes a user-provided GPU string.
-func resolveGPU(raw string) (string, bool) {
-	raw = strings.ToLower(raw)
-	gpuMap := map[string]string{"a6000": "a6000", "a100": "a100xl", "h100": "h100"}
-	canonical, ok := gpuMap[raw]
-	if !ok {
-		return "", false
-	}
-	return canonical, true
-}
-
 // trySkipCurrentStep is the core hybrid-mode method. It loops forward through
 // steps, auto-filling each one from presets if the preset value is valid given
 // the current config state. Called after every step transition.
@@ -182,8 +171,8 @@ func (m *createModel) trySkipCurrentStep() tea.Cmd {
 
 		switch m.step {
 		case stepGPU:
-			if m.presets != nil && m.presets.GPUType != nil {
-				canonical, ok := resolveGPU(*m.presets.GPUType)
+			if m.presets != nil && m.presets.GPUType != nil && m.specs != nil {
+				canonical, ok := m.specs.NormalizeGPUType(*m.presets.GPUType)
 				if ok && m.specs.IsGPUTypeAvailable(canonical) {
 					m.config.GPUType = canonical
 					m.skippedSteps[stepGPU] = true
@@ -319,6 +308,10 @@ func (m *createModel) trySkipTemplate() tea.Cmd {
 	// Check snapshots by name
 	for i, s := range m.snapshots {
 		if s.Name == raw {
+			if !s.IsReady() {
+				m.openSnapshotBrowserAt(i)
+				return nil
+			}
 			m.config.Template = s.Name
 			m.selectedSnapshot = &m.snapshots[i]
 			m.skippedSteps[stepTemplate] = true
@@ -333,6 +326,19 @@ func (m *createModel) trySkipTemplate() tea.Cmd {
 	// Not found — user picks manually
 	m.initStep()
 	return nil
+}
+
+func (m *createModel) openSnapshotBrowserAt(index int) {
+	if index < 0 || index >= len(m.snapshots) {
+		index = 0
+	}
+	m.templateBrowse = false
+	m.snapshotBrowse = true
+	m.cursor = index
+	m.snapshotOffset = 0
+	if index >= templateWindowSize {
+		m.snapshotOffset = index - templateWindowSize + 1
+	}
 }
 
 // initStep sets up step-specific state (cursor, focus, sub-phases) when arriving at a visible step.
@@ -396,6 +402,17 @@ type createPricingMsg struct {
 type createSpecsMsg struct {
 	specs *utils.SpecStore
 	err   error
+}
+
+func snapshotStatusLabel(snapshot api.Snapshot) string {
+	status := snapshot.NormalizedStatus()
+	if snapshot.IsReady() {
+		return status
+	}
+	if status == "CREATING" {
+		return status + " (not ready)"
+	}
+	return status + " (unavailable)"
 }
 
 func sortTemplates(templates []api.TemplateEntry) []api.TemplateEntry {
@@ -688,6 +705,9 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 			// Scrolling snapshot list
 			if m.cursor < len(m.snapshots) {
 				snapshot := m.snapshots[m.cursor]
+				if !snapshot.IsReady() {
+					return m, nil
+				}
 				m.config.Template = snapshot.Name
 				m.selectedSnapshot = &snapshot
 				if m.presets == nil || m.presets.DiskSizeGB == nil {
@@ -715,9 +735,7 @@ func (m createModel) handleEnter() (tea.Model, tea.Cmd) {
 				m.cursor = 0
 			case 2:
 				// "Custom Snapshots"
-				m.snapshotBrowse = true
-				m.snapshotOffset = 0
-				m.cursor = 0
+				m.openSnapshotBrowserAt(0)
 			}
 		}
 
@@ -983,8 +1001,10 @@ func (m createModel) View() string {
 					if m.cursor == i {
 						cursor = m.styles.Cursor.Render("▶ ")
 					}
-					name := fmt.Sprintf("%s (%d GB)", snapshot.Name, snapshot.MinimumDiskSizeGB)
-					if m.cursor == i {
+					name := fmt.Sprintf("%s (%d GB) — %s", snapshot.Name, snapshot.MinimumDiskSizeGB, snapshotStatusLabel(snapshot))
+					if !snapshot.IsReady() {
+						name = subtleTextStyle.Render(name)
+					} else if m.cursor == i {
 						name = m.styles.Selected.Render(name)
 					}
 					s.WriteString(fmt.Sprintf("%s%s\n", cursor, name))
@@ -993,6 +1013,16 @@ func (m createModel) View() string {
 				if winEnd < totalItems {
 					s.WriteString(m.styles.Help.Render(fmt.Sprintf("  ↓ %d more", totalItems-winEnd)) + "\n")
 				} else {
+					s.WriteString("\n")
+				}
+
+				if m.cursor < len(m.snapshots) && !m.snapshots[m.cursor].IsReady() {
+					snapshot := m.snapshots[m.cursor]
+					s.WriteString(warningStyleTUI.Render(fmt.Sprintf(
+						"Snapshot %q is %s. Only READY snapshots can be used for creation.",
+						snapshot.Name,
+						snapshot.NormalizedStatus(),
+					)))
 					s.WriteString("\n")
 				}
 			}

@@ -43,7 +43,7 @@ func init() {
 
 	rootCmd.AddCommand(createCmd)
 
-	createCmd.Flags().StringVar(&gpuType, "gpu", "", "GPU type (for example: a6000, a100, h100)")
+	createCmd.Flags().StringVar(&gpuType, "gpu", "", "GPU type (for example: a6000, a100, l40, h100)")
 	createCmd.Flags().IntVar(&numGPUs, "num-gpus", 0, "Number of GPUs")
 	createCmd.Flags().IntVar(&vcpus, "vcpus", 0, "CPU cores: options vary by GPU type and count")
 	createCmd.Flags().StringVar(&template, "template", "", "OS template key or name (accepts snapshot names too; --snapshot is an alias)")
@@ -201,13 +201,6 @@ func runCreate(cmd *cobra.Command) error {
 				return e
 			}
 			snapshots, _ = client.ListSnapshots()
-			readySnapshots := make([]api.Snapshot, 0)
-			for _, s := range snapshots {
-				if s.Status == "READY" {
-					readySnapshots = append(readySnapshots, s)
-				}
-			}
-			snapshots = readySnapshots
 			return nil
 		}); fetchErr != nil {
 			return fmt.Errorf("failed to fetch templates: %w", fetchErr)
@@ -368,6 +361,9 @@ func validateCreateConfig(config *tui.CreateConfig, templates []api.TemplateEntr
 	if !templateFound {
 		for _, s := range snapshots {
 			if s.Name == config.Template {
+				if !s.IsReady() {
+					return usageErr("snapshot %q is %s; only READY snapshots can be used for creation", s.Name, s.NormalizedStatus())
+				}
 				selectedSnapshot = &s
 				templateFound = true
 				break
