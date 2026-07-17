@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -356,7 +357,7 @@ func runInteractiveLogin() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	port, authChan, errChan, cleanup, err := startCallbackServerWithContext(ctx)
+	port, authChan, errChan, cleanup, err := startCallbackServerWithContext(ctx, state)
 	if err != nil {
 		return fmt.Errorf("failed to start callback server: %w", err)
 	}
@@ -451,7 +452,7 @@ func buildAuthURL(state, returnURI string) string {
 	return fmt.Sprintf("%s?%s", authURL, params.Encode())
 }
 
-func startCallbackServerWithContext(ctx context.Context) (int, <-chan AuthResponse, <-chan error, func(), error) {
+func startCallbackServerWithContext(ctx context.Context, expectedState string) (int, <-chan AuthResponse, <-chan error, func(), error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return 0, nil, nil, nil, err
@@ -477,6 +478,17 @@ func startCallbackServerWithContext(ctx context.Context) (int, <-chan AuthRespon
 			w.Header().Set("Content-Type", "text/html")
 			w.WriteHeader(http.StatusUnauthorized)
 			_ = authFailedTemplate.Execute(w, map[string]string{"Error": errorParam}) //nolint:errcheck // template execution error is non-fatal
+			return
+		}
+
+		// Validate the state parameter to prevent login CSRF. The state was
+		// generated locally and round-tripped through the browser; a mismatch
+		// means the callback did not originate from the flow we started.
+		if subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("state")), []byte(expectedState)) != 1 {
+			errChan <- fmt.Errorf("invalid state parameter (possible CSRF)")
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = authFailedTemplate.Execute(w, map[string]string{"Error": "Invalid state parameter"}) //nolint:errcheck // template execution error is non-fatal
 			return
 		}
 
