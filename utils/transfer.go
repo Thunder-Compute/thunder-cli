@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -48,16 +49,23 @@ func WrapAPIError(err error, context string) error {
 // Transfer uses rsync on Mac/Linux (with scp fallback), scp on Windows.
 // Retries up to 3 times on connection failures.
 func Transfer(ctx context.Context, keyFile, ip string, port int, localPath, remotePath string, upload bool) error {
+	return TransferWithOutput(ctx, keyFile, ip, port, localPath, remotePath, upload, os.Stdout, os.Stderr)
+}
+
+// TransferWithOutput performs a transfer while allowing callers to route
+// subprocess progress away from stdout when stdout is reserved for structured
+// output.
+func TransferWithOutput(ctx context.Context, keyFile, ip string, port int, localPath, remotePath string, upload bool, stdout, stderr io.Writer) error {
 	var err error
 	for attempt := 1; attempt <= 3; attempt++ {
 		if runtime.GOOS != "windows" {
 			if _, lookErr := exec.LookPath("rsync"); lookErr == nil {
-				err = rsyncTransfer(ctx, keyFile, ip, port, localPath, remotePath, upload)
+				err = rsyncTransfer(ctx, keyFile, ip, port, localPath, remotePath, upload, stdout, stderr)
 			} else {
-				err = scpTransfer(ctx, keyFile, ip, port, localPath, remotePath, upload)
+				err = scpTransfer(ctx, keyFile, ip, port, localPath, remotePath, upload, stdout, stderr)
 			}
 		} else {
-			err = scpTransfer(ctx, keyFile, ip, port, localPath, remotePath, upload)
+			err = scpTransfer(ctx, keyFile, ip, port, localPath, remotePath, upload, stdout, stderr)
 		}
 		if err == nil {
 			return nil
@@ -111,7 +119,7 @@ func wrapTransferError(err error, upload bool) error {
 	}
 }
 
-func rsyncTransfer(ctx context.Context, keyFile, ip string, port int, localPath, remotePath string, upload bool) error {
+func rsyncTransfer(ctx context.Context, keyFile, ip string, port int, localPath, remotePath string, upload bool, stdout, stderr io.Writer) error {
 	remote := fmt.Sprintf("ubuntu@%s:%s", ip, remotePath)
 	sshCmd := fmt.Sprintf("ssh -i %s -p %d -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=30", keyFile, port)
 	args := []string{"-az", "--progress", "-e", sshCmd, localPath, remote}
@@ -119,20 +127,20 @@ func rsyncTransfer(ctx context.Context, keyFile, ip string, port int, localPath,
 		args = []string{"-az", "--progress", "-e", sshCmd, remote, localPath}
 	}
 	cmd := exec.CommandContext(ctx, "rsync", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	return cmd.Run()
 }
 
-func scpTransfer(ctx context.Context, keyFile, ip string, port int, localPath, remotePath string, upload bool) error {
+func scpTransfer(ctx context.Context, keyFile, ip string, port int, localPath, remotePath string, upload bool, stdout, stderr io.Writer) error {
 	remote := fmt.Sprintf("ubuntu@%s:%s", ip, remotePath)
 	args := []string{"-i", keyFile, "-P", fmt.Sprintf("%d", port), "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=30", "-r", localPath, remote}
 	if !upload {
 		args = []string{"-i", keyFile, "-P", fmt.Sprintf("%d", port), "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=30", "-r", remote, localPath}
 	}
 	cmd := exec.CommandContext(ctx, "scp", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	return cmd.Run()
 }
 

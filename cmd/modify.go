@@ -80,6 +80,9 @@ func runModify(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(instances) == 0 {
+		if JSONOutput {
+			return usageErr("no instances found; create an instance first using 'tnr create'")
+		}
 		PrintWarningSimple("No instances found. Use 'tnr create' to create a Thunder Compute instance.")
 		return nil
 	}
@@ -235,7 +238,11 @@ func runModify(cmd *cobra.Command, args []string) error {
 
 		included := specs.IncludedVCPUs(resultGPU, resultNumGPUs)
 		price := utils.CalculateHourlyPrice(pd, resultGPU, resultNumGPUs, resultVCPUs, resultDisk, included)
-		fmt.Printf("\nEstimated cost: %s\n", utils.FormatPrice(price))
+		if JSONOutput {
+			fmt.Fprintf(os.Stderr, "Estimated cost: %s\n", utils.FormatPrice(price))
+		} else {
+			fmt.Printf("\nEstimated cost: %s\n", utils.FormatPrice(price))
+		}
 	}
 
 	// Make API call

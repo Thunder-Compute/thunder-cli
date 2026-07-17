@@ -15,6 +15,7 @@ var snapshotListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
 	Short:   "List all snapshots",
+	Args:    wrapArgs(cobra.NoArgs),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runSnapshotList()
 	},

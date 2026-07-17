@@ -34,6 +34,7 @@ Examples:
   tnr ports forward 1 --add 8080,3000
   tnr ports forward 1 --add 9000-9010
   tnr ports fwd 1 --add 8080 --remove 443`,
+	Args: wrapArgs(cobra.MaximumNArgs(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runPortsForward(cmd, args)
 	},
@@ -63,6 +64,9 @@ func runPortsForward(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(instances) == 0 {
+		if JSONOutput {
+			return usageErr("no instances found; create an instance first using 'tnr create'")
+		}
 		PrintWarningSimple("No instances found. Use 'tnr create' to create a Thunder Compute instance.")
 		return nil
 	}

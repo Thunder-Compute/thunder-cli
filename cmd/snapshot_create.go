@@ -24,6 +24,7 @@ var (
 var snapshotCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a snapshot from an instance",
+	Args:  wrapArgs(cobra.NoArgs),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runSnapshotCreate(cmd)
 	},
@@ -70,12 +71,21 @@ func renderSnapshotCreateSuccess(resp **api.CreateSnapshotResponse) func() strin
 }
 
 func runSnapshotCreate(cmd *cobra.Command) error {
+	isInteractive := tui.IsInteractive() && !JSONOutput &&
+		!cmd.Flags().Changed("instance-id") && !cmd.Flags().Changed("name")
+	if !isInteractive {
+		if snapshotInstanceID == "" {
+			return usageErr("--instance-id is required in non-interactive mode")
+		}
+		if snapshotName == "" {
+			return usageErr("--name is required in non-interactive mode")
+		}
+	}
+
 	client, err := getAuthenticatedClient()
 	if err != nil {
 		return err
 	}
-
-	isInteractive := !cmd.Flags().Changed("instance-id")
 
 	var instanceID, name string
 
@@ -97,12 +107,6 @@ func runSnapshotCreate(cmd *cobra.Command) error {
 		name = createConfig.Name
 	} else {
 		// Non-interactive mode: validate flags
-		if snapshotInstanceID == "" {
-			return usageErr("--instance-id is required")
-		}
-		if snapshotName == "" {
-			return usageErr("--name is required")
-		}
 		instanceID = snapshotInstanceID
 		name = snapshotName
 

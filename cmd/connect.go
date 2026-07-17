@@ -76,6 +76,7 @@ func defaultConnectOptions(token, baseURL string) *connectOptions {
 var connectCmd = &cobra.Command{
 	Use:   "connect [instance_id]",
 	Short: "Establish an SSH connection to a Thunder Compute instance",
+	Args:  wrapArgs(cobra.MaximumNArgs(1)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var instanceID string
 		if len(args) > 0 {
@@ -159,6 +160,9 @@ func runConnectWithOptions(instanceID string, tunnelPortsStr []string, debug boo
 		return nil
 	}
 	if len(instances) == 0 {
+		if JSONOutput {
+			return usageErr("no instances found; create an instance first using 'tnr create'")
+		}
 		PrintWarningSimple("No instances found. Create an instance first using 'tnr create'")
 		return nil
 	}

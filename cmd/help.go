@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/version"
 	termx "github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -54,8 +55,8 @@ func printJSONHelp(cmd *cobra.Command) {
 		Usage:       cmd.UseLine(),
 	}
 
-	if v := cmd.Root().Version; v != "" && cmd == cmd.Root() {
-		h.Version = v
+	if cmd == cmd.Root() {
+		h.Version = version.BuildVersion
 	}
 
 	for _, sub := range cmd.Commands() {
@@ -68,32 +69,31 @@ func printJSONHelp(cmd *cobra.Command) {
 		}
 	}
 
-	cmd.Flags().VisitAll(func(f *pflag.Flag) {
-		if f.Hidden {
-			return
-		}
-		h.Flags = append(h.Flags, jsonFlag{
-			Name:        "--" + f.Name,
-			Shorthand:   f.Shorthand,
-			Description: f.Usage,
-			Type:        f.Value.Type(),
-			Default:     f.DefValue,
+	seenFlags := make(map[string]struct{})
+	appendFlags := func(flags *pflag.FlagSet) {
+		flags.VisitAll(func(f *pflag.Flag) {
+			if f.Hidden {
+				return
+			}
+			if _, duplicate := seenFlags[f.Name]; duplicate {
+				return
+			}
+			seenFlags[f.Name] = struct{}{}
+			h.Flags = append(h.Flags, jsonFlag{
+				Name:        "--" + f.Name,
+				Shorthand:   f.Shorthand,
+				Description: f.Usage,
+				Type:        f.Value.Type(),
+				Default:     f.DefValue,
+			})
 		})
-	})
+	}
 
-	// Include inherited persistent flags (e.g. --json, --yes).
-	cmd.InheritedFlags().VisitAll(func(f *pflag.Flag) {
-		if f.Hidden {
-			return
-		}
-		h.Flags = append(h.Flags, jsonFlag{
-			Name:        "--" + f.Name,
-			Shorthand:   f.Shorthand,
-			Description: f.Usage,
-			Type:        f.Value.Type(),
-			Default:     f.DefValue,
-		})
-	})
+	// NonInheritedFlags contains flags owned by this command; inherited flags
+	// are added separately. cmd.Flags() merges both sets after parsing, which
+	// caused global flags to appear twice in JSON help.
+	appendFlags(cmd.NonInheritedFlags())
+	appendFlags(cmd.InheritedFlags())
 
 	printJSON(h)
 }

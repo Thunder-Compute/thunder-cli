@@ -18,6 +18,7 @@ var verboseStatus bool
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "List and monitor Thunder Compute instances",
+	Args:  wrapArgs(cobra.NoArgs),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return RunStatus()
 	},

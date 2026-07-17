@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,14 +41,14 @@ var rootCmd = &cobra.Command{
 	Use:           "tnr",
 	Short:         "Thunder Compute CLI",
 	Long:          "tnr is the command-line interface for Thunder Compute.\nUse it to manage and connect to your Thunder Compute instances.",
-	Version:       version.BuildVersion,
 	SilenceErrors: true,
-	Run: func(cmd *cobra.Command, args []string) {
+	Args:          wrapArgs(cobra.NoArgs),
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if v, err := cmd.Flags().GetBool("version"); err == nil && v {
-			fmt.Fprint(cmd.OutOrStdout(), versionTemplate())
-			return
+			printVersion(cmd)
+			return nil
 		}
-		helpmenus.RenderRootHelp(cmd)
+		return cmd.Help()
 	},
 }
 
@@ -53,10 +56,50 @@ func versionTemplate() string {
 	return fmt.Sprintf("tnr version %s\n", version.BuildVersion)
 }
 
+func printVersion(cmd *cobra.Command) {
+	if JSONOutput {
+		printJSON(map[string]string{"version": version.BuildVersion})
+		return
+	}
+	fmt.Fprint(cmd.OutOrStdout(), versionTemplate())
+}
+
+// detectJSONOutput runs before Cobra resolves commands or parses flags so
+// parse failures such as an unknown command still honor --json. Invalid
+// --json values are treated as a request for JSON, allowing the validation
+// error itself to be returned as JSON.
+func detectJSONOutput(args []string) bool {
+	requested := false
+	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
+		if arg == "--json" {
+			requested = true
+			continue
+		}
+		if !strings.HasPrefix(arg, "--json=") {
+			continue
+		}
+		value := strings.TrimPrefix(arg, "--json=")
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			requested = true
+			continue
+		}
+		requested = parsed
+	}
+	return requested
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // Returns the process exit code; main is responsible for os.Exit so deferred tty
 // restore runs on every path (os.Exit skips defers).
 func Execute() int {
+	requestedJSON := detectJSONOutput(os.Args[1:])
+	JSONOutput = requestedJSON
+	tui.SetNonInteractive(JSONOutput)
+
 	// Heal an inherited-broken tty (e.g. left in raw mode by a previous tnr
 	// process that was SIGKILL'd) before snapshotting. Detect-and-heal only
 	// touches the tty when canonical cooked-mode bits are missing, so users
@@ -76,7 +119,15 @@ func Execute() int {
 
 	c, err := rootCmd.ExecuteC()
 	if err != nil {
+		// pflag may overwrite a pre-detected true value while rejecting an
+		// invalid --json value. Error rendering still needs to honor the user's
+		// request for structured output.
+		JSONOutput = requestedJSON
+		tui.SetNonInteractive(JSONOutput)
 		if errors.Is(err, context.Canceled) {
+			if JSONOutput {
+				PrintError(err)
+			}
 			return 130
 		}
 		if !isUserError(err) {
@@ -186,7 +237,6 @@ func isUserError(err error) bool {
 
 func init() {
 	tui.InitCommonStyles(os.Stdout)
-	rootCmd.SetVersionTemplate(versionTemplate())
 	if rootCmd.Flags().Lookup("version") == nil {
 		rootCmd.Flags().BoolP("version", "v", false, "Show version information")
 	}
@@ -208,8 +258,9 @@ func init() {
 	completionCmd := &cobra.Command{
 		Use:   "completion [shell]",
 		Short: "Generate the autocompletion script for tnr for the specified shell",
-		Run: func(cmd *cobra.Command, args []string) {
-			_ = rootCmd.GenBashCompletionV2(os.Stdout, true) //nolint:errcheck // completion generation error is non-fatal
+		Args:  wrapArgs(cobra.NoArgs),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCompletion("bash")
 		},
 	}
 
@@ -218,32 +269,36 @@ func init() {
 	completionCmd.AddCommand(&cobra.Command{
 		Use:   "bash",
 		Short: "Generate the autocompletion script for bash",
-		Run: func(cmd *cobra.Command, args []string) {
-			_ = rootCmd.GenBashCompletionV2(os.Stdout, true) //nolint:errcheck // completion generation error is non-fatal
+		Args:  wrapArgs(cobra.NoArgs),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCompletion("bash")
 		},
 	})
 
 	completionCmd.AddCommand(&cobra.Command{
 		Use:   "zsh",
 		Short: "Generate the autocompletion script for zsh",
-		Run: func(cmd *cobra.Command, args []string) {
-			_ = rootCmd.GenZshCompletion(os.Stdout) //nolint:errcheck // completion generation error is non-fatal
+		Args:  wrapArgs(cobra.NoArgs),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCompletion("zsh")
 		},
 	})
 
 	completionCmd.AddCommand(&cobra.Command{
 		Use:   "fish",
 		Short: "Generate the autocompletion script for fish",
-		Run: func(cmd *cobra.Command, args []string) {
-			_ = rootCmd.GenFishCompletion(os.Stdout, true) //nolint:errcheck // completion generation error is non-fatal
+		Args:  wrapArgs(cobra.NoArgs),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCompletion("fish")
 		},
 	})
 
 	completionCmd.AddCommand(&cobra.Command{
 		Use:   "powershell",
 		Short: "Generate the autocompletion script for powershell",
-		Run: func(cmd *cobra.Command, args []string) {
-			_ = rootCmd.GenPowerShellCompletion(os.Stdout) //nolint:errcheck // completion generation error is non-fatal
+		Args:  wrapArgs(cobra.NoArgs),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCompletion("powershell")
 		},
 	})
 
@@ -261,6 +316,35 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+func runCompletion(shell string) error {
+	var output bytes.Buffer
+	var destination io.Writer = os.Stdout
+	if JSONOutput {
+		destination = &output
+	}
+
+	var err error
+	switch shell {
+	case "bash":
+		err = rootCmd.GenBashCompletionV2(destination, true)
+	case "zsh":
+		err = rootCmd.GenZshCompletion(destination)
+	case "fish":
+		err = rootCmd.GenFishCompletion(destination, true)
+	case "powershell":
+		err = rootCmd.GenPowerShellCompletion(destination)
+	default:
+		return usageErr("unsupported completion shell %q", shell)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to generate %s completion: %w", shell, err)
+	}
+	if JSONOutput {
+		printJSON(map[string]string{"shell": shell, "script": output.String()})
+	}
+	return nil
 }
 
 func checkIfUpdateNeeded(cmd *cobra.Command) {
@@ -523,10 +607,16 @@ func shouldSkipSubscriptionCheck(cmd *cobra.Command) bool {
 	if helpFlag := cmd.Flags().Lookup("help"); helpFlag != nil && helpFlag.Changed {
 		return true
 	}
+	if versionFlag := cmd.Flags().Lookup("version"); versionFlag != nil && versionFlag.Changed {
+		return true
+	}
 	return false
 }
 
 func shouldSkipUpdateCheck(cmd *cobra.Command) bool {
+	if JSONOutput {
+		return true
+	}
 	if cmd == nil {
 		return false
 	}
@@ -543,6 +633,9 @@ func shouldSkipUpdateCheck(cmd *cobra.Command) bool {
 	}
 
 	if helpFlag := cmd.Flags().Lookup("help"); helpFlag != nil && helpFlag.Changed {
+		return true
+	}
+	if versionFlag := cmd.Flags().Lookup("version"); versionFlag != nil && versionFlag.Changed {
 		return true
 	}
 

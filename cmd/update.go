@@ -20,6 +20,7 @@ var updateCmd = &cobra.Command{
 	Annotations: map[string]string{
 		"skipUpdateCheck": "true",
 	},
+	Args: wrapArgs(cobra.NoArgs),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runUpdateCommand()
 	},
@@ -32,6 +33,9 @@ func init() {
 }
 
 func runUpdateCommand() error {
+	if JSONOutput {
+		return usageErr("--json is not supported for self-update")
+	}
 	if os.Getenv("TNR_NO_SELFUPDATE") == "1" {
 		return usageErr("self-update is disabled (TNR_NO_SELFUPDATE=1)")
 	}

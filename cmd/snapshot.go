@@ -12,6 +12,7 @@ var snapshotCmd = &cobra.Command{
 	Aliases: []string{"snapshots", "snap"},
 	Short:   "Manage Thunder Compute snapshots",
 	Long:    "Create snapshots of your Thunder Compute instances.",
+	Args:    wrapArgs(cobra.NoArgs),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Show help when parent command is called without subcommand
 		_ = cmd.Help()

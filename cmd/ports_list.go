@@ -22,6 +22,7 @@ var portsListCmd = &cobra.Command{
 	Aliases: []string{"ls"},
 	Short:   "List forwarded ports for all instances",
 	Long:    "Display a table of all instances with their forwarded HTTP ports.",
+	Args:    wrapArgs(cobra.NoArgs),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runPortsList()
 	},

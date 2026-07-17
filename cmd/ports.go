@@ -12,6 +12,7 @@ var portsCmd = &cobra.Command{
 	Aliases: []string{"port"},
 	Short:   "Manage HTTP port forwarding for instances",
 	Long:    "Commands for listing and managing forwarded HTTP ports on Thunder instances.",
+	Args:    wrapArgs(cobra.NoArgs),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Show help when parent command is called without subcommand
 		_ = cmd.Help()

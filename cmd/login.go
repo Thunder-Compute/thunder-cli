@@ -236,6 +236,7 @@ var loginToken string
 var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Authenticate with Thunder Compute",
+	Args:  wrapArgs(cobra.NoArgs),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runLogin()
 	},
@@ -258,6 +259,25 @@ func loginMessage(prefix string, result *api.ValidateTokenResult) string {
 	return prefix + "."
 }
 
+type loginJSONOutput struct {
+	Status       string `json:"status"`
+	Email        string `json:"email,omitempty"`
+	Organization string `json:"organization,omitempty"`
+}
+
+func renderLoginOutput(status, message string, result *api.ValidateTokenResult, humanOutput func(string)) {
+	output := loginJSONOutput{Status: status}
+	if result != nil {
+		output.Email = result.Email
+		output.Organization = result.OrgName
+	}
+	if JSONOutput {
+		printJSON(output)
+		return
+	}
+	humanOutput(loginMessage(message, result))
+}
+
 func runLogin() error {
 	config, err := LoadConfig()
 	if err == nil && config.Token != "" {
@@ -266,11 +286,14 @@ func runLogin() error {
 		defer cancel()
 
 		result, err := client.ValidateToken(ctx)
-		if err == nil {
-			PrintWarningSimple(loginMessage("Already logged in", result))
-		} else {
+		if err != nil {
+			if JSONOutput {
+				return fmt.Errorf("token validation failed: %w", err)
+			}
 			PrintWarningSimple("Already logged in.")
+			return nil
 		}
+		renderLoginOutput("already_logged_in", "Already logged in", result, PrintWarningSimple)
 		return nil
 	}
 
@@ -292,7 +315,7 @@ func runLogin() error {
 			if err := saveConfig(authResp); err != nil {
 				return fmt.Errorf("failed to save credentials: %w", err)
 			}
-			PrintSuccessSimple(loginMessage("Logged in", result))
+			renderLoginOutput("logged_in", "Logged in", result, PrintSuccessSimple)
 			return nil
 		}
 	}
@@ -313,8 +336,12 @@ func runLogin() error {
 		if err := saveConfig(authResp); err != nil {
 			return fmt.Errorf("failed to save credentials: %w", err)
 		}
-		PrintSuccessSimple(loginMessage("Logged in", result))
+		renderLoginOutput("logged_in", "Logged in", result, PrintSuccessSimple)
 		return nil
+	}
+
+	if JSONOutput {
+		return usageErr("--token or TNR_API_TOKEN is required with --json; browser login is interactive")
 	}
 
 	return runInteractiveLogin()
@@ -394,7 +421,7 @@ func runInteractiveLogin() error {
 		if err := saveConfig(authResp); err != nil {
 			return fmt.Errorf("failed to save credentials: %w", err)
 		}
-		PrintSuccessSimple(loginMessage("Logged in", result))
+		renderLoginOutput("logged_in", "Logged in", result, PrintSuccessSimple)
 		return nil
 	}
 
@@ -599,6 +626,7 @@ var logoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "Log out from Thunder Compute",
 	Long:  `Log out from Thunder Compute and remove saved authentication credentials.`,
+	Args:  wrapArgs(cobra.NoArgs),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runLogout()
 	},
@@ -625,9 +653,17 @@ func runLogout() error {
 	}
 
 	if !configExists && envToken == "" {
+		if JSONOutput {
+			printJSON(map[string]string{"status": "not_logged_in"})
+			return nil
+		}
 		PrintWarningSimple("You are not logged in.")
 		return nil
 	} else if envToken != "" {
+		if JSONOutput {
+			printJSON(map[string]string{"status": "environment_token_active"})
+			return nil
+		}
 		PrintWarningSimple("You are authenticated via TNR_API_TOKEN environment variable.")
 		return nil
 	}
@@ -636,6 +672,10 @@ func runLogout() error {
 		return fmt.Errorf("failed to remove config file: %w", err)
 	}
 
-	PrintSuccessSimple("Successfully logged out from Thunder Compute!")
+	if JSONOutput {
+		printJSON(map[string]string{"status": "logged_out"})
+	} else {
+		PrintSuccessSimple("Successfully logged out from Thunder Compute!")
+	}
 	return nil
 }

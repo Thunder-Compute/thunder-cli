@@ -137,6 +137,10 @@ func runSCP(sources []string, destination string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+	transferOutput := os.Stdout
+	if JSONOutput {
+		transferOutput = os.Stderr
+	}
 
 	// Transfer each source
 	for _, src := range sourcePaths {
@@ -151,7 +155,11 @@ func runSCP(sources []string, destination string) error {
 			if remotePath == "" {
 				remotePath = "./"
 			}
-			fmt.Printf("Uploading %s to %s:%s\n", localPath, target.Name, remotePath)
+			if JSONOutput {
+				fmt.Fprintf(os.Stderr, "Uploading %s to %s:%s\n", localPath, target.Name, remotePath)
+			} else {
+				fmt.Printf("Uploading %s to %s:%s\n", localPath, target.Name, remotePath)
+			}
 		} else {
 			remotePath = src.Path
 			localPath = destPath.Path
@@ -159,12 +167,19 @@ func runSCP(sources []string, destination string) error {
 				homeDir, _ := os.UserHomeDir()
 				localPath = filepath.Join(homeDir, localPath[2:])
 			}
-			fmt.Printf("Downloading %s:%s to %s\n", target.Name, remotePath, localPath)
+			if JSONOutput {
+				fmt.Fprintf(os.Stderr, "Downloading %s:%s to %s\n", target.Name, remotePath, localPath)
+			} else {
+				fmt.Printf("Downloading %s:%s to %s\n", target.Name, remotePath, localPath)
+			}
 		}
 
-		err := utils.Transfer(ctx, keyFile, target.GetIP(), target.Port, localPath, remotePath, direction == "upload")
+		err := utils.TransferWithOutput(ctx, keyFile, target.GetIP(), target.Port, localPath, remotePath, direction == "upload", transferOutput, os.Stderr)
 		if err != nil {
 			if errors.Is(err, utils.ErrTransferCancelled) {
+				if JSONOutput {
+					return err
+				}
 				fmt.Println("\nTransfer cancelled")
 				return nil
 			}
@@ -178,7 +193,21 @@ func runSCP(sources []string, destination string) error {
 		}
 	}
 
-	fmt.Println("Transfer complete")
+	if JSONOutput {
+		printJSON(struct {
+			Status     string `json:"status"`
+			Direction  string `json:"direction"`
+			InstanceID string `json:"instance_id"`
+			Files      int    `json:"files"`
+		}{
+			Status:     "complete",
+			Direction:  direction,
+			InstanceID: instanceID,
+			Files:      len(sources),
+		})
+	} else {
+		fmt.Println("Transfer complete")
+	}
 	return nil
 }
 
