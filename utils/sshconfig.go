@@ -27,31 +27,7 @@ func UpdateSSHConfig(instanceID, ip string, port int, uuid string, tunnelPorts [
 		existingLines = strings.Split(string(data), "\n")
 	}
 
-	// Check if entry exists
 	hostName := fmt.Sprintf("tnr-%s", instanceID)
-	existingIndex := -1
-	inBlock := false
-	blockStart := -1
-	blockEnd := -1
-
-	for i, line := range existingLines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "Host ") {
-			if inBlock {
-				blockEnd = i - 1
-				break
-			}
-			if strings.Contains(trimmed, hostName) {
-				existingIndex = i
-				blockStart = i
-				inBlock = true
-			}
-		}
-	}
-
-	if inBlock && blockEnd == -1 {
-		blockEnd = len(existingLines) - 1
-	}
 
 	// Build new SSH config entry
 	keyFile := GetKeyFile(uuid)
@@ -78,22 +54,7 @@ func UpdateSSHConfig(instanceID, ip string, port int, uuid string, tunnelPorts [
 		configLines = append(configLines, fmt.Sprintf("    LocalForward %d localhost:%d", port, port))
 	}
 
-	// Update or append config
-	var newLines []string
-	if existingIndex != -1 {
-		// Replace existing block
-		newLines = append(existingLines[:blockStart], configLines...)
-		if blockEnd+1 < len(existingLines) {
-			newLines = append(newLines, existingLines[blockEnd+1:]...)
-		}
-	} else {
-		// Append new entry
-		newLines = existingLines
-		if len(newLines) > 0 && newLines[len(newLines)-1] != "" {
-			newLines = append(newLines, "")
-		}
-		newLines = append(newLines, configLines...)
-	}
+	newLines := upsertSSHHostBlock(existingLines, configLines, hostName)
 
 	// Write config
 	content := strings.Join(newLines, "\n")
@@ -106,6 +67,50 @@ func UpdateSSHConfig(instanceID, ip string, port int, uuid string, tunnelPorts [
 	}
 
 	return nil
+}
+
+func upsertSSHHostBlock(existingLines, configLines []string, hostName string) []string {
+	blockStart := -1
+	blockEnd := len(existingLines)
+
+	for i, line := range existingLines {
+		if blockStart == -1 {
+			if isExactSSHHostDirective(line, hostName) {
+				blockStart = i
+			}
+			continue
+		}
+
+		if isSSHConfigBlockStart(line) {
+			blockEnd = i
+			break
+		}
+	}
+
+	if blockStart != -1 {
+		newLines := make([]string, 0, len(existingLines)-(blockEnd-blockStart)+len(configLines))
+		newLines = append(newLines, existingLines[:blockStart]...)
+		newLines = append(newLines, configLines...)
+		newLines = append(newLines, existingLines[blockEnd:]...)
+		return newLines
+	}
+
+	newLines := make([]string, 0, len(existingLines)+len(configLines)+1)
+	newLines = append(newLines, existingLines...)
+	if len(newLines) > 0 && newLines[len(newLines)-1] != "" {
+		newLines = append(newLines, "")
+	}
+	return append(newLines, configLines...)
+}
+
+func isExactSSHHostDirective(line, hostName string) bool {
+	fields := strings.Fields(line)
+	return len(fields) == 2 && strings.EqualFold(fields[0], "Host") && fields[1] == hostName
+}
+
+func isSSHConfigBlockStart(line string) bool {
+	fields := strings.Fields(line)
+	return len(fields) > 0 && (strings.EqualFold(fields[0], "Host") || strings.EqualFold(fields[0], "Match"))
 }
 
 // GetTemplateOpenPorts returns the list of open ports for a given template
