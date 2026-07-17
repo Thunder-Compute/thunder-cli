@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -337,6 +340,63 @@ func TestLoginCommandTableDriven(t *testing.T) {
 
 				assert.Equal(t, tt.authResp.Token, config.Token)
 				assert.Equal(t, tt.authResp.RefreshToken, config.RefreshToken)
+			}
+		})
+	}
+}
+
+// TestCallbackServerStateValidation verifies that the local OAuth callback
+// server accepts a token only when the returned state matches the state the
+// login flow generated, guarding against login CSRF.
+func TestCallbackServerStateValidation(t *testing.T) {
+	const expectedState = "expected_state_value_abc123"
+
+	tests := []struct {
+		name       string
+		query      string
+		wantToken  string
+		wantErrMsg string
+	}{
+		{
+			name:      "matching state accepts token",
+			query:     fmt.Sprintf("token=good_token&state=%s", expectedState),
+			wantToken: "good_token",
+		},
+		{
+			name:       "mismatched state is rejected",
+			query:      "token=attacker_token&state=wrong_state",
+			wantErrMsg: "invalid state parameter",
+		},
+		{
+			name:       "missing state is rejected",
+			query:      "token=attacker_token",
+			wantErrMsg: "invalid state parameter",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			port, authChan, errChan, cleanup, err := startCallbackServerWithContext(ctx, expectedState)
+			require.NoError(t, err)
+			defer cleanup()
+
+			url := fmt.Sprintf("http://127.0.0.1:%d/callback?%s", port, tt.query)
+			resp, err := http.Get(url) //nolint:noctx // simple test request
+			require.NoError(t, err)
+			_ = resp.Body.Close()
+
+			select {
+			case authResp := <-authChan:
+				require.Empty(t, tt.wantErrMsg, "expected an error but token was accepted")
+				assert.Equal(t, tt.wantToken, authResp.Token)
+			case cbErr := <-errChan:
+				require.NotEmpty(t, tt.wantErrMsg, "expected token acceptance but got error: %v", cbErr)
+				assert.Contains(t, cbErr.Error(), tt.wantErrMsg)
+			case <-time.After(2 * time.Second):
+				t.Fatal("timed out waiting for callback result")
 			}
 		})
 	}
