@@ -1,7 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta name="supported-color-schemes" content="light dark">
   <style>
+    :root {
+      color-scheme: light dark;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
       font-size: 13px;
@@ -18,8 +22,6 @@
       margin: 8px 0;
     }
     .commands {
-      background: #f5f5f7;
-      border-radius: 8px;
       padding: 14px 18px;
       margin: 16px 0;
       font-family: "SF Mono", Menlo, Monaco, monospace;
@@ -37,6 +39,17 @@
     }
     a:hover {
       text-decoration: underline;
+    }
+    @media (prefers-color-scheme: dark) {
+      body {
+        color: #ddd;
+      }
+      .commands .label {
+        color: #999;
+      }
+      a {
+        color: #4da2ff;
+      }
     }
   </style>
 </head>
