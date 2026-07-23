@@ -47,7 +47,6 @@ const authSuccessHTML = `
 
 			html, body {
 				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
-				background: #0a0a0a;
 				color: #fafafa;
 				height: 100vh;
 				overflow: hidden;
@@ -59,6 +58,10 @@ const authSuccessHTML = `
 				text-rendering: optimizeLegibility;
 				-webkit-font-smoothing: antialiased;
 				-moz-osx-font-smoothing: grayscale;
+			}
+
+			body {
+				background: #0a0a0a;
 			}
 
 			.logo-container {
@@ -94,9 +97,26 @@ const authSuccessHTML = `
 				text-align: center;
 				max-width: 400px;
 			}
+
+			body.light {
+				background: #ffffff;
+				color: #171717;
+			}
+
+			body.light h1 {
+				color: #171717;
+			}
+
+			body.light .message {
+				color: #525252;
+			}
+
+			body.light svg .s0 {
+				fill: #171717;
+			}
 		</style>
 	</head>
-	<body>
+	<body class="{{.Theme}}">
 		<div class="logo-container">
 			<svg xmlns="http://www.w3.org/2000/svg" version="1.2" viewBox="0 0 970 970" width="970" height="970">
 				<style>
@@ -133,7 +153,6 @@ const authFailedHTML = `
 
 			html, body {
 				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
-				background: #0a0a0a;
 				color: #fafafa;
 				height: 100vh;
 				overflow: hidden;
@@ -145,6 +164,10 @@ const authFailedHTML = `
 				text-rendering: optimizeLegibility;
 				-webkit-font-smoothing: antialiased;
 				-moz-osx-font-smoothing: grayscale;
+			}
+
+			body {
+				background: #0a0a0a;
 			}
 
 			.logo-container {
@@ -183,11 +206,32 @@ const authFailedHTML = `
 				padding: 12px 16px;
 				color: #fca5a5;
 				margin-bottom: 16px;
-				word-break: break-word;
+				max-width: 400px;
+				text-align: center;
+				overflow-wrap: anywhere;
+			}
+
+			body.light {
+				background: #ffffff;
+				color: #171717;
+			}
+
+			body.light .message {
+				color: #525252;
+			}
+
+			body.light .error {
+				background: rgba(239, 68, 68, 0.08);
+				border-color: #fecaca;
+				color: #b91c1c;
+			}
+
+			body.light svg .s0 {
+				fill: #171717;
 			}
 		</style>
 	</head>
-	<body>
+	<body class="{{.Theme}}">
 		<div class="logo-container">
 			<svg xmlns="http://www.w3.org/2000/svg" version="1.2" viewBox="0 0 970 970" width="970" height="970">
 				<style>
@@ -213,6 +257,11 @@ type AuthResponse struct {
 	Token        string `json:"token"`
 	RefreshToken string `json:"refresh_token,omitempty"`
 	ExpiresIn    int    `json:"expires_in,omitempty"`
+}
+
+type authPageData struct {
+	Error string
+	Theme string
 }
 
 type Config struct {
@@ -469,6 +518,7 @@ func startCallbackServerWithContext(ctx context.Context, expectedState string) (
 	}
 
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+		theme := callbackTheme(r)
 		token := r.URL.Query().Get("token")
 		refreshToken := r.URL.Query().Get("refresh_token")
 		errorParam := r.URL.Query().Get("error")
@@ -477,7 +527,7 @@ func startCallbackServerWithContext(ctx context.Context, expectedState string) (
 			errChan <- fmt.Errorf("authentication error: %s", errorParam)
 			w.Header().Set("Content-Type", "text/html")
 			w.WriteHeader(http.StatusUnauthorized)
-			_ = authFailedTemplate.Execute(w, map[string]string{"Error": errorParam}) //nolint:errcheck // template execution error is non-fatal
+			_ = authFailedTemplate.Execute(w, authPageData{Error: errorParam, Theme: theme}) //nolint:errcheck // template execution error is non-fatal
 			return
 		}
 
@@ -488,7 +538,7 @@ func startCallbackServerWithContext(ctx context.Context, expectedState string) (
 			errChan <- fmt.Errorf("invalid state parameter (possible CSRF)")
 			w.Header().Set("Content-Type", "text/html")
 			w.WriteHeader(http.StatusBadRequest)
-			_ = authFailedTemplate.Execute(w, map[string]string{"Error": "Invalid state parameter"}) //nolint:errcheck // template execution error is non-fatal
+			_ = authFailedTemplate.Execute(w, authPageData{Error: "Invalid state parameter", Theme: theme}) //nolint:errcheck // template execution error is non-fatal
 			return
 		}
 
@@ -507,7 +557,7 @@ func startCallbackServerWithContext(ctx context.Context, expectedState string) (
 		authChan <- authResp
 
 		w.Header().Set("Content-Type", "text/html")
-		_ = authSuccessTemplate.Execute(w, nil) //nolint:errcheck // template execution error is non-fatal
+		_ = authSuccessTemplate.Execute(w, authPageData{Theme: theme}) //nolint:errcheck // template execution error is non-fatal
 	})
 
 	go func() {
@@ -523,6 +573,13 @@ func startCallbackServerWithContext(ctx context.Context, expectedState string) (
 	}
 
 	return port, authChan, errChan, cleanup, nil
+}
+
+func callbackTheme(r *http.Request) string {
+	if r.URL.Query().Get("theme") == "light" {
+		return "light"
+	}
+	return "dark"
 }
 
 func openBrowser(url string) error {
