@@ -152,16 +152,55 @@ var sgrPattern = regexp.MustCompile(`\x1b\[([0-9;]*)m`)
 // lipgloss appends does not erase the answer. Text with no explicit colour
 // resolves to the palette's default foreground.
 func Foreground(rendered string, p Palette) RGB {
-	fg, faint := p.Fg, false
+	return resolve(rendered, p, false)
+}
+
+// ForegroundBoldAsBright is Foreground for terminals that render bold by
+// promoting the colour to its bright palette slot instead of by using a bold
+// font. Legacy Windows conhost always does this (SGR 1 sets the intensity bit),
+// macOS Terminal offers it as "Use bright colors for bold text", and Windows
+// Terminal exposes it as intenseTextStyle. Under this reading `1;32` is drawn
+// as bright green, so choosing the non-bright colour buys nothing.
+func ForegroundBoldAsBright(rendered string, p Palette) RGB {
+	return resolve(rendered, p, true)
+}
+
+// WorstRatio is the contrast of rendered against p's background under whichever
+// bold interpretation is less legible. Assert against this rather than
+// Foreground: we cannot tell which behaviour the user's terminal has, so the
+// style has to survive both.
+func WorstRatio(rendered string, p Palette) float64 {
+	return math.Min(
+		Ratio(Foreground(rendered, p), p.Bg),
+		Ratio(ForegroundBoldAsBright(rendered, p), p.Bg),
+	)
+}
+
+type sgrState struct {
+	fg RGB
+	// slot is the ANSI index fg came from, or -1 when fg is not a palette
+	// entry. Only slots 0-7 can be promoted to their bright counterpart.
+	slot  int
+	bold  bool
+	faint bool
+}
+
+func resolve(rendered string, p Palette, boldIsBright bool) RGB {
+	s := sgrState{fg: p.Fg, slot: -1}
 	pos := 0
 	for _, loc := range sgrPattern.FindAllStringSubmatchIndex(rendered, -1) {
 		if hasVisibleText(rendered[pos:loc[0]]) {
 			break
 		}
-		fg, faint = applySGR(fg, faint, rendered[loc[2]:loc[3]], p)
+		s = applySGR(s, rendered[loc[2]:loc[3]], p)
 		pos = loc[1]
 	}
-	if faint {
+
+	fg := s.fg
+	if boldIsBright && s.bold && s.slot >= 0 && s.slot < 8 {
+		fg = p.ANSI[s.slot+8]
+	}
+	if s.faint {
 		// Terminals vary in how they dim SGR 2; some ignore it entirely. Half
 		// way to the background is a pessimistic stand-in, so a ratio measured
 		// here is a lower bound on what the user actually sees.
@@ -179,7 +218,11 @@ func hasVisibleText(s string) bool {
 	return strings.TrimSpace(s) != ""
 }
 
-func applySGR(fg RGB, faint bool, params string, p Palette) (RGB, bool) {
+func applySGR(s sgrState, params string, p Palette) sgrState {
+	setFg := func(c RGB, slot int) {
+		s.fg, s.slot = c, slot
+	}
+
 	fields := strings.Split(params, ";")
 	for i := 0; i < len(fields); i++ {
 		n, err := strconv.Atoi(fields[i])
@@ -188,30 +231,36 @@ func applySGR(fg RGB, faint bool, params string, p Palette) (RGB, bool) {
 		}
 		switch {
 		case n == 0:
-			fg, faint = p.Fg, false
+			s = sgrState{fg: p.Fg, slot: -1}
+		case n == 1:
+			s.bold = true
 		case n == 2:
-			faint = true
+			s.faint = true
 		case n == 22:
-			faint = false
+			s.bold, s.faint = false, false
 		case n == 39:
-			fg = p.Fg
+			setFg(p.Fg, -1)
 		case n >= 30 && n <= 37:
-			fg = p.ANSI[n-30]
+			setFg(p.ANSI[n-30], n-30)
 		case n >= 90 && n <= 97:
-			fg = p.ANSI[n-90+8]
+			setFg(p.ANSI[n-90+8], n-90+8)
 		case n == 38 && i+2 < len(fields) && fields[i+1] == "5":
 			idx, _ := strconv.Atoi(fields[i+2])
-			fg = xterm256(idx, p)
+			slot := -1
+			if idx < 16 {
+				slot = idx
+			}
+			setFg(xterm256(idx, p), slot)
 			i += 2
 		case n == 38 && i+4 < len(fields) && fields[i+1] == "2":
 			r, _ := strconv.Atoi(fields[i+2])
 			g, _ := strconv.Atoi(fields[i+3])
 			b, _ := strconv.Atoi(fields[i+4])
-			fg = RGB{uint8(r), uint8(g), uint8(b)}
+			setFg(RGB{uint8(r), uint8(g), uint8(b)}, -1)
 			i += 4
 		}
 	}
-	return fg, faint
+	return s
 }
 
 // xterm256 maps a 256-colour index to RGB. The first 16 come from the palette;

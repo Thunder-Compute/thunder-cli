@@ -39,7 +39,7 @@ type snapshotDeleteModel struct {
 func NewSnapshotDeleteModel(client *api.Client, snapshots api.ListSnapshotsResponse) snapshotDeleteModel {
 	s := NewPrimarySpinner()
 	ps := NewPanelStyles()
-	ps.Title = PrimaryTitleStyle().MarginTop(1).MarginBottom(1)
+	ps.Title = TitleStyle().MarginTop(1).MarginBottom(1)
 
 	return snapshotDeleteModel{
 		step:       snapshotDeleteStepSelect,

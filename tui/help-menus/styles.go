@@ -24,8 +24,7 @@ var (
 )
 
 const (
-	flagColor    = "9" // Bright Red
-	exampleColor = "8" // Bright Black (Gray)
+	flagColor = "9" // Bright Red
 )
 
 const boxWidth = 77
@@ -48,13 +47,18 @@ func InitHelpStyles(out io.Writer) {
 	initOnce.Do(func() {
 		r := theme.Renderer()
 
-		HeaderStyle = theme.Primary().Bold(true).Padding(1, 0)
+		// Everything a reader has to act on stays on the terminal's default
+		// foreground. The command column is already distinct by its fixed
+		// width, and the runnable examples are the last thing that should be
+		// hard to read: the accent colour drops to 1.1:1 on a blue background.
+		HeaderStyle = theme.Label().Padding(1, 0)
 		SectionStyle = theme.Label().MarginTop(1)
-		CommandStyle = theme.Primary().Bold(true).Width(20)
-		CommandTextStyle = theme.Primary().Bold(true)
-		DescStyle = r.NewStyle() // Uses terminal default foreground
+		CommandStyle = theme.Label().Width(20)
+		CommandTextStyle = theme.Label()
+		DescStyle = theme.Body()
 		LinkStyle = theme.Label().Underline(true)
 		FlagStyle = r.NewStyle().Foreground(lipgloss.Color(flagColor)).Bold(true).Width(19)
-		ExampleStyle = r.NewStyle().Foreground(lipgloss.Color(exampleColor)).Italic(true)
+		// Faint rather than colour 8, which Solarized maps to the background.
+		ExampleStyle = theme.Neutral().Italic(true)
 	})
 }

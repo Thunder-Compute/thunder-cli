@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 )
 
 type snapshotListStyles struct {
@@ -27,8 +28,8 @@ type snapshotListStyles struct {
 
 func newSnapshotListStyles() snapshotListStyles {
 	return snapshotListStyles{
-		header:    PrimaryTitleStyle().Padding(0, 1),
-		cell:      lipgloss.NewStyle().Padding(0, 1),
+		header:    LabelStyle().Padding(0, 1),
+		cell:      theme.Body().Padding(0, 1),
 		ready:     SuccessStyle(),
 		creating:  WarningStyle(),
 		failed:    ErrorStyle(),
@@ -180,9 +181,9 @@ func (m snapshotListModel) View() string {
 	b.WriteString("\n")
 
 	if m.hasCreatingSnapshots() {
-		b.WriteString(primaryStyle.Render("Snapshot creation can take anywhere from 10 to 90 minutes."))
+		b.WriteString(theme.Body().Render("Snapshot creation can take anywhere from 10 to 90 minutes."))
 		b.WriteString("\n")
-		b.WriteString(primaryStyle.Render("You can delete your instance and snapshotting will continue in the background."))
+		b.WriteString(theme.Body().Render("You can delete your instance and snapshotting will continue in the background."))
 		b.WriteString("\n\n")
 	}
 

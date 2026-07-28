@@ -54,7 +54,6 @@ func renderSnapshotCreateSuccess(resp **api.CreateSnapshotResponse) func() strin
 		labelStyle := theme.Neutral()
 		boxStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(theme.PrimaryColor)).
 			Padding(1, 2)
 
 		var lines []string

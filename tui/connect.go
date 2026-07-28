@@ -41,9 +41,9 @@ type connectStyles struct {
 
 func newConnectStyles() connectStyles {
 	return connectStyles{
-		title:    PrimaryTitleStyle().MarginTop(1).MarginBottom(1),
-		cursor:   PrimaryCursorStyle(),
-		selected: PrimarySelectedStyle(),
+		title:    TitleStyle().MarginTop(1).MarginBottom(1),
+		cursor:   CursorStyle(),
+		selected: SelectedStyle(),
 		help:     HelpStyle(),
 	}
 }

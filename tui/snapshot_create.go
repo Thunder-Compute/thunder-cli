@@ -59,7 +59,7 @@ func NewSnapshotCreateModel(client *api.Client) snapshotCreateModel {
 	ti.Prompt = "▶ "
 	ti.PromptStyle = styles.Cursor
 	ti.TextStyle = styles.Cursor
-	ti.PlaceholderStyle = styles.Cursor
+	ti.PlaceholderStyle = SubtleTextStyle()
 	ti.Cursor.Style = styles.Cursor
 
 	s := NewPrimarySpinner()

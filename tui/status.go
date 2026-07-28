@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/tui/theme"
 	"github.com/Thunder-Compute/thunder-cli/utils"
 )
 
@@ -47,11 +48,11 @@ func newStatusStyles() statusStyles {
 		header:       LabelStyle().Padding(0, 1),
 		running:      SuccessStyle(),
 		starting:     WarningStyle(),
-		restoring:    PrimaryStyle().Bold(true),
-		migrating:    PrimaryStyle().Bold(true),
+		restoring:    WarningStyle(),
+		migrating:    WarningStyle(),
 		deleting:     ErrorStyle(),
 		provisioning: WarningStyle(),
-		cell:         lipgloss.NewStyle().Padding(0, 1),
+		cell:         theme.Body().Padding(0, 1),
 		timestamp:    HelpStyle(),
 	}
 }
@@ -388,7 +389,7 @@ func (m statusModel) View() string {
 		}
 	}
 	if hasRestoring {
-		b.WriteString(primaryStyle.Render("ℹ Restoring from a snapshot may take about 10 minutes for every 100GB of data\n"))
+		b.WriteString(theme.Body().Render("ℹ Restoring from a snapshot may take about 10 minutes for every 100GB of data\n"))
 	}
 
 	b.WriteString("\n")
@@ -522,7 +523,7 @@ func (m *statusModel) renderProvisioningSection() string {
 
 	var b strings.Builder
 	b.WriteString("\n")
-	b.WriteString(primaryStyle.Bold(true).Render("Provisioning Instances:"))
+	b.WriteString(LabelStyle().Render("Provisioning Instances:"))
 	b.WriteString("\n\n")
 
 	gpuTypes := make([]string, 0, len(instancesByGPU))
@@ -605,7 +606,7 @@ func (m *statusModel) renderRestoringSection() string {
 
 	var b strings.Builder
 	b.WriteString("\n")
-	b.WriteString(primaryStyle.Bold(true).Render("Restoring Instances:"))
+	b.WriteString(LabelStyle().Render("Restoring Instances:"))
 	b.WriteString("\n\n")
 
 	for _, instance := range restoringInstances {
@@ -662,7 +663,7 @@ func (m *statusModel) renderMigratingSection() string {
 
 	var b strings.Builder
 	b.WriteString("\n")
-	b.WriteString(primaryStyle.Bold(true).Render("Migrating Instances:"))
+	b.WriteString(LabelStyle().Render("Migrating Instances:"))
 	b.WriteString("\n\n")
 
 	for _, instance := range migratingInstances {

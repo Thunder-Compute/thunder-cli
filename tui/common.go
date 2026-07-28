@@ -27,14 +27,13 @@ var (
 	warningStyleTUI lipgloss.Style
 	successStyle    lipgloss.Style
 
-	primaryStyle         lipgloss.Style
-	primaryTitleStyle    lipgloss.Style
-	primaryCursorStyle   lipgloss.Style
-	primarySelectedStyle lipgloss.Style
-	labelStyle           lipgloss.Style
-	subtleTextStyle      lipgloss.Style
-	durationTextStyle    lipgloss.Style
-	warningBoxStyle      lipgloss.Style
+	titleStyle        lipgloss.Style
+	cursorStyle       lipgloss.Style
+	selectedStyle     lipgloss.Style
+	labelStyle        lipgloss.Style
+	subtleTextStyle   lipgloss.Style
+	durationTextStyle lipgloss.Style
+	warningBoxStyle   lipgloss.Style
 )
 
 var initOnce sync.Once
@@ -48,16 +47,15 @@ func InitCommonStyles(out io.Writer) {
 		warningStyleTUI = theme.Warning()
 		successStyle = theme.Success()
 
-		primaryStyle = theme.Primary()
-		primaryTitleStyle = primaryStyle.Bold(true)
-		primaryCursorStyle = primaryStyle
-		primarySelectedStyle = primaryTitleStyle
+		titleStyle = theme.Label()
+		cursorStyle = theme.Label()
+		selectedStyle = theme.Label()
 		labelStyle = theme.Label()
 		subtleTextStyle = theme.Neutral()
 		durationTextStyle = subtleTextStyle.Italic(true)
 		warningBoxStyle = warningStyleTUI.
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(theme.WarningColor)).
+			BorderForeground(theme.WarningColor).
 			Padding(1, 2)
 	})
 }
@@ -104,20 +102,16 @@ func RenderErrorMessage(message string) string {
 	return errorStyleTUI.Render("✗ Error: " + message)
 }
 
-func PrimaryStyle() lipgloss.Style {
-	return primaryStyle
+func TitleStyle() lipgloss.Style {
+	return titleStyle
 }
 
-func PrimaryTitleStyle() lipgloss.Style {
-	return primaryTitleStyle
+func CursorStyle() lipgloss.Style {
+	return cursorStyle
 }
 
-func PrimaryCursorStyle() lipgloss.Style {
-	return primaryCursorStyle
-}
-
-func PrimarySelectedStyle() lipgloss.Style {
-	return primarySelectedStyle
+func SelectedStyle() lipgloss.Style {
+	return selectedStyle
 }
 
 func LabelStyle() lipgloss.Style {
@@ -193,21 +187,31 @@ type PanelStyles struct {
 // NewPanelStyles creates the standard panel styles shared across TUI views.
 func NewPanelStyles() PanelStyles {
 	return PanelStyles{
-		Title:    PrimaryTitleStyle().MarginBottom(1),
-		Selected: PrimarySelectedStyle(),
-		Cursor:   PrimaryCursorStyle(),
-		Panel: PrimaryStyle().
+		Title:    TitleStyle().MarginBottom(1),
+		Selected: SelectedStyle(),
+		Cursor:   CursorStyle(),
+		// Accent on the border, default foreground for anything inside it that
+		// does not set its own style.
+		Panel: theme.Body().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(theme.PrimaryColor)).
 			Padding(1, 2).MarginTop(1).MarginBottom(1),
 		Label: LabelStyle(),
 		Help:  HelpStyle(),
 	}
 }
 
+// SpinnerStyle is deliberately not the accent colour. A spinner's motion is the
+// only thing telling the user the process is alive rather than hung, so it has
+// to be visible on every scheme; the accent drops to 1.1:1 on a blue background
+// and takes that signal with it. Borders keep the accent because losing one
+// costs nothing but the grouping cue.
+func SpinnerStyle() lipgloss.Style {
+	return labelStyle
+}
+
 func NewPrimarySpinner() spinner.Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = primaryStyle
+	s.Style = SpinnerStyle()
 	return s
 }

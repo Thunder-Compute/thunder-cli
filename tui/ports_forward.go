@@ -55,9 +55,7 @@ func NewPortsForwardModel(client *api.Client, instances []api.Instance) tea.Mode
 	ti.Width = 40
 	ti.Prompt = "▶ "
 
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.Primary()
+	s := NewPrimarySpinner()
 
 	return portsForwardModel{
 		step:      portsForwardStepSelectInstance,
@@ -406,7 +404,6 @@ func (m portsForwardModel) renderCompleteStep() string {
 	valueStyle := lipgloss.NewStyle().Bold(true)
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(theme.PrimaryColor)).
 		Padding(1, 2)
 
 	var lines []string

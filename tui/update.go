@@ -25,14 +25,14 @@ type updateStyles struct {
 
 func newUpdateStyles() updateStyles {
 	return updateStyles{
-		title:   PrimaryTitleStyle(),
-		version: PrimaryStyle().Bold(true),
+		title:   TitleStyle(),
+		version: LabelStyle(),
 		arrow:   SubtleTextStyle(),
 		pmBox: WarningStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(theme.WarningColor)).
+			BorderForeground(theme.WarningColor).
 			Padding(1, 2),
-		command:    PrimaryStyle().Bold(true),
+		command:    LabelStyle(),
 		help:       HelpStyle(),
 		label:      LabelStyle(),
 		spinnerMsg: LabelStyle().Bold(false),
@@ -58,11 +58,11 @@ func RenderUpdating(currentVer, latestVer string) string {
 	InitCommonStyles(os.Stdout)
 	styles := newUpdateStyles()
 	return fmt.Sprintf("%s %s%s %s%s",
-		PrimaryStyle().Render("Currently on version"),
+		theme.Body().Render("Currently on version"),
 		styles.version.Render(currentVer),
-		PrimaryStyle().Render(", latest version"),
+		theme.Body().Render(", latest version"),
 		styles.version.Render(latestVer),
-		PrimaryStyle().Render(", installing update..."))
+		theme.Body().Render(", installing update..."))
 }
 
 func RenderPMInstructions(pm, currentVer, latestVer string) string {

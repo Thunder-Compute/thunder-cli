@@ -71,7 +71,6 @@ func renderCreateSuccess(resp **api.CreateInstanceResponse) func() string {
 		cmdStyle := theme.Neutral()
 		boxStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(theme.PrimaryColor)).
 			Padding(1, 2)
 
 		var lines []string

@@ -61,9 +61,8 @@ func newLoginStyles() loginStyles {
 	return loginStyles{
 		prompt: SubtleTextStyle().MarginBottom(1),
 		help:   HelpStyle().MarginTop(1),
-		input: PrimaryStyle().
+		input: theme.Body().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(theme.PrimaryColor)).
 			Padding(0, 1).
 			MarginBottom(1),
 	}
@@ -78,10 +77,10 @@ func NewLoginModel(authURL string) LoginModel {
 	ti.CharLimit = 500
 	ti.Width = 50
 	ti.Focus()
-	ti.PromptStyle = PrimaryCursorStyle()
-	ti.TextStyle = PrimaryCursorStyle()
+	ti.PromptStyle = CursorStyle()
+	ti.TextStyle = CursorStyle()
 	ti.PlaceholderStyle = SubtleTextStyle()
-	ti.Cursor.Style = PrimaryCursorStyle()
+	ti.Cursor.Style = CursorStyle()
 
 	return LoginModel{
 		state:      LoginStateWaiting,
@@ -191,7 +190,7 @@ func (m LoginModel) View() string {
 		promptStyle := m.styles.prompt.Width(m.width)
 		b.WriteString(promptStyle.Render("Authenticate with your browser. If this doesn't open automatically, copy and paste this link in your browser:"))
 		b.WriteString("\n")
-		urlStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.PrimaryColor))
+		urlStyle := theme.Label().Underline(true)
 		b.WriteString(urlStyle.Render(terminalHyperlink(m.authURL, m.authURL)))
 		b.WriteString("\n\n")
 		spinnerStyle := lipgloss.NewStyle().Width(m.width)

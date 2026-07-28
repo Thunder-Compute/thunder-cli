@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
@@ -83,12 +82,11 @@ func runPortsList() error {
 	tui.InitCommonStyles(os.Stdout)
 
 	headerStyle := tui.LabelStyle().Padding(0, 1)
-	cellStyle := lipgloss.NewStyle().Padding(0, 1)
+	cellStyle := theme.Body().Padding(0, 1)
 	runningStyle := tui.SuccessStyle()
 	startingStyle := tui.WarningStyle()
-	stoppedStyle := lipgloss.NewStyle()
+	stoppedStyle := theme.Body()
 	helpStyle := tui.HelpStyle()
-	primaryStyle := tui.PrimaryStyle()
 
 	// Define column widths
 	colWidths := map[string]int{
@@ -165,7 +163,7 @@ func runPortsList() error {
 
 	// Add helper message about how to connect
 	if hasPortsConfigured {
-		b.WriteString(primaryStyle.Render("ℹ Access forwarded ports at:"))
+		b.WriteString(tui.LabelStyle().Render("ℹ Access forwarded ports at:"))
 		b.WriteString("\n")
 		b.WriteString(helpStyle.Render("  https://<uuid>-<port>.thundercompute.net"))
 		b.WriteString("\n\n")

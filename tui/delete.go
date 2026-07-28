@@ -42,7 +42,7 @@ func NewDeleteModel(client *api.Client, instances []api.Instance) deleteModel {
 
 	ps := NewPanelStyles()
 	// Override title with margins matching delete layout
-	ps.Title = PrimaryTitleStyle().MarginTop(1).MarginBottom(1)
+	ps.Title = TitleStyle().MarginTop(1).MarginBottom(1)
 
 	return deleteModel{
 		step:       deleteStepSelect,

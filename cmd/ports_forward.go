@@ -191,7 +191,6 @@ func renderPortsForwardSuccess(resp **api.PortAddResponse) func() string {
 		valueStyle := lipgloss.NewStyle().Bold(true)
 		boxStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(theme.PrimaryColor)).
 			Padding(1, 2)
 
 		var lines []string

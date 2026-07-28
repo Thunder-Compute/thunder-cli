@@ -504,7 +504,6 @@ func renderModifySuccess(instanceID string, resp **api.InstanceModifyResponse) f
 		cmdStyle := theme.Neutral()
 		boxStyle := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(theme.PrimaryColor)).
 			Padding(1, 2)
 
 		var lines []string

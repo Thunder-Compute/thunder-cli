@@ -77,9 +77,9 @@ func NewConnectFlowModel(instanceID string) ConnectFlowModel {
 	}
 
 	styles := connectFlowStyles{
-		title:      PrimaryTitleStyle().MarginTop(1).MarginBottom(1),
+		title:      TitleStyle().MarginTop(1).MarginBottom(1),
 		phase:      lipgloss.NewStyle().PaddingLeft(2),
-		inProgress: PrimaryStyle(),
+		inProgress: LabelStyle(),
 		pending:    SubtleTextStyle(),
 		duration:   DurationStyle(),
 	}
