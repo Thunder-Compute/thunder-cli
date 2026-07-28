@@ -41,7 +41,10 @@ type statusStyles struct {
 
 func newStatusStyles() statusStyles {
 	return statusStyles{
-		header:       PrimaryTitleStyle().Padding(0, 1),
+		// Bold on the terminal's default foreground, not the primary blue: the
+		// column titles have to be readable, and blue text disappears on blue
+		// backgrounds like the Windows PowerShell default.
+		header:       LabelStyle().Padding(0, 1),
 		running:      SuccessStyle(),
 		starting:     WarningStyle(),
 		restoring:    PrimaryStyle().Bold(true),

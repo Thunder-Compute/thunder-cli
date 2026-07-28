@@ -498,7 +498,7 @@ func modifyInstanceCmd(client *api.Client, instanceID string, req api.InstanceMo
 
 func renderModifySuccess(instanceID string, resp **api.InstanceModifyResponse) func() string {
 	return func() string {
-		headerStyle := theme.Primary().Bold(true)
+		headerStyle := theme.Label()
 		labelStyle := theme.Neutral()
 		valueStyle := lipgloss.NewStyle().Bold(true)
 		cmdStyle := theme.Neutral()

@@ -82,7 +82,7 @@ func runPortsList() error {
 	theme.Init(os.Stdout)
 	tui.InitCommonStyles(os.Stdout)
 
-	headerStyle := tui.PrimaryTitleStyle().Padding(0, 1)
+	headerStyle := tui.LabelStyle().Padding(0, 1)
 	cellStyle := lipgloss.NewStyle().Padding(0, 1)
 	runningStyle := tui.SuccessStyle()
 	startingStyle := tui.WarningStyle()

@@ -186,7 +186,7 @@ func portsForwardApiCall(client *api.Client, instanceID string, add, remove []in
 
 func renderPortsForwardSuccess(resp **api.PortAddResponse) func() string {
 	return func() string {
-		headerStyle := theme.Primary().Bold(true)
+		headerStyle := theme.Label()
 		labelStyle := theme.Neutral()
 		valueStyle := lipgloss.NewStyle().Bold(true)
 		boxStyle := lipgloss.NewStyle().

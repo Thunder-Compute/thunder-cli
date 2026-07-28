@@ -65,7 +65,7 @@ func createInstanceCmd(client *api.Client, req api.CreateInstanceRequest, resp *
 
 func renderCreateSuccess(resp **api.CreateInstanceResponse) func() string {
 	return func() string {
-		headerStyle := theme.Primary().Bold(true)
+		headerStyle := theme.Label()
 		labelStyle := theme.Neutral()
 		valueStyle := lipgloss.NewStyle().Bold(true)
 		cmdStyle := theme.Neutral()

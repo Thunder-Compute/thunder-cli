@@ -401,7 +401,7 @@ func (m portsForwardModel) renderCompleteStep() string {
 		return errorStyleTUI.Render(fmt.Sprintf("\n✗ Failed to update ports: %v\n\n", m.err))
 	}
 
-	headerStyle := theme.Primary().Bold(true)
+	headerStyle := theme.Label()
 	labelStyle := theme.Neutral()
 	valueStyle := lipgloss.NewStyle().Bold(true)
 	boxStyle := lipgloss.NewStyle().
