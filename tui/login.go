@@ -93,7 +93,16 @@ func NewLoginModel(authURL string) LoginModel {
 }
 
 func (m LoginModel) Init() tea.Cmd {
-	return m.spinner.Tick
+	var instructions strings.Builder
+	instructions.WriteString(m.styles.prompt.Render("Authenticate with your browser. If this doesn't open automatically, copy and paste this link in your browser:"))
+	instructions.WriteString("\n")
+	instructions.WriteString(theme.Label().Underline(true).Render(m.authURL))
+	instructions.WriteString("\n")
+
+	// Bubble Tea truncates model-view lines at the terminal width. Printing
+	// the URL above the model lets the terminal soft-wrap it while preserving
+	// the complete URL for copying and Ctrl-clicking.
+	return tea.Sequence(tea.Println(instructions.String()), m.spinner.Tick)
 }
 
 func (m LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -165,34 +174,15 @@ func (m LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// terminalHyperlink wraps text in OSC 8 escape sequences so terminals
-// treat it as a clickable link to url.
-func terminalHyperlink(url, text string) string {
-	return "\x1b]8;;" + url + "\x1b\\" + text + "\x1b]8;;\x1b\\"
-}
-
 func (m LoginModel) View() string {
 	if m.quitting {
-		switch m.state {
-		case LoginStateSuccess:
-			return successStyle.Render("✓ Successfully authenticated with Thunder Compute!")
-		case LoginStateError:
-			return errorStyleTUI.Render(fmt.Sprintf("✗ Error: Authentication failed: %v", m.err))
-		case LoginStateCancelled:
-			return ""
-		}
+		return ""
 	}
 
 	var b strings.Builder
 
 	switch m.state {
 	case LoginStateWaiting:
-		promptStyle := m.styles.prompt.Width(m.width)
-		b.WriteString(promptStyle.Render("Authenticate with your browser. If this doesn't open automatically, copy and paste this link in your browser:"))
-		b.WriteString("\n")
-		urlStyle := theme.Label().Underline(true)
-		b.WriteString(urlStyle.Render(terminalHyperlink(m.authURL, m.authURL)))
-		b.WriteString("\n\n")
 		spinnerStyle := lipgloss.NewStyle().Width(m.width)
 		b.WriteString(spinnerStyle.Render(fmt.Sprintf("%s Waiting for browser callback...", m.spinner.View())))
 		b.WriteString("\n")

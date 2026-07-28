@@ -416,7 +416,7 @@ func runInteractiveLogin() error {
 	authURLWithParams := buildAuthURL(state, returnURI)
 
 	model := tui.NewLoginModel(authURLWithParams)
-	p := tea.NewProgram(model, tea.WithAltScreen())
+	p := tea.NewProgram(model)
 
 	go func() {
 		select {
