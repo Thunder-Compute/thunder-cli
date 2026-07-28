@@ -1,10 +1,8 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -25,12 +23,10 @@ const (
 type LoginModel struct {
 	state      LoginState
 	authURL    string
-	spinner    spinner.Model
 	tokenInput textinput.Model
 	token      string
 	err        error
 	quitting   bool
-	width      int
 
 	styles loginStyles
 }
@@ -69,7 +65,6 @@ func newLoginStyles() loginStyles {
 }
 
 func NewLoginModel(authURL string) LoginModel {
-	s := NewPrimarySpinner()
 	styles := newLoginStyles()
 
 	ti := textinput.New()
@@ -85,9 +80,7 @@ func NewLoginModel(authURL string) LoginModel {
 	return LoginModel{
 		state:      LoginStateWaiting,
 		authURL:    authURL,
-		spinner:    s,
 		tokenInput: ti,
-		width:      80,
 		styles:     styles,
 	}
 }
@@ -97,12 +90,15 @@ func (m LoginModel) Init() tea.Cmd {
 	instructions.WriteString(m.styles.prompt.Render("Authenticate with your browser. If this doesn't open automatically, copy and paste this link in your browser:"))
 	instructions.WriteString("\n")
 	instructions.WriteString(theme.Label().Underline(true).Render(m.authURL))
+	instructions.WriteString("\n\n")
+	instructions.WriteString("Waiting for browser callback...")
 	instructions.WriteString("\n")
+	instructions.WriteString(m.styles.help.Render("Or, press 'T' to enter a token manually. Press 'Q' to cancel"))
 
-	// Bubble Tea truncates model-view lines at the terminal width. Printing
-	// the URL above the model lets the terminal soft-wrap it while preserving
-	// the complete URL for copying and Ctrl-clicking.
-	return tea.Sequence(tea.Println(instructions.String()), m.spinner.Tick)
+	// Keep the waiting screen outside Bubble Tea's live renderer. The terminal
+	// can then reflow every line on resize without leaving stale render rows,
+	// while preserving the complete URL for copying and Ctrl-clicking.
+	return tea.Println(instructions.String())
 }
 
 func (m LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -120,14 +116,14 @@ func (m LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "t", "T":
 				m.state = LoginStateTokenInput
 				m.tokenInput.Focus()
-				return m, nil
+				return m, tea.EnterAltScreen
 			}
 		case LoginStateTokenInput:
 			switch msg.String() {
 			case "esc":
 				m.state = LoginStateWaiting
 				m.tokenInput.Blur()
-				return m, nil
+				return m, tea.ExitAltScreen
 			case "enter":
 				if strings.TrimSpace(m.tokenInput.Value()) != "" {
 					return m, func() tea.Msg {
@@ -139,10 +135,6 @@ func (m LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		}
-
-	case spinner.TickMsg:
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
 
 	case loginSuccessMsg:
 		m.state = LoginStateSuccess
@@ -165,31 +157,18 @@ func (m LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, func() tea.Msg {
 			return loginSuccessMsg(msg)
 		}
-
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		return m, nil
 	}
 
 	return m, cmd
 }
 
 func (m LoginModel) View() string {
-	if m.quitting {
+	if m.quitting || m.state == LoginStateWaiting {
 		return ""
 	}
 
 	var b strings.Builder
-
-	switch m.state {
-	case LoginStateWaiting:
-		spinnerStyle := lipgloss.NewStyle().Width(m.width)
-		b.WriteString(spinnerStyle.Render(fmt.Sprintf("%s Waiting for browser callback...", m.spinner.View())))
-		b.WriteString("\n")
-		helpStyle := m.styles.help.Width(m.width)
-		b.WriteString(helpStyle.Render("Or, press 'T' to enter a token manually. Press 'Q' to cancel"))
-
-	case LoginStateTokenInput:
+	if m.state == LoginStateTokenInput {
 		b.WriteString(m.styles.prompt.Render("Enter your Thunder Compute token:"))
 		b.WriteString("\n")
 		b.WriteString(m.styles.input.Render(m.tokenInput.View()))
