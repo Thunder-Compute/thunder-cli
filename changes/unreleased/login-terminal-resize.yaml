@@ -1,0 +1,3 @@
+kind: Fixed
+body: Preserve the login link and stable layout when the terminal is resized.
+time: 2026-07-30T00:00:05+10:00

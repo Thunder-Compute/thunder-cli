@@ -1,0 +1,3 @@
+kind: Fixed
+body: Keep installer completion screens readable when the system uses a dark theme.
+time: 2026-07-30T00:00:04+10:00

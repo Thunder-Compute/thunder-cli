@@ -46,11 +46,48 @@ tnr port <id> <port> # Forward a port
 
 Instance IDs are integers. Add `--json` for scripted/non-interactive usage.
 
+## Release Notes
+
+Every pull request that changes `cli/**` must add a Changie fragment under
+`cli/changes/unreleased/`. The generated release-preparation pull request is the
+only exception because it consumes all pending fragments.
+
+Use the fragment kind that matches the shipped user impact. Changie derives the
+SemVer bump automatically:
+
+- `Fixed`, `Changed`, or `Security`: patch
+- `Added` or `Deprecated`: minor
+- `Breaking` or `Removed`: major
+- `Internal`: no release bump
+
+Example:
+
+```sh
+cd cli
+changie new --kind Fixed \
+  --body "Preserve the login link when the terminal is resized."
+```
+
+Tests, refactors, and build-only changes still require an explicit `Internal`
+fragment:
+
+```sh
+cd cli
+changie new --kind Internal \
+  --body "Adds test coverage without changing shipped behavior."
+```
+
+Write summaries for users and describe observable impact rather than
+implementation details. Do not update `VERSION` in ordinary feature or fix pull
+requests. `make prepare-cli-release` asks Changie to select the highest pending
+bump and generate the versioned notes and changelog. See
+[RELEASING.md](RELEASING.md) for the complete process.
+
 ## Development
 
 - **Language:** Go 1.25
-- **Build:** `go build -o tnr`
-- **Test:** `go test ./...`
+- **Build:** from the monorepo root, run `make build-cli`
+- **Test:** from the monorepo root, run `make test-cli`
 
 ## Links
 

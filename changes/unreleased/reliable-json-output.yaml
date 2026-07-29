@@ -1,0 +1,3 @@
+kind: Fixed
+body: Keep JSON command output machine-readable and free from interactive text.
+time: 2026-07-30T00:00:08+10:00

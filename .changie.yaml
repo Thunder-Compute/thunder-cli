@@ -1,0 +1,41 @@
+changesDir: changes
+unreleasedDir: unreleased
+headerPath: header.tpl.md
+changelogPath: CHANGELOG.md
+versionExt: md
+versionFormat: '## {{.Version}} - {{.Time.Format "2006-01-02"}}'
+kindFormat: '{{if ne .Kind "Internal"}}### {{.Kind}}{{end}}'
+changeFormat: '{{if ne .Kind "Internal"}}- {{.Body}}{{end}}'
+footerFormat: '**Full Changelog**: https://github.com/Thunder-Compute/thunder-cli/compare/{{.PreviousVersion}}...{{.Version}}'
+body:
+  minLength: 10
+  maxLength: 180
+kinds:
+  - label: Breaking
+    auto: major
+  - label: Added
+    auto: minor
+  - label: Changed
+    auto: patch
+  - label: Deprecated
+    auto: minor
+  - label: Removed
+    auto: major
+  - label: Fixed
+    auto: patch
+  - label: Security
+    auto: patch
+  - label: Internal
+    auto: none
+    format: "<!-- Internal changes -->"
+    changeFormat: "<!-- {{.Body}} -->"
+replacements:
+  - path: VERSION
+    find: '[0-9]+\.[0-9]+\.[0-9]+'
+    replace: '{{.VersionNoPrefix}}'
+newlines:
+  afterChangelogHeader: 1
+  beforeChangelogVersion: 1
+  beforeKind: 1
+  beforeFooterTemplate: 1
+  endOfVersion: 1

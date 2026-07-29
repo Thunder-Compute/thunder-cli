@@ -1,0 +1,3 @@
+kind: Security
+body: Harden browser login by validating the OAuth callback state.
+time: 2026-07-30T00:00:06+10:00

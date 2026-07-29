@@ -1,0 +1,3 @@
+kind: Fixed
+body: Allow create presets to use GPU types provided by the current GPU configuration and show unavailable snapshots.
+time: 2026-07-30T00:00:03+10:00

@@ -1,0 +1,3 @@
+kind: Fixed
+body: Keep browser authentication callback pages readable in light themes.
+time: 2026-07-30T00:00:02+10:00
