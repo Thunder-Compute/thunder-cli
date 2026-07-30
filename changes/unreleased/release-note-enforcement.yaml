@@ -1,3 +1,0 @@
-kind: Internal
-body: Adds release governance and automation without changing shipped CLI behavior.
-time: 2026-07-30T00:00:07+10:00
