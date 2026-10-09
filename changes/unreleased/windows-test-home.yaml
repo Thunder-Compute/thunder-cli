@@ -1,0 +1,3 @@
+kind: Internal
+body: Isolate test home and cache directories on Windows so CLI tests do not write to the developer's profile.
+time: 2026-10-09T16:30:00Z

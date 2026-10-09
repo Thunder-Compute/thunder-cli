@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -102,12 +103,12 @@ func createTestInstance(id, uuid, name, ip, status, template, _ string, port int
 }
 
 // setupTestEnvironment creates a temporary test environment with config and keys
-func setupTestEnvironment(t *testing.T) (string, func()) {
+func setupTestEnvironment(t *testing.T) string {
 	t.Helper()
 
 	tmpDir := t.TempDir()
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
+	testutils.SetHome(t, tmpDir)
+	t.Setenv("TNR_HOME", "")
 
 	// Create .thunder directory structure
 	thunderDir := filepath.Join(tmpDir, ".thunder")
@@ -118,15 +119,7 @@ func setupTestEnvironment(t *testing.T) (string, func()) {
 	sshDir := filepath.Join(tmpDir, ".ssh")
 	require.NoError(t, os.MkdirAll(sshDir, 0o700))
 
-	cleanup := func() {
-		if originalHome != "" {
-			os.Setenv("HOME", originalHome)
-		} else {
-			os.Unsetenv("HOME")
-		}
-	}
-
-	return tmpDir, cleanup
+	return tmpDir
 }
 
 // generateTestSSHKey generates a test RSA private key in PEM format
@@ -177,8 +170,7 @@ func mockSSHConnector(client sshClient, err error) func(context.Context, string,
 // =============================================================================
 
 func TestRunConnect_InstanceNotFound(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	mockClient := &mockAPIClient{
 		instances: []api.Instance{
@@ -203,8 +195,7 @@ func TestRunConnect_InstanceNotFound(t *testing.T) {
 }
 
 func TestRunConnect_InstanceNotRunning(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	mockClient := &mockAPIClient{
 		instances: []api.Instance{
@@ -227,8 +218,7 @@ func TestRunConnect_InstanceNotRunning(t *testing.T) {
 }
 
 func TestRunConnect_InstanceNoIP(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	mockClient := &mockAPIClient{
 		instances: []api.Instance{
@@ -251,8 +241,7 @@ func TestRunConnect_InstanceNoIP(t *testing.T) {
 }
 
 func TestRunConnect_NoInstances(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	mockClient := &mockAPIClient{
 		instances: []api.Instance{},
@@ -275,8 +264,7 @@ func TestRunConnect_NoInstances(t *testing.T) {
 }
 
 func TestRunConnect_InvalidPort(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	mockClient := &mockAPIClient{
 		instances: []api.Instance{
@@ -299,8 +287,7 @@ func TestRunConnect_InvalidPort(t *testing.T) {
 }
 
 func TestRunConnect_NoAuthToken(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	opts := &connectOptions{
 		skipTTYCheck: true,
@@ -318,8 +305,7 @@ func TestRunConnect_NoAuthToken(t *testing.T) {
 }
 
 func TestRunConnect_ConfigLoadError(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	opts := &connectOptions{
 		skipTTYCheck: true,
@@ -337,8 +323,7 @@ func TestRunConnect_ConfigLoadError(t *testing.T) {
 }
 
 func TestRunConnect_ListInstancesError(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	mockClient := &mockAPIClient{
 		listInstancesErr: fmt.Errorf("API error"),
@@ -457,8 +442,7 @@ func TestCreateTestInstance(t *testing.T) {
 }
 
 func TestSetupTestEnvironment(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	// Verify directories were created
 	thunderDir := filepath.Join(tmpDir, ".thunder")
@@ -474,8 +458,7 @@ func TestSetupTestEnvironment(t *testing.T) {
 }
 
 func TestSaveTestKey(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	uuid := "test-uuid-12345"
 	keyFile := saveTestKey(t, tmpDir, uuid)
@@ -491,8 +474,7 @@ func TestSaveTestKey(t *testing.T) {
 }
 
 func TestSSHConfigUpdate(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	// Create a mock SSH config file
 	sshDir := filepath.Join(tmpDir, ".ssh")
