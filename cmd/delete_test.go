@@ -17,10 +17,6 @@ func TestCleanupSSHConfig(t *testing.T) {
 	env := testutils.SetupTestEnvironment(t)
 	defer env.Cleanup()
 
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", env.TempDir)
-
 	sshConfigPath := testutils.CreateMockSSHConfig(t, env.TempDir)
 
 	instanceID := "test-instance"
@@ -237,10 +233,6 @@ func TestSSHConfigCleanupWithIP(t *testing.T) {
 	env := testutils.SetupTestEnvironment(t)
 	defer env.Cleanup()
 
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", env.TempDir)
-
 	sshConfigPath := testutils.CreateMockSSHConfig(t, env.TempDir)
 
 	instanceID := "test-instance"
@@ -259,10 +251,6 @@ func TestSSHConfigCleanupWithIP(t *testing.T) {
 func TestSSHConfigCleanupWithoutIP(t *testing.T) {
 	env := testutils.SetupTestEnvironment(t)
 	defer env.Cleanup()
-
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", env.TempDir)
 
 	sshConfigPath := testutils.CreateMockSSHConfig(t, env.TempDir)
 
