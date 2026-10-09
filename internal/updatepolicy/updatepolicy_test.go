@@ -13,12 +13,15 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/Thunder-Compute/thunder-cli/internal/testutils"
 )
 
 func TestCheckOptionalUpdateUsesCache(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutils.SetHome(t, t.TempDir())
 	cacheDir := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cacheDir)
+	t.Setenv("LOCALAPPDATA", cacheDir)
 
 	plat := detectPlatform()
 	version := "1.2.3"
@@ -145,8 +148,9 @@ func TestCheckReportsUpdateButFlagsUnverifiableChecksum(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("HOME", t.TempDir())
+			testutils.SetHome(t, t.TempDir())
 			t.Setenv("XDG_CACHE_HOME", t.TempDir())
+			t.Setenv("LOCALAPPDATA", t.TempDir())
 			t.Setenv("TNR_MIN_VERSION_URL", "")
 
 			plat := detectPlatform()
@@ -200,8 +204,9 @@ func TestCheckReportsUpdateButFlagsUnverifiableChecksum(t *testing.T) {
 // The checksum is only worth fetching once an update is actually available;
 // fetching it on every command costs a round-trip that buys nothing.
 func TestCheckSkipsChecksumFetchWhenUpToDate(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutils.SetHome(t, t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("LOCALAPPDATA", t.TempDir())
 	t.Setenv("TNR_MIN_VERSION_URL", "")
 
 	plat := detectPlatform()
@@ -247,7 +252,7 @@ func TestCheckSkipsChecksumFetchWhenUpToDate(t *testing.T) {
 
 func TestOptionalUpdateCacheHelpers(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
+	testutils.SetHome(t, tmp)
 
 	ts, err := ReadOptionalUpdateAttempt("1.2.3")
 	if err != nil {
@@ -315,8 +320,9 @@ func TestClassifyAsset(t *testing.T) {
 }
 
 func TestFetchLatestFromGitHub(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutils.SetHome(t, t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("LOCALAPPDATA", t.TempDir())
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -374,8 +380,9 @@ func init() {
 // configured, being behind latest is an optional update, never a mandatory one —
 // a mandatory update the CLI cannot complete exits(1) and leaves it unusable.
 func TestCheckDoesNotForceUpdateWithoutMinVersionSource(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testutils.SetHome(t, t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("LOCALAPPDATA", t.TempDir())
 	t.Setenv(minVersionEnvKey, "")
 
 	plat := detectPlatform()
