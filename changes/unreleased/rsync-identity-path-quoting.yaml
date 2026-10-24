@@ -1,0 +1,3 @@
+kind: Fixed
+body: Preserve SSH key paths containing spaces or quotes when uploading and downloading files with rsync.
+time: 2026-10-24T19:57:25-04:00

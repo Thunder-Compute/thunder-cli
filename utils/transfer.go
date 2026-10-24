@@ -121,7 +121,10 @@ func wrapTransferError(err error, upload bool) error {
 
 func rsyncTransfer(ctx context.Context, keyFile, ip string, port int, localPath, remotePath string, upload bool, stdout, stderr io.Writer) error {
 	remote := fmt.Sprintf("ubuntu@%s:%s", ip, remotePath)
-	sshCmd := fmt.Sprintf("ssh -i %s -p %d -o IdentitiesOnly=yes -o IdentityAgent=none -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=30", keyFile, port)
+	// rsync parses -e itself: doubled single quotes preserve literal quotes
+	// inside a quoted argument, including paths with spaces or backslashes.
+	quotedKeyFile := "'" + strings.ReplaceAll(keyFile, "'", "''") + "'"
+	sshCmd := fmt.Sprintf("ssh -i %s -p %d -o IdentitiesOnly=yes -o IdentityAgent=none -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=30", quotedKeyFile, port)
 	args := []string{"-az", "--progress", "-e", sshCmd, localPath, remote}
 	if !upload {
 		args = []string{"-az", "--progress", "-e", sshCmd, remote, localPath}
