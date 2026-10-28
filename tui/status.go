@@ -116,7 +116,7 @@ func (m statusModel) Init() tea.Cmd {
 func hasTransitionalInstance(instances []api.Instance) bool {
 	for _, inst := range instances {
 		switch inst.Status {
-		case "PROVISIONING", "RESTORING", "MIGRATING", "STARTING", "STAGING", "PENDING", "QUEUED", "UNKNOWN", "MODIFYING":
+		case "BUILDING", "PROVISIONING", "RESTORING", "MIGRATING", "STARTING", "STAGING", "PENDING", "QUEUED", "UNKNOWN", "MODIFYING":
 			return true
 		}
 	}
@@ -321,6 +321,8 @@ func (m statusModel) View() string {
 		b.WriteString(provisioningSection)
 	}
 
+	b.WriteString(m.renderBuildingSection())
+
 	// Render restoring progress section
 	restoringSection := m.renderRestoringSection()
 	if restoringSection != "" {
@@ -477,7 +479,7 @@ func (m statusModel) formatStatus(status string, width int) string {
 		style = m.styles.running
 	case "STARTING", "SNAPPING":
 		style = m.styles.starting
-	case "RESTORING":
+	case "BUILDING", "RESTORING":
 		style = m.styles.restoring
 	case "MIGRATING":
 		style = m.styles.migrating
@@ -584,117 +586,39 @@ func restorationExpectedDuration(instance api.Instance) time.Duration {
 	return utils.EstimateInstanceRestorationDurationGB(instance.Storage)
 }
 
+func (m *statusModel) renderBuildingSection() string {
+	return m.renderTimedInstanceSection("BUILDING", "Building Instance Images:", func(api.Instance) time.Duration { return 15 * time.Minute })
+}
+
 func (m *statusModel) renderRestoringSection() string {
-	// Filter instances with RESTORING status
-	var restoringInstances []api.Instance
-	for _, instance := range m.instances {
-		if instance.Status == "RESTORING" && !instance.ProgressStartedAt.IsZero() {
-			restoringInstances = append(restoringInstances, instance)
-		}
-	}
-
-	if len(restoringInstances) == 0 {
-		return ""
-	}
-
-	var b strings.Builder
-	b.WriteString("\n")
-	b.WriteString(LabelStyle().Render("Restoring Instances:"))
-	b.WriteString("\n\n")
-
-	for _, instance := range restoringInstances {
-		// Use instance ID for restoring progress bars (each instance gets its own)
-		progressBarKey := "restoring-" + instance.ID
-		m.ensureProgressBar(progressBarKey)
-		progressBar := m.progressBars[progressBarKey]
-
-		// Calculate progress using the GetProgress method
-		restoringExpectedDuration := restorationExpectedDuration(instance)
-		progressPercent := utils.GetProgress(instance.ProgressStartedAt, restoringExpectedDuration)
-
-		// Calculate time remaining
-		elapsed := time.Since(instance.ProgressStartedAt)
-		remaining := restoringExpectedDuration - elapsed
-		if remaining < 0 {
-			remaining = 0
-		}
-		remainingMinutes := int(remaining.Minutes())
-		if remainingMinutes < 1 {
-			remainingMinutes = 1
-		}
-
-		// Render instance name (grey, unbolded)
-		b.WriteString(fmt.Sprintf("  %s\n", SubtleTextStyle().Render(instance.Name)))
-
-		// Render progress bar
-		b.WriteString(fmt.Sprintf("  %s\n", progressBar.ViewAs(progressPercent)))
-
-		// Render message (compressed)
-		message := fmt.Sprintf("  ~%d min total, ~%d min remaining",
-			int(restoringExpectedDuration.Minutes()),
-			remainingMinutes,
-		)
-		b.WriteString(m.styles.timestamp.Render(message))
-		b.WriteString("\n\n")
-	}
-
-	return b.String()
+	return m.renderTimedInstanceSection("RESTORING", "Restoring Instances:", restorationExpectedDuration)
 }
 
 func (m *statusModel) renderMigratingSection() string {
-	// Filter instances with MIGRATING status
-	var migratingInstances []api.Instance
-	for _, instance := range m.instances {
-		if instance.Status == "MIGRATING" && !instance.ProgressStartedAt.IsZero() {
-			migratingInstances = append(migratingInstances, instance)
-		}
-	}
+	return m.renderTimedInstanceSection("MIGRATING", "Migrating Instances:", func(instance api.Instance) time.Duration {
+		return utils.EstimateInstanceMigrationDuration(instance.Storage)
+	})
+}
 
-	if len(migratingInstances) == 0 {
-		return ""
-	}
-
+func (m *statusModel) renderTimedInstanceSection(status, label string, duration func(api.Instance) time.Duration) string {
 	var b strings.Builder
-	b.WriteString("\n")
-	b.WriteString(LabelStyle().Render("Migrating Instances:"))
-	b.WriteString("\n\n")
-
-	for _, instance := range migratingInstances {
-		// Use instance ID for migrating progress bars (each instance gets its own)
-		progressBarKey := "migrating-" + instance.ID
-		m.ensureProgressBar(progressBarKey)
-		progressBar := m.progressBars[progressBarKey]
-
-		// Calculate progress using the GetProgress method
-		migratingExpectedDuration := utils.EstimateInstanceMigrationDuration(instance.Storage)
-		progressPercent := utils.GetProgress(instance.ProgressStartedAt, migratingExpectedDuration)
-
-		// Calculate time remaining
-		elapsed := time.Since(instance.ProgressStartedAt)
-		remaining := migratingExpectedDuration - elapsed
-		if remaining < 0 {
-			remaining = 0
+	for _, instance := range m.instances {
+		if instance.Status != status || instance.ProgressStartedAt.IsZero() {
+			continue
 		}
-		remainingMinutes := int(remaining.Minutes())
-		if remainingMinutes < 1 {
-			remainingMinutes = 1
+		if b.Len() == 0 {
+			b.WriteString("\n" + LabelStyle().Render(label) + "\n\n")
 		}
-
-		// Render instance name (grey, unbolded)
+		key := strings.ToLower(status) + "-" + instance.ID
+		m.ensureProgressBar(key)
+		expected := duration(instance)
+		percent := utils.GetProgress(instance.ProgressStartedAt, expected)
+		remainingMinutes := max(1, int((expected - time.Since(instance.ProgressStartedAt)).Minutes()))
 		b.WriteString(fmt.Sprintf("  %s\n", SubtleTextStyle().Render(instance.Name)))
-
-		// Render progress bar
-		b.WriteString(fmt.Sprintf("  %s\n", progressBar.ViewAs(progressPercent)))
-
-		// Render message (compressed)
-		message := fmt.Sprintf("  ~%d min total, ~%d min remaining",
-			int(migratingExpectedDuration.Minutes()),
-			remainingMinutes,
-		)
-		b.WriteString(m.styles.timestamp.Render(message))
+		b.WriteString(fmt.Sprintf("  %s\n", m.progressBars[key].ViewAs(percent)))
+		b.WriteString(m.styles.timestamp.Render(fmt.Sprintf("  ~%d min total, ~%d min remaining", int(expected.Minutes()), remainingMinutes)))
 		b.WriteString("\n\n")
 	}
-
 	return b.String()
 }
 

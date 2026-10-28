@@ -23,6 +23,7 @@ const (
 	InstanceStatus_Unknown      InstanceStatus = "UNKNOWN"
 	InstanceStatus_Modifying    InstanceStatus = "MODIFYING"
 	InstanceStatus_Snapshotting InstanceStatus = "SNAPPING"
+	InstanceStatus_Building     InstanceStatus = "BUILDING"
 	InstanceStatus_Restoring    InstanceStatus = "RESTORING"
 	InstanceStatus_Migrating    InstanceStatus = "MIGRATING"
 )

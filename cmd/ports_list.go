@@ -136,7 +136,7 @@ func runPortsList() error {
 		switch inst.Status {
 		case "RUNNING":
 			statusStyled = runningStyle.Render(truncateStr(inst.Status, colWidths["Status"]))
-		case "STARTING", "SNAPPING", "RESTORING":
+		case "BUILDING", "STARTING", "SNAPPING", "RESTORING":
 			statusStyled = startingStyle.Render(truncateStr(inst.Status, colWidths["Status"]))
 		default:
 			statusStyled = stoppedStyle.Render(truncateStr(inst.Status, colWidths["Status"]))
