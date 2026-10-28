@@ -18,7 +18,10 @@ type TestEnvironment struct {
 }
 
 func SetupTestEnvironment(t *testing.T) *TestEnvironment {
+	t.Helper()
 	tmpDir := t.TempDir()
+	SetHome(t, tmpDir)
+	t.Setenv("TNR_HOME", "")
 	thunderDir := filepath.Join(tmpDir, ".thunder")
 
 	if err := os.MkdirAll(thunderDir, 0700); err != nil {
