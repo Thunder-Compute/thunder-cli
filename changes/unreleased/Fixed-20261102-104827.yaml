@@ -1,0 +1,3 @@
+kind: Fixed
+body: tnr status now refreshes promptly when an instance moves to its next state and while instances are stopping or snapshotting, and shows elapsed time once an operation runs past its estimate.
+time: 2026-11-02T10:48:27.151239+11:00

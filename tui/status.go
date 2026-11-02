@@ -113,10 +113,34 @@ func (m statusModel) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// hasTransitionalInstance lists the settled states rather than the in-progress
+// ones, so a status the server adds later is polled quickly without a CLI
+// release. An empty or unrecognised status is not known to be settled, so it
+// counts as transitional too; the poll backoff bounds the cost if it sticks.
 func hasTransitionalInstance(instances []api.Instance) bool {
 	for _, inst := range instances {
 		switch inst.Status {
-		case "BUILDING", "PROVISIONING", "RESTORING", "MIGRATING", "STARTING", "STAGING", "PENDING", "QUEUED", "UNKNOWN", "MODIFYING":
+		case "RUNNING", "STOPPED":
+		default:
+			return true
+		}
+	}
+	return false
+}
+
+// instanceStatusesChanged reports whether any instance changed status, appeared
+// or disappeared, so the poll backoff can restart for the next phase of an
+// operation instead of continuing from when the first phase began.
+func instanceStatusesChanged(prev, next []api.Instance) bool {
+	if len(prev) != len(next) {
+		return true
+	}
+	prevStatus := make(map[string]string, len(prev))
+	for _, inst := range prev {
+		prevStatus[inst.ID] = inst.Status
+	}
+	for _, inst := range next {
+		if status, ok := prevStatus[inst.ID]; !ok || status != inst.Status {
 			return true
 		}
 	}
@@ -198,7 +222,7 @@ func (m statusModel) statusRefreshRetryDelay(err error) (time.Duration, bool) {
 	return 0, false
 }
 
-func formatRetryDelay(delay time.Duration) string {
+func formatDuration(delay time.Duration) string {
 	if delay <= 0 {
 		return "now"
 	}
@@ -209,6 +233,9 @@ func formatRetryDelay(delay time.Duration) string {
 	}
 
 	minutes := seconds / 60
+	if minutes >= 60 {
+		return fmt.Sprintf("%dh %02dm", minutes/60, minutes%60)
+	}
 	remainingSeconds := seconds % 60
 	if remainingSeconds == 0 {
 		return fmt.Sprintf("%dm", minutes)
@@ -220,9 +247,9 @@ func statusRefreshErrorMessage(err error, retryAt time.Time) string {
 	delay := time.Until(retryAt)
 	var apiErr *api.APIError
 	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests {
-		return fmt.Sprintf("Refresh rate-limited. Retrying in %s.", formatRetryDelay(delay))
+		return fmt.Sprintf("Refresh rate-limited. Retrying in %s.", formatDuration(delay))
 	}
-	return fmt.Sprintf("Failed to refresh instances. Retrying in %s.", formatRetryDelay(delay))
+	return fmt.Sprintf("Failed to refresh instances. Retrying in %s.", formatDuration(delay))
 }
 
 func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -267,6 +294,7 @@ func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, deferQuit()
 		}
+		statusesChanged := instanceStatusesChanged(m.instances, msg.instances)
 		m.instances = msg.instances
 		m.lastUpdate = time.Now()
 		m.refreshErr = nil
@@ -289,6 +317,11 @@ func (m statusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if hasTransitionalInstance(m.instances) {
 			if m.transitionStartedAt.IsZero() {
 				m.transitionStartedAt = time.Now()
+			} else if reentry := time.Now().Add(-2 * time.Minute); statusesChanged && m.transitionStartedAt.Before(reentry) {
+				// Re-enter the 10s tier rather than the 1s burst: a status that
+				// keeps changing then costs at most one request per 10s against
+				// the org's shared list rate limit.
+				m.transitionStartedAt = reentry
 			}
 		} else {
 			m.transitionStartedAt = time.Time{}
@@ -357,7 +390,7 @@ func (m statusModel) View() string {
 		ts := m.lastUpdate.Format("15:04:05")
 		statusText := fmt.Sprintf("Last updated: %s", ts)
 		if len(m.instances) == 0 {
-			statusText = fmt.Sprintf("Last updated: %s; checking every %s", ts, formatRetryDelay(nextEmptyPollDelay(m.emptyStartedAt)))
+			statusText = fmt.Sprintf("Last updated: %s; checking every %s", ts, formatDuration(nextEmptyPollDelay(m.emptyStartedAt)))
 		}
 		b.WriteString(m.styles.timestamp.Render(statusText))
 		b.WriteString("  ")
@@ -477,7 +510,7 @@ func (m statusModel) formatStatus(status string, width int) string {
 	switch status {
 	case "RUNNING":
 		style = m.styles.running
-	case "STARTING", "SNAPPING":
+	case "STARTING", "STOPPING", "SNAPPING":
 		style = m.styles.starting
 	case "BUILDING", "RESTORING":
 		style = m.styles.restoring
@@ -543,17 +576,6 @@ func (m *statusModel) renderProvisioningSection() string {
 		// Calculate progress using the GetProgress method
 		progressPercent := utils.GetProgress(earliestTime, provisioningExpectedDuration)
 
-		// Calculate time remaining
-		elapsed := time.Since(earliestTime)
-		remaining := provisioningExpectedDuration - elapsed
-		if remaining < 0 {
-			remaining = 0
-		}
-		remainingMinutes := int(remaining.Minutes())
-		if remainingMinutes < 1 {
-			remainingMinutes = 1
-		}
-
 		// Build comma-separated list of instance names
 		var names []string
 		for _, instance := range instances {
@@ -567,12 +589,7 @@ func (m *statusModel) renderProvisioningSection() string {
 		// Render progress bar
 		b.WriteString(fmt.Sprintf("  %s\n", progressBar.ViewAs(progressPercent)))
 
-		// Render message (compressed)
-		message := fmt.Sprintf("  ~%d min total, ~%d min remaining",
-			int(provisioningExpectedDuration.Minutes()),
-			remainingMinutes,
-		)
-		b.WriteString(m.styles.timestamp.Render(message))
+		b.WriteString(m.styles.timestamp.Render(progressEstimateMessage(provisioningExpectedDuration, time.Since(earliestTime))))
 		b.WriteString("\n\n")
 	}
 
@@ -613,13 +630,22 @@ func (m *statusModel) renderTimedInstanceSection(status, label string, duration 
 		m.ensureProgressBar(key)
 		expected := duration(instance)
 		percent := utils.GetProgress(instance.ProgressStartedAt, expected)
-		remainingMinutes := max(1, int((expected - time.Since(instance.ProgressStartedAt)).Minutes()))
 		b.WriteString(fmt.Sprintf("  %s\n", SubtleTextStyle().Render(instance.Name)))
 		b.WriteString(fmt.Sprintf("  %s\n", m.progressBars[key].ViewAs(percent)))
-		b.WriteString(m.styles.timestamp.Render(fmt.Sprintf("  ~%d min total, ~%d min remaining", int(expected.Minutes()), remainingMinutes)))
+		b.WriteString(m.styles.timestamp.Render(progressEstimateMessage(expected, time.Since(instance.ProgressStartedAt))))
 		b.WriteString("\n\n")
 	}
 	return b.String()
+}
+
+// progressEstimateMessage switches to a ticking elapsed time once the estimate
+// has passed; "~1 min remaining" shown indefinitely reads as a frozen screen.
+func progressEstimateMessage(expected, elapsed time.Duration) string {
+	if elapsed > expected {
+		return fmt.Sprintf("  Taking longer than expected (elapsed %s)", formatDuration(elapsed))
+	}
+	remainingMinutes := max(1, int((expected - elapsed).Minutes()))
+	return fmt.Sprintf("  ~%d min total, ~%d min remaining", int(expected.Minutes()), remainingMinutes)
 }
 
 func (m *statusModel) renderEventsSection() string {
