@@ -1,0 +1,17 @@
+{
+  "version": "v2.3.0",
+  "channel": "stable",
+  "assets": {
+    "macos/arm64": "https://github.com/Thunder-Compute/thunder-cli/releases/download/v2.3.0/tnr_2.3.0_darwin_arm64.tar.gz",
+    "macos/amd64": "https://github.com/Thunder-Compute/thunder-cli/releases/download/v2.3.0/tnr_2.3.0_darwin_amd64.tar.gz",
+    "macos/pkg-amd64": "https://github.com/Thunder-Compute/thunder-cli/releases/download/v2.3.0/tnr_2.3.0_darwin_amd64.pkg",
+    "macos/pkg-arm64": "https://github.com/Thunder-Compute/thunder-cli/releases/download/v2.3.0/tnr_2.3.0_darwin_arm64.pkg",
+    "linux/arm64": "https://github.com/Thunder-Compute/thunder-cli/releases/download/v2.3.0/tnr_2.3.0_linux_arm64.tar.gz",
+    "linux/amd64": "https://github.com/Thunder-Compute/thunder-cli/releases/download/v2.3.0/tnr_2.3.0_linux_amd64.tar.gz",
+    "windows/arm64": "https://github.com/Thunder-Compute/thunder-cli/releases/download/v2.3.0/tnr_2.3.0_windows_arm64.zip",
+    "windows/amd64": "https://github.com/Thunder-Compute/thunder-cli/releases/download/v2.3.0/tnr_2.3.0_windows_amd64.zip",
+    "windows/installer-amd64": "https://github.com/Thunder-Compute/thunder-cli/releases/download/v2.3.0/tnr-2.3.0-amd64.msi",
+    "windows/installer-arm64": "https://github.com/Thunder-Compute/thunder-cli/releases/download/v2.3.0/tnr-2.3.0-arm64.msi",
+    "checksums": "https://github.com/Thunder-Compute/thunder-cli/releases/download/v2.3.0/checksums.txt"
+  }
+}
