@@ -5,6 +5,16 @@ change-fragment process was adopted remain available on the
 [GitHub releases page](https://github.com/Thunder-Compute/thunder-cli/releases).
 
 
+## v2.3.0 - 2026-11-05
+
+### Added
+- Show instance image build progress with a 15-minute estimate while creation continues in the background.
+
+### Fixed
+- tnr status now refreshes promptly when an instance moves to its next state and while instances are stopping or snapshotting, and shows elapsed time once an operation runs past its estimate.
+
+**Full Changelog**: https://github.com/Thunder-Compute/thunder-cli/compare/v2.2.0...v2.3.0
+
 ## v2.2.0 - 2026-10-27
 
 ### Added
