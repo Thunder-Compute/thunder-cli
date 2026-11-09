@@ -5,13 +5,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestThunderDirHappyPath(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
+	testutils.SetHome(t, tmp)
 	t.Setenv("TNR_HOME", "")
 
 	got, err := ThunderDir()
@@ -23,7 +24,7 @@ func TestThunderDirHappyPath(t *testing.T) {
 func TestThunderDirTNRHomeOverride(t *testing.T) {
 	tmp := t.TempDir()
 	override := filepath.Join(tmp, "custom-state")
-	t.Setenv("HOME", tmp)
+	testutils.SetHome(t, tmp)
 	t.Setenv("TNR_HOME", override)
 
 	got, err := ThunderDir()
@@ -38,7 +39,7 @@ func TestThunderDirTNRHomeHardFails(t *testing.T) {
 	blocker := filepath.Join(tmp, "file-not-dir")
 	require.NoError(t, os.WriteFile(blocker, []byte("x"), 0600))
 
-	t.Setenv("HOME", tmp)
+	testutils.SetHome(t, tmp)
 	t.Setenv("TNR_HOME", blocker)
 
 	_, err := ThunderDir()
@@ -50,8 +51,9 @@ func TestThunderDirFallsBackToUserCacheDir(t *testing.T) {
 	// Make $HOME/.thunder unusable by planting a regular file there.
 	require.NoError(t, os.WriteFile(filepath.Join(tmp, ".thunder"), []byte("x"), 0600))
 
-	t.Setenv("HOME", tmp)
+	testutils.SetHome(t, tmp)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(tmp, "xdg-cache"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(tmp, "xdg-cache"))
 	t.Setenv("TNR_HOME", "")
 
 	got, err := ThunderDir()
@@ -66,8 +68,9 @@ func TestThunderDirFallsBackToUserCacheDir(t *testing.T) {
 func TestSavePrivateKeyUsesFallback(t *testing.T) {
 	tmp := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tmp, ".thunder"), []byte("x"), 0600))
-	t.Setenv("HOME", tmp)
+	testutils.SetHome(t, tmp)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(tmp, "xdg-cache"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(tmp, "xdg-cache"))
 	t.Setenv("TNR_HOME", "")
 
 	require.NoError(t, SavePrivateKey("test-uuid", "PRIVATE KEY CONTENT"))

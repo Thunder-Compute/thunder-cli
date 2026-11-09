@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Thunder-Compute/thunder-cli/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh"
@@ -32,20 +33,12 @@ type testSSHServer struct {
 }
 
 // setupTestEnvironment creates a temporary directory and sets HOME environment variable
-func setupTestEnvironment(t *testing.T) (string, func()) {
+func setupTestEnvironment(t *testing.T) string {
 	tmpDir := t.TempDir()
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
+	testutils.SetHome(t, tmpDir)
+	t.Setenv("TNR_HOME", "")
 
-	cleanup := func() {
-		if originalHome != "" {
-			os.Setenv("HOME", originalHome)
-		} else {
-			os.Unsetenv("HOME")
-		}
-	}
-
-	return tmpDir, cleanup
+	return tmpDir
 }
 
 // generateRSAKeyPair generates an RSA key pair for testing
@@ -208,8 +201,7 @@ func TestSSHKnownHosts(t *testing.T) {
 	// Test that connections succeed to unknown hosts without modifying known_hosts.
 	// With known hosts verification disabled, the known_hosts file should remain empty.
 	t.Run("unknown host auto-add", func(t *testing.T) {
-		tmpDir, cleanup := setupTestEnvironment(t)
-		defer cleanup()
+		tmpDir := setupTestEnvironment(t)
 
 		clientPrivateKey, _, clientPublicKey := generateRSAKeyPair(t)
 		keyFile := filepath.Join(tmpDir, "test_key")
@@ -236,8 +228,7 @@ func TestSSHKnownHosts(t *testing.T) {
 	// Test that connections succeed to known hosts with matching keys.
 	// The connection should succeed regardless of known_hosts file state since verification is disabled.
 	t.Run("known host with matching key", func(t *testing.T) {
-		tmpDir, cleanup := setupTestEnvironment(t)
-		defer cleanup()
+		tmpDir := setupTestEnvironment(t)
 
 		clientPrivateKey, _, clientPublicKey := generateRSAKeyPair(t)
 		keyFile := filepath.Join(tmpDir, "test_key")
@@ -270,8 +261,7 @@ func TestSSHKnownHosts(t *testing.T) {
 	// Test that connections succeed even when known_hosts contains a mismatched key.
 	// This verifies that known hosts verification is disabled and connections are not blocked by key mismatches.
 	t.Run("known host with mismatched key should succeed after fix", func(t *testing.T) {
-		tmpDir, cleanup := setupTestEnvironment(t)
-		defer cleanup()
+		tmpDir := setupTestEnvironment(t)
 
 		clientPrivateKey, _, clientPublicKey := generateRSAKeyPair(t)
 		keyFile := filepath.Join(tmpDir, "test_key")
@@ -305,8 +295,7 @@ func TestSSHKnownHosts(t *testing.T) {
 	// Test that connections succeed when using hostname with port format.
 	// Verifies that known hosts verification is disabled regardless of hostname format.
 	t.Run("hostname with port", func(t *testing.T) {
-		tmpDir, cleanup := setupTestEnvironment(t)
-		defer cleanup()
+		tmpDir := setupTestEnvironment(t)
 
 		clientPrivateKey, _, clientPublicKey := generateRSAKeyPair(t)
 		keyFile := filepath.Join(tmpDir, "test_key")
@@ -332,8 +321,7 @@ func TestSSHKnownHosts(t *testing.T) {
 }
 
 func TestRobustSSHConnectCtxRetriesUntilServerAvailable(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	clientPrivateKey, _, clientPublicKey := generateRSAKeyPair(t)
 	keyFile := filepath.Join(tmpDir, "retry_key")
@@ -378,8 +366,7 @@ func TestRobustSSHConnectCtxRetriesUntilServerAvailable(t *testing.T) {
 }
 
 func TestRobustSSHConnectCtxHonorsContextCancellation(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	clientPrivateKey, _, _ := generateRSAKeyPair(t)
 	keyFile := filepath.Join(tmpDir, "cancel_key")
@@ -394,8 +381,7 @@ func TestRobustSSHConnectCtxHonorsContextCancellation(t *testing.T) {
 }
 
 func TestVerifySSHConnectionCtxSuccess(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	clientPrivateKey, _, clientPublicKey := generateRSAKeyPair(t)
 	keyFile := filepath.Join(tmpDir, "verify_key")
@@ -412,8 +398,7 @@ func TestVerifySSHConnectionCtxSuccess(t *testing.T) {
 }
 
 func TestVerifySSHConnectionCtxRespectsContext(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	clientPrivateKey, _, _ := generateRSAKeyPair(t)
 	keyFile := filepath.Join(tmpDir, "verify_cancel_key")
@@ -460,8 +445,7 @@ func TestNewSSHConfigErrors(t *testing.T) {
 }
 
 func TestRobustSSHConnectCtxTimeoutVsCancellation(t *testing.T) {
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	clientPrivateKey, _, _ := generateRSAKeyPair(t)
 	keyFile := filepath.Join(tmpDir, "timeout_key")
@@ -486,8 +470,7 @@ func TestRobustSSHConnectCtxTimeoutVsCancellation(t *testing.T) {
 func TestRobustSSHConnectCtxAuthErrorRetries(t *testing.T) {
 	// Auth errors are now retried (key may still be propagating to instance)
 	// so this test verifies the retry behavior with a wrong key eventually times out
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	acceptedKey, acceptedSigner, acceptedPublic := generateRSAKeyPair(t)
 	_ = acceptedSigner // keep for clarity
@@ -603,8 +586,7 @@ func TestErrPersistentAuthFailure(t *testing.T) {
 
 func TestRobustSSHConnectWithOptionsPersistentAuthDetection(t *testing.T) {
 	// Test that persistent auth failure is detected when DetectPersistentAuthFailure is enabled
-	tmpDir, cleanup := setupTestEnvironment(t)
-	defer cleanup()
+	tmpDir := setupTestEnvironment(t)
 
 	// Use accepted key for server, but connect with rejected key to trigger auth failures
 	acceptedKey, _, acceptedPublic := generateRSAKeyPair(t)

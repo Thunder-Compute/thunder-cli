@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Thunder-Compute/thunder-cli/api"
+	"github.com/Thunder-Compute/thunder-cli/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,9 +21,7 @@ import (
 func TestLoginSuccess(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("TNR_HOME", "")
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", tmpDir)
+	testutils.SetHome(t, tmpDir)
 
 	expiresAt := time.Now().UTC().Add(3600 * time.Second)
 	authResp := AuthResponse{
@@ -54,9 +53,7 @@ func TestLoginSuccess(t *testing.T) {
 func TestLoadConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("TNR_HOME", "")
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", tmpDir)
+	testutils.SetHome(t, tmpDir)
 
 	originalEnv := os.Getenv("TNR_API_TOKEN")
 	defer os.Setenv("TNR_API_TOKEN", originalEnv)
@@ -91,9 +88,7 @@ func TestLoadConfig(t *testing.T) {
 func TestLoadConfigFromEnvironmentVariable(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("TNR_HOME", "")
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", tmpDir)
+	testutils.SetHome(t, tmpDir)
 
 	originalEnv := os.Getenv("TNR_API_TOKEN")
 	defer os.Setenv("TNR_API_TOKEN", originalEnv)
@@ -144,9 +139,7 @@ func TestGenerateState(t *testing.T) {
 func TestSaveConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("TNR_HOME", "")
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", tmpDir)
+	testutils.SetHome(t, tmpDir)
 
 	expiresAt := time.Now().UTC().Add(7200 * time.Second)
 	authResp := AuthResponse{
@@ -178,9 +171,7 @@ func TestSaveConfig(t *testing.T) {
 func TestSaveConfigWithoutExpiration(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("TNR_HOME", "")
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", tmpDir)
+	testutils.SetHome(t, tmpDir)
 
 	authResp := AuthResponse{
 		Token:        "test_token",
@@ -208,9 +199,7 @@ func TestSaveConfigWithoutExpiration(t *testing.T) {
 func TestSaveConfigCreatesDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("TNR_HOME", "")
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", tmpDir)
+	testutils.SetHome(t, tmpDir)
 
 	authResp := AuthResponse{
 		Token: "test_token",
@@ -252,8 +241,9 @@ func TestSaveConfigFallback(t *testing.T) {
 	// Block $HOME/.thunder by putting a file there.
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".thunder"), []byte("x"), 0600))
 
-	t.Setenv("HOME", tmpDir)
+	testutils.SetHome(t, tmpDir)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(tmpDir, "cache"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(tmpDir, "cache"))
 	t.Setenv("TNR_HOME", "")
 
 	require.NoError(t, saveConfig(AuthResponse{Token: "test_token"}, CredentialSourceProvidedToken, nil))
@@ -306,9 +296,7 @@ func TestLoginCommandTableDriven(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			t.Setenv("TNR_HOME", "")
-			originalHome := os.Getenv("HOME")
-			defer os.Setenv("HOME", originalHome)
-			os.Setenv("HOME", tmpDir)
+			testutils.SetHome(t, tmpDir)
 
 			err := saveConfig(tt.authResp, CredentialSourceProvidedToken, &api.ValidateTokenResult{ExpiresAt: tt.expiresAt})
 
