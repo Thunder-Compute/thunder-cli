@@ -66,6 +66,7 @@ func init() {
 	request.Spec.GPUCount = 1
 
 	sandbox := &cobra.Command{Use: "sandbox", Short: "Start short-lived Thunder GPU sandboxes"}
+	sandbox.SetHelpFunc(wrapHelp(printDefaultHelp))
 	sandbox.AddCommand(create)
 	rootCmd.AddCommand(sandbox)
 }
