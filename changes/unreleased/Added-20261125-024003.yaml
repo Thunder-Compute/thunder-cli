@@ -1,0 +1,3 @@
+kind: Added
+body: Start a GPU sandbox from a ready image with tnr sandbox create and request direct GPU access with --timing-sensitive.
+time: 2026-11-25T02:40:03.694603+00:00
