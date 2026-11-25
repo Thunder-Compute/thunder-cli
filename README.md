@@ -106,6 +106,17 @@ tnr delete 0        # Delete instance
 reached, create a named API token in Console Settings and run
 `tnr login --token <named_api_token>` instead.
 
+To benchmark a GPU with direct access to the physical device, set `IMAGE_ID` to
+the ID of a ready Thunder container image and run:
+
+```sh
+tnr sandbox create --image-id "$IMAGE_ID" --gpu h100 --timing-sensitive --json
+```
+
+The command returns the sandbox ID when Thunder accepts the request. The sandbox
+expires 15 minutes after it becomes ready by default. Omit `--timing-sensitive`
+to start a standard sandbox.
+
 # Bug reports and feedback
 
 Run `tnr report` for a guided report in the style of `tnr create`: choose **Report a problem** or **Suggest an improvement**, write a one-sentence summary and the details, then review the report and choose **Send report**, **Edit report**, or **Cancel**. Sign in before starting. `--kind`, `--subject`, and `--details` or `--details-file` fill in their steps, which are then skipped, and supplied text is sent as given. Quitting sends nothing and exits with code 130. Noninteractive reports default to bugs; use `--kind feedback` for product feedback.
